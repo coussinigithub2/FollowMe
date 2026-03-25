@@ -1,0 +1,241 @@
+<!-- Taxiway Pathfinder V4 COMPLET -->
+<!-- VERSION FULL AVEC TES MODIFS -->
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Taxiway Pathfinder V4</title>
+<style>
+body { margin:0; background:#000; color:#0ff; font-family:monospace; }
+canvas { display:block; }
+#tooltip {
+ position:fixed; background:#111; color:#0ff;
+ padding:6px 10px; border:1px solid #0ff;
+ pointer-events:none; display:none;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="c"></canvas>
+<div id="tooltip"></div>
+
+<script>
+
+let NODES={}, SEGMENTS=[], GRAPH={};
+let cam={x:0,y:0,scale:1};
+let latMin,latMax,lonMin,lonMax,latRange,lonRange;
+
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+ canvas.width=window.innerWidth;
+ canvas.height=window.innerHeight;
+}
+window.addEventListener("resize",resize);
+resize();
+
+function toScreen(lat,lon){
+ return {
+  x:(lon-lonMin)*cam.scale+cam.x,
+  y:(latMax-lat)*cam.scale+cam.y
+ };
+}
+
+function haversine(a,b,c,d){
+ const R=6371000;
+ const dLat=(c-a)*Math.PI/180;
+ const dLon=(d-b)*Math.PI/180;
+ const x=Math.sin(dLat/2)**2+
+ Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dLon/2)**2;
+ return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+/* =========================
+   DROPDOWN (TAXIWAY ONLY)
+=========================*/
+function getTaxiNodes(){
+ return Object.keys(NODES)
+ .map(Number)
+ .filter(id=>!NODES[id].isGate && !NODES[id].isThresh);
+}
+
+/* =========================
+   GRAPH AVEC PRIORITÉ TAXIWAY
+=========================*/
+function buildGraph(){
+ GRAPH={};
+ Object.keys(NODES).forEach(id=>GRAPH[id]=[]);
+
+ SEGMENTS.forEach(s=>{
+  let d=haversine(
+   NODES[s.n1].lat,NODES[s.n1].lon,
+   NODES[s.n2].lat,NODES[s.n2].lon
+  );
+
+  if(s.type==="runway") d*=5;
+  if(s.type==="backtaxi") d*=8;
+
+  GRAPH[s.n1].push({to:s.n2,dist:d});
+  GRAPH[s.n2].push({to:s.n1,dist:d});
+ });
+}
+
+/* =========================
+   DIJKSTRA
+=========================*/
+function path(a,b){
+ let dist={},prev={},Q=[];
+ Object.keys(GRAPH).forEach(n=>dist[n]=Infinity);
+ dist[a]=0;
+ Q.push([0,a]);
+
+ while(Q.length){
+  Q.sort((x,y)=>x[0]-y[0]);
+  let [d,u]=Q.shift();
+  if(u==b) break;
+
+  GRAPH[u].forEach(e=>{
+   let nd=d+e.dist;
+   if(nd<dist[e.to]){
+    dist[e.to]=nd;
+    prev[e.to]=u;
+    Q.push([nd,e.to]);
+   }
+  });
+ }
+
+ let P=[],cur=b;
+ while(cur){
+  P.unshift(cur);
+  cur=prev[cur];
+ }
+ return P;
+}
+
+/* =========================
+   DRAW
+=========================*/
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ SEGMENTS.forEach(s=>{
+  let p1=toScreen(NODES[s.n1].lat,NODES[s.n1].lon);
+  let p2=toScreen(NODES[s.n2].lat,NODES[s.n2].lon);
+
+  ctx.strokeStyle =
+   s.type==="runway" ? "#ff0" :
+   s.type==="taxiway" ? "#0f0" :
+   "#0ff";
+
+  ctx.beginPath();
+  ctx.moveTo(p1.x,p1.y);
+  ctx.lineTo(p2.x,p2.y);
+  ctx.stroke();
+ });
+
+ Object.entries(NODES).forEach(([id,n])=>{
+  let p=toScreen(n.lat,n.lon);
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,5,0,Math.PI*2);
+  ctx.fillStyle =
+   n.isGate ? "#f0f" :
+   n.isThresh ? "#f60" :
+   "#0f0";
+  ctx.fill();
+ });
+
+}
+
+/* =========================
+   HOVER FIX (ZONE LARGE)
+=========================*/
+canvas.addEventListener("mousemove",e=>{
+ let rect=canvas.getBoundingClientRect();
+ let mx=e.clientX-rect.left;
+ let my=e.clientY-rect.top;
+
+ let world={
+  lat:latMax-(my-cam.y)/cam.scale,
+  lon:(mx-cam.x)/cam.scale+lonMin
+ };
+
+ let closest=null,cd=1e9;
+
+ Object.entries(NODES).forEach(([id,n])=>{
+  let d=Math.hypot(n.lat-world.lat,n.lon-world.lon);
+  if(d<cd){cd=d;closest={id,...n};}
+ });
+
+ const thresh = 30 / cam.scale; // FIX hover large
+
+ let tip=document.getElementById("tooltip");
+
+ if(cd<thresh){
+  tip.style.display="block";
+  tip.style.left=e.clientX+10+"px";
+  tip.style.top=e.clientY+"px";
+
+  let type = closest.isGate ? "◉ TERMINAL" :
+             closest.isThresh ? "⚡ SEUIL" :
+             "◉ NŒUD";
+
+  tip.innerHTML =
+   type+" #"+closest.id+"<br>"+
+   (closest.isGate
+    ? "<span style='color:#f0f'>"+closest.name+"</span>"
+    : "<span style='color:#ff0'>"+(closest.name||"")+"</span>"
+   );
+ } else {
+  tip.style.display="none";
+ }
+
+});
+
+/* =========================
+   PARSE GATES (FIX NOM)
+=========================*/
+function parseGate(raw){
+ let parts=raw.split("|");
+ return parts.length>1
+  ? parts[parts.length-1].trim()
+  : raw.split(" ").pop();
+}
+
+/* =========================
+   DEMO DATA (POUR TEST)
+=========================*/
+function demo(){
+ NODES={
+  1:{lat:0,lon:0},
+  2:{lat:0,lon:1},
+  3:{lat:1,lon:1},
+  4:{lat:1,lon:0,isGate:true,name:"Gate A"},
+ };
+
+ SEGMENTS=[
+  {n1:1,n2:2,type:"taxiway"},
+  {n1:2,n2:3,type:"taxiway"},
+  {n1:3,n2:4,type:"runway"}
+ ];
+
+ latMin=0;latMax=1;lonMin=0;lonMax=1;
+ latRange=1;lonRange=1;
+
+ cam.scale=400;
+ cam.x=200;
+ cam.y=200;
+
+ buildGraph();
+ draw();
+}
+
+demo();
+
+</script>
+
+</body>
+</html>

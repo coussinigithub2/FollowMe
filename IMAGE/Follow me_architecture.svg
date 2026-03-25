@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1220" viewBox="0 0 1500 1220">
+
+  <!-- Background blanc -->
+  <rect width="1500" height="1220" fill="#FFFFFF"/>
+
+  <!-- Titre -->
+  <rect x="10" y="10" width="1480" height="50" rx="8" fill="#1a1a2e"/>
+  <text x="750" y="43" font-family="Arial" font-size="22" font-weight="bold" fill="white" text-anchor="middle">FollowMe Ver 1.19 — Architecture des Traitements (X-Plane 12 / FlyWithLua)</text>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- COLONNE GAUCHE -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- BLOC 1 : Initialisation -->
+  <rect x="20" y="80" width="350" height="175" rx="8" fill="#E8F4FD" stroke="#2196F3" stroke-width="2"/>
+  <rect x="20" y="80" width="350" height="30" rx="8" fill="#2196F3"/>
+  <rect x="20" y="97" width="350" height="13" fill="#2196F3"/>
+  <text x="195" y="101" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">① INITIALISATION</text>
+  <text x="35" y="126" font-family="Arial" font-size="12" fill="#333">• Chargement bibliothèques FFI/XPLM</text>
+  <text x="35" y="144" font-family="Arial" font-size="12" fill="#333">• Définition cdefs (structs C/XPLM)</text>
+  <text x="35" y="162" font-family="Arial" font-size="12" fill="#333">• Déclaration datarefs X-Plane</text>
+  <text x="35" y="180" font-family="Arial" font-size="12" fill="#333">• Chargement sons WAV (6 fichiers)</text>
+  <text x="35" y="198" font-family="Arial" font-size="12" fill="#333">• register_dataref() — fm/anim/sign</text>
+  <text x="35" y="216" font-family="Arial" font-size="12" fill="#333">• load_config() — préférences .prf</text>
+  <text x="35" y="237" font-family="Arial" font-size="11" fill="#888" font-style="italic">→ exécuté au démarrage du script Lua</text>
+
+  <!-- BLOC 2 : Interface utilisateur -->
+  <rect x="20" y="275" width="350" height="185" rx="8" fill="#FFF3E0" stroke="#FF9800" stroke-width="2"/>
+  <rect x="20" y="275" width="350" height="30" rx="8" fill="#FF9800"/>
+  <rect x="20" y="292" width="350" height="13" fill="#FF9800"/>
+  <text x="195" y="296" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">② INTERFACE IMGUI (FlyWithLua)</text>
+  <text x="35" y="322" font-family="Arial" font-size="12" fill="#333">• show_holder() — bouton FM (30×30)</text>
+  <text x="35" y="340" font-family="Arial" font-size="12" fill="#333">• build_holder() — icône FM + clic</text>
+  <text x="35" y="358" font-family="Arial" font-size="12" fill="#333">• show_window() — fenêtre 400×525</text>
+  <text x="35" y="376" font-family="Arial" font-size="12" fill="#333">• build_window() — panneau complet</text>
+  <text x="35" y="394" font-family="Arial" font-size="12" fill="#555">  ├ Départ/Arrivée · Piste · Gate</text>
+  <text x="35" y="412" font-family="Arial" font-size="12" fill="#555">  ├ SimBrief ID · Fetch · Auto-assign</text>
+  <text x="35" y="430" font-family="Arial" font-size="12" fill="#555">  ├ Modèle voiture · Vol · Vitesse</text>
+  <text x="35" y="450" font-family="Arial" font-size="11" fill="#888" font-style="italic">  └ Bouton Request / Cancel Follow Me</text>
+
+  <!-- BLOC 3 : Config & Son -->
+  <rect x="20" y="480" width="350" height="135" rx="8" fill="#F3E5F5" stroke="#9C27B0" stroke-width="2"/>
+  <rect x="20" y="480" width="350" height="30" rx="8" fill="#9C27B0"/>
+  <rect x="20" y="497" width="350" height="13" fill="#9C27B0"/>
+  <text x="195" y="501" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">③ CONFIG &amp; SON</text>
+  <text x="35" y="528" font-family="Arial" font-size="12" fill="#333">• load_config() / save_config()</text>
+  <text x="35" y="546" font-family="Arial" font-size="12" fill="#333">• Fichier FollowMeXplane12.prf</text>
+  <text x="35" y="564" font-family="Arial" font-size="12" fill="#333">• set_sound_vol() — 6 sons</text>
+  <text x="35" y="582" font-family="Arial" font-size="12" fill="#333">• update_msg() — 20+ codes erreur</text>
+  <text x="35" y="600" font-family="Arial" font-size="11" fill="#888" font-style="italic">• play_sound() — feedback audio pilote</text>
+
+  <!-- BLOC 4 : SimBrief -->
+  <rect x="20" y="635" width="350" height="145" rx="8" fill="#E8F5E9" stroke="#4CAF50" stroke-width="2"/>
+  <rect x="20" y="635" width="350" height="30" rx="8" fill="#4CAF50"/>
+  <rect x="20" y="652" width="350" height="13" fill="#4CAF50"/>
+  <text x="195" y="656" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">④ INTÉGRATION SIMBRIEF</text>
+  <text x="35" y="682" font-family="Arial" font-size="12" fill="#333">• check_SimBrief() — HTTP GET API</text>
+  <text x="35" y="700" font-family="Arial" font-size="12" fill="#333">• URL: simbrief.com/api/xml.fetcher</text>
+  <text x="35" y="718" font-family="Arial" font-size="12" fill="#333">• Parse XML — ICAO, nom, piste dep/arr</text>
+  <text x="35" y="736" font-family="Arial" font-size="12" fill="#333">• apply_simbrief_runway()</text>
+  <text x="35" y="754" font-family="Arial" font-size="11" fill="#888" font-style="italic">• Vérifie mismatch aéroport SimBrief/sim</text>
+  <text x="35" y="772" font-family="Arial" font-size="11" fill="#888" font-style="italic">• Statuts: LOADING / OK / ERROR / NO_ID</text>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- COLONNE CENTRE -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- BLOC 5 : Lecture apt.dat -->
+  <rect x="395" y="80" width="380" height="280" rx="8" fill="#FFF8E1" stroke="#FFC107" stroke-width="2"/>
+  <rect x="395" y="80" width="380" height="30" rx="8" fill="#FFC107"/>
+  <rect x="395" y="97" width="380" height="13" fill="#FFC107"/>
+  <text x="585" y="101" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">⑤ LECTURE APT.DAT</text>
+  <text x="410" y="126" font-family="Arial" font-size="12" fill="#333">• get_airport_elements() — détecte ICAO courant</text>
+  <text x="410" y="144" font-family="Arial" font-size="12" fill="#333">• read_apt_file() — parcourt scenery_packs.ini</text>
+  <text x="410" y="162" font-family="Arial" font-size="12" fill="#555">  ├ Scan séquentiel apt.dat (chunks 100KB)</text>
+  <text x="410" y="180" font-family="Arial" font-size="12" fill="#555">  ├ Recherche code ICAO en buffer</text>
+  <text x="410" y="198" font-family="Arial" font-size="12" fill="#555">  └ Fallback → Global Airports si non trouvé</text>
+  <text x="410" y="220" font-family="Arial" font-size="12" fill="#333" font-weight="bold">Décodeurs de lignes :</text>
+  <text x="410" y="238" font-family="Arial" font-size="12" fill="#555">  • decipher_runway()          ligne 100</text>
+  <text x="410" y="256" font-family="Arial" font-size="12" fill="#555">  • decipher_ramp()            ligne 1300</text>
+  <text x="410" y="274" font-family="Arial" font-size="12" fill="#555">  • decipher_ramp_operation()  ligne 1301</text>
+  <text x="410" y="292" font-family="Arial" font-size="12" fill="#555">  • decipher_taxinode()        ligne 1201</text>
+  <text x="410" y="310" font-family="Arial" font-size="12" fill="#555">  • decipher_taxisegment()     ligne 1202</text>
+  <text x="410" y="328" font-family="Arial" font-size="12" fill="#555">  • decipher_taxisegment_hotzone() lg 1204</text>
+  <text x="410" y="348" font-family="Arial" font-size="11" fill="#888" font-style="italic">• determine_runway_node() / match_runway()</text>
+
+  <!-- BLOC 6 : Tables de données -->
+  <rect x="395" y="380" width="380" height="200" rx="8" fill="#E3F2FD" stroke="#1565C0" stroke-width="2"/>
+  <rect x="395" y="380" width="380" height="30" rx="8" fill="#1565C0"/>
+  <rect x="395" y="397" width="380" height="13" fill="#1565C0"/>
+  <text x="585" y="401" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">⑥ STRUCTURES DE DONNÉES EN MÉMOIRE</text>
+  <text x="410" y="428" font-family="Arial" font-size="12" fill="#333" font-weight="bold">Tables Lua (chargées une fois) :</text>
+  <text x="410" y="446" font-family="Arial" font-size="12" fill="#555">  • t_runway[]     — pistes {ID, Lat, Lon, Node, x,z}</text>
+  <text x="410" y="464" font-family="Arial" font-size="12" fill="#555">  • t_gate[]       — gates {ID, Type, Heading, x,y,z}</text>
+  <text x="410" y="482" font-family="Arial" font-size="12" fill="#555">  • t_taxinode[]   — nœuds {Lat,Lon, Type, Segment…}</text>
+  <text x="410" y="500" font-family="Arial" font-size="12" fill="#555">  • t_segment[]    — arêtes {Node1, Node2, Dir, Type}</text>
+  <text x="410" y="518" font-family="Arial" font-size="12" fill="#555">  • t_runway_node[] — nœuds sur piste</text>
+  <text x="410" y="536" font-family="Arial" font-size="12" fill="#555">  • t_deleted_runway[] — pistes sans route</text>
+  <text x="410" y="558" font-family="Arial" font-size="11" fill="#888" font-style="italic">→ Alimentées par read_apt_file()</text>
+
+  <!-- BLOC 7 : Algorithme A* -->
+  <rect x="395" y="600" width="380" height="290" rx="8" fill="#FCE4EC" stroke="#E91E63" stroke-width="2"/>
+  <rect x="395" y="600" width="380" height="30" rx="8" fill="#E91E63"/>
+  <rect x="395" y="617" width="380" height="13" fill="#E91E63"/>
+  <text x="585" y="621" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">⑦ CALCUL DE ROUTE (A*)</text>
+  <text x="410" y="648" font-family="Arial" font-size="12" fill="#333">• determine_XP_route() — validation + dispatch</text>
+  <text x="410" y="666" font-family="Arial" font-size="12" fill="#333">• determine_possible_routes()</text>
+  <text x="410" y="684" font-family="Arial" font-size="12" fill="#555">  ├ Trouve start pt (gate ou avion +60m)</text>
+  <text x="410" y="702" font-family="Arial" font-size="12" fill="#555">  └ Trouve end pt (piste ou gate arrivée)</text>
+  <text x="410" y="720" font-family="Arial" font-size="12" fill="#333">• transverse() — A* avec coût angulaire</text>
+  <text x="410" y="738" font-family="Arial" font-size="12" fill="#555">  ├ Open/Close lists, f=g+h</text>
+  <text x="410" y="756" font-family="Arial" font-size="12" fill="#555">  ├ Heuristique: distance au but</text>
+  <text x="410" y="774" font-family="Arial" font-size="12" fill="#555">  └ Restriction taille taxiway (A/B/C/D/E)</text>
+  <text x="410" y="792" font-family="Arial" font-size="12" fill="#333">• process_possible_routes() → t_node[]</text>
+  <text x="410" y="810" font-family="Arial" font-size="12" fill="#555">  ├ Projection sur axe centreline piste</text>
+  <text x="410" y="828" font-family="Arial" font-size="12" fill="#555">  └ Nœud GPS seuil de piste (VER1.17)</text>
+  <text x="410" y="848" font-family="Arial" font-size="11" fill="#888" font-style="italic">• determine_pos_on_segment(), compute_intersection()</text>
+  <text x="410" y="866" font-family="Arial" font-size="11" fill="#888" font-style="italic">• add_new_taxinode_segment() — nœuds virtuels</text>
+  <text x="410" y="884" font-family="Arial" font-size="11" fill="#888" font-style="italic">• t_node[] = route finale consommée par la voiture</text>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- COLONNE DROITE -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- BLOC 8 : Physique voiture -->
+  <rect x="800" y="80" width="380" height="300" rx="8" fill="#E8EAF6" stroke="#3F51B5" stroke-width="2"/>
+  <rect x="800" y="80" width="380" height="30" rx="8" fill="#3F51B5"/>
+  <rect x="800" y="97" width="380" height="13" fill="#3F51B5"/>
+  <text x="990" y="101" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">⑧ PHYSIQUE DE LA VOITURE</text>
+  <text x="815" y="128" font-family="Arial" font-size="12" fill="#333">• start_car() — init position + messages</text>
+  <text x="815" y="146" font-family="Arial" font-size="12" fill="#555">  └ Spawn 15m derrière avion si &gt;150m</text>
+  <text x="815" y="168" font-family="Arial" font-size="12" fill="#333">• object_physics() — moteur principal (frame)</text>
+  <text x="815" y="186" font-family="Arial" font-size="12" fill="#333">• move_car(dist, in_sight, behind)</text>
+  <text x="815" y="204" font-family="Arial" font-size="12" fill="#555">  ├ Zone &lt;30m: accélération max</text>
+  <text x="815" y="222" font-family="Arial" font-size="12" fill="#555">  ├ Zone 30-65m: suit vitesse avion</text>
+  <text x="815" y="240" font-family="Arial" font-size="12" fill="#555">  └ Zone &gt;80m: décélération</text>
+  <text x="815" y="262" font-family="Arial" font-size="12" fill="#333">• manage_car_motion() — cinématique</text>
+  <text x="815" y="280" font-family="Arial" font-size="12" fill="#555">  ├ Vitesse max, accél, décél</text>
+  <text x="815" y="298" font-family="Arial" font-size="12" fill="#555">  └ Frein avant virage (dist_b4_turn)</text>
+  <text x="815" y="320" font-family="Arial" font-size="12" fill="#333">• plot_position() — navigation nœud→nœud</text>
+  <text x="815" y="338" font-family="Arial" font-size="12" fill="#555">  ├ Mode droit + virage (turning_is_active)</text>
+  <text x="815" y="356" font-family="Arial" font-size="11" fill="#888" font-style="italic">  └ determine_dir_of_turn(), CoR_coordinates()</text>
+
+  <!-- BLOC 9 : Rendu 3D XPLM -->
+  <rect x="800" y="400" width="380" height="235" rx="8" fill="#FBE9E7" stroke="#FF5722" stroke-width="2"/>
+  <rect x="800" y="400" width="380" height="30" rx="8" fill="#FF5722"/>
+  <rect x="800" y="417" width="380" height="13" fill="#FF5722"/>
+  <text x="990" y="421" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">⑨ RENDU 3D (XPLM Instances)</text>
+  <text x="815" y="448" font-family="Arial" font-size="12" fill="#333">• load_object() — voiture + signboard</text>
+  <text x="815" y="466" font-family="Arial" font-size="12" fill="#555">  ├ Ferrari / Van / FM Truck / Auto</text>
+  <text x="815" y="484" font-family="Arial" font-size="12" fill="#555">  └ XPLMLoadObjectAsync + CreateInstance</text>
+  <text x="815" y="506" font-family="Arial" font-size="12" fill="#333">• draw_object() — position chaque frame</text>
+  <text x="815" y="524" font-family="Arial" font-size="12" fill="#555">  ├ XPLMInstanceSetPosition (x,y,z,hdg)</text>
+  <text x="815" y="542" font-family="Arial" font-size="12" fill="#555">  └ sync_anim_datarefs() — roues/signboard</text>
+  <text x="815" y="564" font-family="Arial" font-size="12" fill="#333">• load_path() — marqueurs pushpin</text>
+  <text x="815" y="582" font-family="Arial" font-size="12" fill="#333">• load_rampstart() — diamant gate</text>
+  <text x="815" y="600" font-family="Arial" font-size="11" fill="#888" font-style="italic">• load_probe() / probe_y() — altitude terrain</text>
+  <text x="815" y="618" font-family="Arial" font-size="11" fill="#888" font-style="italic">• unload_object/path/rampstart/probe()</text>
+
+  <!-- BLOC 10 : Utilitaires mathématiques -->
+  <rect x="800" y="655" width="380" height="200" rx="8" fill="#F9FBE7" stroke="#8BC34A" stroke-width="2"/>
+  <rect x="800" y="655" width="380" height="30" rx="8" fill="#8BC34A"/>
+  <rect x="800" y="672" width="380" height="13" fill="#8BC34A"/>
+  <text x="990" y="676" font-family="Arial" font-size="14" font-weight="bold" fill="white" text-anchor="middle">⑩ UTILITAIRES MATHÉMATIQUES</text>
+  <text x="815" y="702" font-family="Arial" font-size="12" fill="#333">• heading_n_dist() — cap + distance</text>
+  <text x="815" y="720" font-family="Arial" font-size="12" fill="#333">• add/minus_delta_clockwise()</text>
+  <text x="815" y="738" font-family="Arial" font-size="12" fill="#333">• compute_angle_diff() / diff_dir()</text>
+  <text x="815" y="756" font-family="Arial" font-size="12" fill="#333">• chk_line_of_sight() — cône de vision</text>
+  <text x="815" y="774" font-family="Arial" font-size="12" fill="#333">• coordinates_of_adjusted_ref()</text>
+  <text x="815" y="792" font-family="Arial" font-size="12" fill="#333">• local_to_latlon() / latlon_to_local()</text>
+  <text x="815" y="810" font-family="Arial" font-size="11" fill="#888" font-style="italic">• determine_exit_angle() — géométrie virage</text>
+  <text x="815" y="828" font-family="Arial" font-size="11" fill="#888" font-style="italic">• XPLMWorldToLocal / XPLMLocalToWorld</text>
+  <text x="815" y="846" font-family="Arial" font-size="11" fill="#888" font-style="italic">• XPLMProbeTerrainXYZ — sol 3D</text>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- COLONNE EXTREME DROITE : Boucles FlyWithLua -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- BLOC 11 : do_every_frame -->
+  <rect x="1205" y="80" width="280" height="280" rx="8" fill="#E0F7FA" stroke="#00BCD4" stroke-width="2.5"/>
+  <rect x="1205" y="80" width="280" height="30" rx="8" fill="#00BCD4"/>
+  <rect x="1205" y="97" width="280" height="13" fill="#00BCD4"/>
+  <text x="1345" y="101" font-family="Arial" font-size="13" font-weight="bold" fill="white" text-anchor="middle">⑪ do_every_frame</text>
+  <text x="1345" y="118" font-family="Arial" font-size="11" fill="white" text-anchor="middle">FlyWithLua — chaque frame</text>
+  <text x="1220" y="142" font-family="Arial" font-size="11" fill="#333" font-weight="bold">handle_plugin_window()</text>
+  <text x="1220" y="160" font-family="Arial" font-size="11" fill="#555">  ├ Détection nouveau vol / téléport</text>
+  <text x="1220" y="178" font-family="Arial" font-size="11" fill="#555">  ├ Décollage → hide_window()</text>
+  <text x="1220" y="196" font-family="Arial" font-size="11" fill="#555">  ├ Toggle fenêtre ImGui</text>
+  <text x="1220" y="214" font-family="Arial" font-size="11" fill="#555">  ├ SimBrief auto-trigger taxi light</text>
+  <text x="1220" y="232" font-family="Arial" font-size="11" fill="#555">  ├ Auto taxi light → route + voiture</text>
+  <text x="1220" y="250" font-family="Arial" font-size="11" fill="#555">  ├ prepare_show_objects → start_car()</text>
+  <text x="1220" y="268" font-family="Arial" font-size="11" fill="#555">  └ prepare_kill_objects → unload()</text>
+  <text x="1220" y="290" font-family="Arial" font-size="11" fill="#333" font-weight="bold">object_physics()</text>
+  <text x="1220" y="308" font-family="Arial" font-size="11" fill="#555">  ├ move_car() + draw_object()</text>
+  <text x="1220" y="326" font-family="Arial" font-size="11" fill="#555">  └ draw_path() + draw_rampstart()</text>
+  <text x="1220" y="348" font-family="Arial" font-size="10" fill="#007b9a" font-style="italic">⚡ Appelée ~60 fois/seconde</text>
+
+  <!-- BLOC 12 : do_on_exit -->
+  <rect x="1205" y="385" width="280" height="140" rx="8" fill="#FFEBEE" stroke="#F44336" stroke-width="2.5"/>
+  <rect x="1205" y="385" width="280" height="30" rx="8" fill="#F44336"/>
+  <rect x="1205" y="402" width="280" height="13" fill="#F44336"/>
+  <text x="1345" y="406" font-family="Arial" font-size="13" font-weight="bold" fill="white" text-anchor="middle">⑫ do_on_exit</text>
+  <text x="1345" y="423" font-family="Arial" font-size="11" fill="white" text-anchor="middle">FlyWithLua — fermeture</text>
+  <text x="1220" y="448" font-family="Arial" font-size="11" fill="#333">• full_reset()</text>
+  <text x="1220" y="466" font-family="Arial" font-size="11" fill="#555">  ├ unload_object() — voiture/sign</text>
+  <text x="1220" y="484" font-family="Arial" font-size="11" fill="#555">  ├ unload_path() — marqueurs</text>
+  <text x="1220" y="502" font-family="Arial" font-size="11" fill="#555">  └ unload_probe() — terrain probe</text>
+  <text x="1220" y="514" font-family="Arial" font-size="10" fill="#c62828" font-style="italic">• Évite crash dangling XPLM pointers</text>
+
+  <!-- BLOC 13 : States / Flags -->
+  <rect x="1205" y="545" width="280" height="270" rx="8" fill="#F3E5F5" stroke="#7B1FA2" stroke-width="2"/>
+  <rect x="1205" y="545" width="280" height="30" rx="8" fill="#7B1FA2"/>
+  <rect x="1205" y="562" width="280" height="13" fill="#7B1FA2"/>
+  <text x="1345" y="566" font-family="Arial" font-size="13" font-weight="bold" fill="white" text-anchor="middle">⑬ ÉTAT GLOBAL</text>
+  <text x="1345" y="583" font-family="Arial" font-size="11" fill="white" text-anchor="middle">Variables de contrôle</text>
+  <text x="1220" y="608" font-family="Arial" font-size="11" fill="#333" font-weight="bold">Mode :</text>
+  <text x="1220" y="626" font-family="Arial" font-size="11" fill="#555">  depart_arrive : 0=init 1=dep 2=arr</text>
+  <text x="1220" y="644" font-family="Arial" font-size="11" fill="#555">  FM_car_active : bool</text>
+  <text x="1220" y="662" font-family="Arial" font-size="11" fill="#333" font-weight="bold">Déclencheurs :</text>
+  <text x="1220" y="680" font-family="Arial" font-size="11" fill="#555">  prepare_show_objects</text>
+  <text x="1220" y="698" font-family="Arial" font-size="11" fill="#555">  prepare_kill_objects</text>
+  <text x="1220" y="716" font-family="Arial" font-size="11" fill="#555">  kill_is_manual</text>
+  <text x="1220" y="734" font-family="Arial" font-size="11" fill="#333" font-weight="bold">Vol :</text>
+  <text x="1220" y="752" font-family="Arial" font-size="11" fill="#555">  flightstart, ground_time</text>
+  <text x="1220" y="770" font-family="Arial" font-size="11" fill="#555">  prev_new_flight, prev_plane_x/z</text>
+  <text x="1220" y="788" font-family="Arial" font-size="11" fill="#333" font-weight="bold">Route :</text>
+  <text x="1220" y="806" font-family="Arial" font-size="11" fill="#555">  t_node[], curr_node</text>
+  <text x="1220" y="798" font-family="Arial" font-size="11" fill="#555">  depart_runway, arrival_gate</text>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- FLÈCHES DE FLUX -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- ① → ② -->
+  <line x1="195" y1="255" x2="195" y2="275" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="195,275 191,267 199,267" fill="#555"/>
+
+  <!-- ② → ③ -->
+  <line x1="195" y1="460" x2="195" y2="480" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="195,480 191,472 199,472" fill="#555"/>
+
+  <!-- ③ → ④ -->
+  <line x1="195" y1="615" x2="195" y2="635" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="195,635 191,627 199,627" fill="#555"/>
+
+  <!-- ⑤ → ⑥ -->
+  <line x1="585" y1="360" x2="585" y2="380" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="585,380 581,372 589,372" fill="#555"/>
+
+  <!-- ⑥ → ⑦ -->
+  <line x1="585" y1="580" x2="585" y2="600" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="585,600 581,592 589,592" fill="#555"/>
+
+  <!-- ② → ⑤ (trigger read airport) -->
+  <line x1="370" y1="370" x2="395" y2="370" stroke="#FF9800" stroke-width="2"/>
+  <polygon points="395,370 387,366 387,374" fill="#FF9800"/>
+  <text x="374" y="363" font-family="Arial" font-size="9" fill="#FF9800">open</text>
+
+  <!-- ④ → ⑦ (apply runway) -->
+  <line x1="370" y1="700" x2="395" y2="700" stroke="#4CAF50" stroke-width="2"/>
+  <polygon points="395,700 387,696 387,704" fill="#4CAF50"/>
+  <text x="372" y="693" font-family="Arial" font-size="9" fill="#4CAF50">rwy</text>
+
+  <!-- ⑦ → ⑧ (t_node ready) -->
+  <line x1="775" y1="745" x2="800" y2="745" stroke="#E91E63" stroke-width="2.5"/>
+  <polygon points="800,745 792,741 792,749" fill="#E91E63"/>
+  <text x="776" y="738" font-family="Arial" font-size="9" fill="#E91E63">t_node</text>
+
+  <!-- ⑧ → ⑨ (draw_object) -->
+  <line x1="990" y1="380" x2="990" y2="400" stroke="#3F51B5" stroke-width="2"/>
+  <polygon points="990,400 986,392 994,392" fill="#3F51B5"/>
+
+  <!-- ⑩ math used by ⑧ -->
+  <line x1="990" y1="655" x2="990" y2="635" stroke="#8BC34A" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="990,635 986,643 994,643" fill="#8BC34A"/>
+
+  <!-- ⑪ → ⑧ (object_physics calls) -->
+  <line x1="1205" y1="230" x2="1180" y2="230" stroke="#00BCD4" stroke-width="2"/>
+  <polygon points="1180,230 1188,226 1188,234" fill="#00BCD4"/>
+
+  <!-- ⑪ → ② (window toggle) -->
+  <line x1="1205" y1="185" x2="1180" y2="185" stroke="#00BCD4" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="1180,185 1188,181 1188,189" fill="#00BCD4"/>
+
+  <!-- ⑫ → ⑨ unload -->
+  <line x1="1205" y1="470" x2="1180" y2="530" stroke="#F44336" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="1180,530 1182,521 1188,527" fill="#F44336"/>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- BARRE DE LÉGENDE EN BAS -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <rect x="10" y="910" width="1480" height="300" rx="8" fill="#F8F9FA" stroke="#DEE2E6" stroke-width="1.5"/>
+  <text x="750" y="935" font-family="Arial" font-size="14" font-weight="bold" fill="#333" text-anchor="middle">FLUX COMPLET — CYCLE DE VIE D'UNE MISSION FOLLOW ME</text>
+
+  <!-- Étape A -->
+  <rect x="30" y="950" width="20" height="20" rx="3" fill="#2196F3"/>
+  <text x="58" y="965" font-family="Arial" font-size="12" fill="#333" font-weight="bold">A. Démarrage X-Plane</text>
+  <text x="58" y="982" font-family="Arial" font-size="11" fill="#555">FFI + datarefs + sons → load_config() → show_holder()</text>
+
+  <!-- Étape B -->
+  <rect x="30" y="1000" width="20" height="20" rx="3" fill="#FF9800"/>
+  <text x="58" y="1015" font-family="Arial" font-size="12" fill="#333" font-weight="bold">B. Ouverture panneau FM</text>
+  <text x="58" y="1032" font-family="Arial" font-size="11" fill="#555">Clic bouton FM → show_window() → build_window() → get_airport_elements() → read_apt_file()</text>
+
+  <!-- Étape C -->
+  <rect x="30" y="1050" width="20" height="20" rx="3" fill="#FFC107"/>
+  <text x="58" y="1065" font-family="Arial" font-size="12" fill="#333" font-weight="bold">C. Chargement aéroport</text>
+  <text x="58" y="1082" font-family="Arial" font-size="11" fill="#555">apt.dat parsé → t_runway, t_gate, t_taxinode, t_segment en mémoire → determine_runway_node()</text>
+
+  <!-- Étape D -->
+  <rect x="30" y="1100" width="20" height="20" rx="3" fill="#E91E63"/>
+  <text x="58" y="1115" font-family="Arial" font-size="12" fill="#333" font-weight="bold">D. Calcul de route</text>
+  <text x="58" y="1132" font-family="Arial" font-size="11" fill="#555">Clic "Request" → determine_XP_route() → A* transverse() → process_possible_routes() → t_node[]</text>
+
+  <!-- Étape E -->
+  <rect x="560" y="950" width="20" height="20" rx="3" fill="#3F51B5"/>
+  <text x="588" y="965" font-family="Arial" font-size="12" fill="#333" font-weight="bold">E. Activation voiture</text>
+  <text x="588" y="982" font-family="Arial" font-size="11" fill="#555">prepare_show_objects → load_object() → start_car() → FM_car_active = true</text>
+
+  <!-- Étape F -->
+  <rect x="560" y="1000" width="20" height="20" rx="3" fill="#FF5722"/>
+  <text x="588" y="1015" font-family="Arial" font-size="12" fill="#333" font-weight="bold">F. Boucle de simulation (do_every_frame)</text>
+  <text x="588" y="1032" font-family="Arial" font-size="11" fill="#555">object_physics() → move_car() → manage_car_motion() → plot_position() → draw_object()</text>
+
+  <!-- Étape G -->
+  <rect x="560" y="1050" width="20" height="20" rx="3" fill="#00BCD4"/>
+  <text x="588" y="1065" font-family="Arial" font-size="12" fill="#333" font-weight="bold">G. Fin de mission / Annulation</text>
+  <text x="588" y="1082" font-family="Arial" font-size="11" fill="#555">Arrivée (car_sign=1 + "Arrived") OU taxi_light=0 OU Cancel → prepare_kill_objects → unload()</text>
+
+  <!-- Étape H -->
+  <rect x="560" y="1100" width="20" height="20" rx="3" fill="#F44336"/>
+  <text x="588" y="1115" font-family="Arial" font-size="12" fill="#333" font-weight="bold">H. Quitter X-Plane (do_on_exit)</text>
+  <text x="588" y="1132" font-family="Arial" font-size="11" fill="#555">full_reset() → unload_object + path + rampstart + probe → évite crash dangling XPLM pointers</text>
+
+  <!-- Note version -->
+  <rect x="1100" y="950" width="370" height="230" rx="6" fill="#FFF8E1" stroke="#FFC107" stroke-width="1.5"/>
+  <text x="1285" y="970" font-family="Arial" font-size="12" font-weight="bold" fill="#333" text-anchor="middle">Versions majeures</text>
+  <text x="1115" y="988" font-family="Arial" font-size="10" fill="#555">VER1.4 — Corrections X-Plane 12 / Toliss</text>
+  <text x="1115" y="1004" font-family="Arial" font-size="10" fill="#555">VER1.5 — Intégration SimBrief (HTTP API)</text>
+  <text x="1115" y="1020" font-family="Arial" font-size="10" fill="#555">VER1.6 — Nouvelle prefs, speed limiter 20kts</text>
+  <text x="1115" y="1036" font-family="Arial" font-size="10" fill="#555">VER1.7 — Back-taxi via piste si pas de taxiway</text>
+  <text x="1115" y="1052" font-family="Arial" font-size="10" fill="#555">VER1.8 — Arrêt exact au seuil de piste</text>
+  <text x="1115" y="1068" font-family="Arial" font-size="10" fill="#555">VER1.11 — Règle universelle nœud entrée piste</text>
+  <text x="1115" y="1084" font-family="Arial" font-size="10" fill="#555">VER1.12 — full_reset(), fix double-voiture</text>
+  <text x="1115" y="1100" font-family="Arial" font-size="10" fill="#555">VER1.15 — Fallback nœud connecté (CYQB)</text>
+  <text x="1115" y="1116" font-family="Arial" font-size="10" fill="#555">VER1.16 — Projection centreline piste</text>
+  <text x="1115" y="1132" font-family="Arial" font-size="10" fill="#555">VER1.17 — GPS seuil universel, fix crash reload</text>
+  <text x="1115" y="1148" font-family="Arial" font-size="10" fill="#555">VER1.19 — Cross-runway traversable (KSYR)</text>
+  <text x="1115" y="1168" font-family="Arial" font-size="10" fill="#777" font-style="italic">© 2026 Coussini — FlyWithLua / X-Plane 12</text>
+
+</svg>

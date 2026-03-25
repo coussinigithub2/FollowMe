@@ -1,0 +1,496 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980" font-family="'Courier New', monospace">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#07090d"/>
+      <stop offset="100%" style="stop-color:#0d1520"/>
+    </linearGradient>
+    <filter id="glow-cyan">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-green">
+      <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-pink">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-cyan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00d4ff"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3dff6e"/>
+    </marker>
+    <marker id="arrow-yellow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ffc107"/>
+    </marker>
+    <marker id="arrow-pink" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff00aa"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#b06fff"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff6b35"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="980" fill="url(#bgGrad)"/>
+
+  <!-- Grid -->
+  <g opacity="0.04" stroke="#00d4ff" stroke-width="0.5">
+    <line x1="0" y1="50" x2="1400" y2="50"/><line x1="0" y1="100" x2="1400" y2="100"/>
+    <line x1="0" y1="150" x2="1400" y2="150"/><line x1="0" y1="200" x2="1400" y2="200"/>
+    <line x1="0" y1="250" x2="1400" y2="250"/><line x1="0" y1="300" x2="1400" y2="300"/>
+    <line x1="0" y1="350" x2="1400" y2="350"/><line x1="0" y1="400" x2="1400" y2="400"/>
+    <line x1="0" y1="450" x2="1400" y2="450"/><line x1="0" y1="500" x2="1400" y2="500"/>
+    <line x1="0" y1="550" x2="1400" y2="550"/><line x1="0" y1="600" x2="1400" y2="600"/>
+    <line x1="0" y1="650" x2="1400" y2="650"/><line x1="0" y1="700" x2="1400" y2="700"/>
+    <line x1="0" y1="750" x2="1400" y2="750"/><line x1="0" y1="800" x2="1400" y2="800"/>
+    <line x1="0" y1="850" x2="1400" y2="850"/><line x1="0" y1="900" x2="1400" y2="900"/>
+    <line x1="50" y1="0" x2="50" y2="980"/><line x1="100" y1="0" x2="100" y2="980"/>
+    <line x1="150" y1="0" x2="150" y2="980"/><line x1="200" y1="0" x2="200" y2="980"/>
+    <line x1="250" y1="0" x2="250" y2="980"/><line x1="300" y1="0" x2="300" y2="980"/>
+    <line x1="350" y1="0" x2="350" y2="980"/><line x1="400" y1="0" x2="400" y2="980"/>
+    <line x1="450" y1="0" x2="450" y2="980"/><line x1="500" y1="0" x2="500" y2="980"/>
+    <line x1="550" y1="0" x2="550" y2="980"/><line x1="600" y1="0" x2="600" y2="980"/>
+    <line x1="650" y1="0" x2="650" y2="980"/><line x1="700" y1="0" x2="700" y2="980"/>
+    <line x1="750" y1="0" x2="750" y2="980"/><line x1="800" y1="0" x2="800" y2="980"/>
+    <line x1="850" y1="0" x2="850" y2="980"/><line x1="900" y1="0" x2="900" y2="980"/>
+    <line x1="950" y1="0" x2="950" y2="980"/><line x1="1000" y1="0" x2="1000" y2="980"/>
+    <line x1="1050" y1="0" x2="1050" y2="980"/><line x1="1100" y1="0" x2="1100" y2="980"/>
+    <line x1="1150" y1="0" x2="1150" y2="980"/><line x1="1200" y1="0" x2="1200" y2="980"/>
+    <line x1="1250" y1="0" x2="1250" y2="980"/><line x1="1300" y1="0" x2="1300" y2="980"/>
+    <line x1="1350" y1="0" x2="1350" y2="980"/>
+  </g>
+
+  <!-- ═══ TITLE ═══ -->
+  <text x="700" y="38" text-anchor="middle" fill="#00d4ff" font-size="18" font-weight="bold" letter-spacing="8" filter="url(#glow-cyan)">TAXIWAY PATHFINDER — ARCHITECTURE DES TRAITEMENTS</text>
+  <text x="700" y="54" text-anchor="middle" fill="#3a5570" font-size="10" letter-spacing="4">apt.dat · X-Plane 12 · v6</text>
+  <line x1="40" y1="62" x2="1360" y2="62" stroke="#1c2d3f" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 1 — FILE LOADING
+  ═══════════════════════════════════════════ -->
+  <!-- Phase label -->
+  <rect x="40" y="75" width="160" height="22" rx="3" fill="#0a1520" stroke="#00d4ff" stroke-width="0.5" opacity="0.8"/>
+  <text x="50" y="90" fill="#00d4ff" font-size="9" letter-spacing="3">PHASE 1 · CHARGEMENT</text>
+
+  <!-- DROP ZONE box -->
+  <rect x="40" y="105" width="190" height="80" rx="5" fill="#0a1b2a" stroke="#00d4ff" stroke-width="1.5"/>
+  <rect x="40" y="105" width="190" height="22" rx="5" fill="#00d4ff" opacity="0.15"/>
+  <text x="135" y="120" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold" letter-spacing="2">DROP ZONE</text>
+  <text x="135" y="138" text-anchor="middle" fill="#b8d0e0" font-size="9">📡 Dépôt fichier apt.dat</text>
+  <text x="135" y="153" text-anchor="middle" fill="#4a6880" font-size="8">input type=file · .dat / .txt</text>
+  <text x="135" y="168" text-anchor="middle" fill="#4a6880" font-size="8">drag-over / click</text>
+  <circle cx="218" cy="112" r="4" fill="#00d4ff" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Arrow Phase1 -> scanAptDat -->
+  <line x1="230" y1="145" x2="268" y2="145" stroke="#00d4ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- scanAptDat box -->
+  <rect x="270" y="105" width="200" height="80" rx="5" fill="#0a1b2a" stroke="#00d4ff" stroke-width="1.5"/>
+  <rect x="270" y="105" width="200" height="22" rx="5" fill="#00d4ff" opacity="0.15"/>
+  <text x="370" y="120" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold" letter-spacing="2">scanAptDat()</text>
+  <text x="370" y="138" text-anchor="middle" fill="#b8d0e0" font-size="9">Indexation multi-aéroports</text>
+  <text x="370" y="153" text-anchor="middle" fill="#4a6880" font-size="8">split lignes · rows 1/16/17</text>
+  <text x="370" y="168" text-anchor="middle" fill="#4a6880" font-size="8">RAW_AIRPORTS[ICAO] = bloc texte</text>
+
+  <!-- Progress bar mention -->
+  <rect x="272" y="178" width="196" height="6" rx="2" fill="#0d1520" stroke="#1c2d3f" stroke-width="0.5"/>
+  <rect x="272" y="178" width="100" height="6" rx="2" fill="#00d4ff" opacity="0.5"/>
+  <text x="370" y="196" text-anchor="middle" fill="#3a5570" font-size="8" letter-spacing="1">parse-bar-fill · progression %</text>
+
+  <!-- Arrow scanAptDat -> RAW_AIRPORTS -->
+  <line x1="470" y1="145" x2="508" y2="145" stroke="#00d4ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- RAW_AIRPORTS store box -->
+  <rect x="510" y="105" width="180" height="80" rx="5" fill="#091a14" stroke="#3dff6e" stroke-width="1.5"/>
+  <rect x="510" y="105" width="180" height="22" rx="5" fill="#3dff6e" opacity="0.1"/>
+  <text x="600" y="120" text-anchor="middle" fill="#3dff6e" font-size="10" font-weight="bold" letter-spacing="2">RAW_AIRPORTS{}</text>
+  <text x="600" y="138" text-anchor="middle" fill="#b8d0e0" font-size="9">Index ICAO → bloc texte</text>
+  <text x="600" y="153" text-anchor="middle" fill="#4a6880" font-size="8">N aéroports indexés</text>
+  <text x="600" y="168" text-anchor="middle" fill="#4a6880" font-size="8">row 1302 icao_code override</text>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 2 — AIRPORT SELECTION
+  ═══════════════════════════════════════════ -->
+  <rect x="40" y="220" width="165" height="22" rx="3" fill="#0a1520" stroke="#ffc107" stroke-width="0.5" opacity="0.8"/>
+  <text x="50" y="235" fill="#ffc107" font-size="9" letter-spacing="3">PHASE 2 · SÉLECTION ICAO</text>
+
+  <!-- ICAO Input -->
+  <rect x="40" y="250" width="190" height="70" rx="5" fill="#0a1b20" stroke="#ffc107" stroke-width="1.5"/>
+  <rect x="40" y="250" width="190" height="22" rx="5" fill="#ffc107" opacity="0.12"/>
+  <text x="135" y="265" text-anchor="middle" fill="#ffc107" font-size="10" font-weight="bold" letter-spacing="2">ICAO INPUT</text>
+  <text x="135" y="283" text-anchor="middle" fill="#b8d0e0" font-size="9">Saisie code 4 lettres</text>
+  <text x="135" y="298" text-anchor="middle" fill="#4a6880" font-size="8">airport-code-input · BTN CHARGER</text>
+  <text x="135" y="312" text-anchor="middle" fill="#4a6880" font-size="8">auto-load si code déjà tapé</text>
+
+  <!-- Arrow ICAO -> loadAirportByCode -->
+  <line x1="230" y1="285" x2="268" y2="285" stroke="#ffc107" stroke-width="1.5" marker-end="url(#arrow-yellow)"/>
+
+  <!-- loadAirportByCode -->
+  <rect x="270" y="250" width="200" height="70" rx="5" fill="#0a1b20" stroke="#ffc107" stroke-width="1.5"/>
+  <rect x="270" y="250" width="200" height="22" rx="5" fill="#ffc107" opacity="0.12"/>
+  <text x="370" y="265" text-anchor="middle" fill="#ffc107" font-size="10" font-weight="bold" letter-spacing="1">loadAirportByCode()</text>
+  <text x="370" y="283" text-anchor="middle" fill="#b8d0e0" font-size="9">Validation · lookup RAW_AIRPORTS</text>
+  <text x="370" y="298" text-anchor="middle" fill="#4a6880" font-size="8">✕ introuvable / ✓ trouvé</text>
+  <text x="370" y="312" text-anchor="middle" fill="#4a6880" font-size="8">setTimeout → parseAirportBlock()</text>
+
+  <!-- Arrow RAW_AIRPORTS down to loadAirportByCode -->
+  <line x1="600" y1="185" x2="600" y2="230" stroke="#3dff6e" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="600" y1="230" x2="430" y2="265" stroke="#3dff6e" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-green)"/>
+
+  <!-- Arrow loadAirportByCode -> parseAirportBlock -->
+  <line x1="470" y1="285" x2="508" y2="285" stroke="#ffc107" stroke-width="1.5" marker-end="url(#arrow-yellow)"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 3 — PARSING parseAirportBlock()
+  ═══════════════════════════════════════════ -->
+  <rect x="510" y="220" width="185" height="22" rx="3" fill="#0a1520" stroke="#ff6b35" stroke-width="0.5" opacity="0.8"/>
+  <text x="520" y="235" fill="#ff6b35" font-size="9" letter-spacing="3">PHASE 3 · PARSING APT.DAT</text>
+
+  <!-- parseAirportBlock MAIN -->
+  <rect x="510" y="250" width="200" height="70" rx="5" fill="#1a0d08" stroke="#ff6b35" stroke-width="2"/>
+  <rect x="510" y="250" width="200" height="22" rx="5" fill="#ff6b35" opacity="0.15"/>
+  <text x="610" y="265" text-anchor="middle" fill="#ff6b35" font-size="10" font-weight="bold" letter-spacing="1">parseAirportBlock()</text>
+  <text x="610" y="283" text-anchor="middle" fill="#b8d0e0" font-size="9">Lecture ligne par ligne</text>
+  <text x="610" y="298" text-anchor="middle" fill="#4a6880" font-size="8">Reset : NODES/SEGS/RWYS/GATES</text>
+  <text x="610" y="312" text-anchor="middle" fill="#4a6880" font-size="8">split /\s+/ → tokens p[]</text>
+
+  <!-- Parsing sub-rows — fan out downward -->
+  <!-- Row headers -->
+  <text x="610" y="342" text-anchor="middle" fill="#3a5570" font-size="8" letter-spacing="2">ROWS APT.DAT TRAITÉS</text>
+  <line x1="510" y1="346" x2="710" y2="346" stroke="#1c2d3f" stroke-width="0.5"/>
+
+  <!-- Row 1/16/17 -->
+  <rect x="510" y="355" width="92" height="50" rx="3" fill="#0d1520" stroke="#ffc107" stroke-width="1"/>
+  <text x="556" y="370" text-anchor="middle" fill="#ffc107" font-size="9" font-weight="bold">ROW 1/16/17</text>
+  <text x="556" y="383" text-anchor="middle" fill="#b8d0e0" font-size="8">Header</text>
+  <text x="556" y="396" text-anchor="middle" fill="#4a6880" font-size="7">ICAO · Nom</text>
+
+  <!-- Row 100 -->
+  <rect x="610" y="355" width="92" height="50" rx="3" fill="#0d1520" stroke="#ffc107" stroke-width="1"/>
+  <text x="656" y="370" text-anchor="middle" fill="#ffc107" font-size="9" font-weight="bold">ROW 100</text>
+  <text x="656" y="383" text-anchor="middle" fill="#b8d0e0" font-size="8">Pistes</text>
+  <text x="656" y="396" text-anchor="middle" fill="#4a6880" font-size="7">RUNWAYS[]</text>
+
+  <!-- Row 1201 -->
+  <rect x="710" y="355" width="92" height="50" rx="3" fill="#0d1520" stroke="#00d4ff" stroke-width="1"/>
+  <text x="756" y="370" text-anchor="middle" fill="#00d4ff" font-size="9" font-weight="bold">ROW 1201</text>
+  <text x="756" y="383" text-anchor="middle" fill="#b8d0e0" font-size="8">Nœuds taxi</text>
+  <text x="756" y="396" text-anchor="middle" fill="#4a6880" font-size="7">NODES{id,lat,lon}</text>
+
+  <!-- Row 1202 -->
+  <rect x="810" y="355" width="92" height="50" rx="3" fill="#0d1520" stroke="#3dff6e" stroke-width="1"/>
+  <text x="856" y="370" text-anchor="middle" fill="#3dff6e" font-size="9" font-weight="bold">ROW 1202</text>
+  <text x="856" y="383" text-anchor="middle" fill="#b8d0e0" font-size="8">Segments</text>
+  <text x="856" y="396" text-anchor="middle" fill="#4a6880" font-size="7">SEGMENTS[] type/name</text>
+
+  <!-- Row 1206 -->
+  <rect x="910" y="355" width="92" height="50" rx="3" fill="#0d1520" stroke="#ff4444" stroke-width="1"/>
+  <text x="956" y="370" text-anchor="middle" fill="#ff4444" font-size="9" font-weight="bold">ROW 1206</text>
+  <text x="956" y="383" text-anchor="middle" fill="#b8d0e0" font-size="8">Filtres</text>
+  <text x="956" y="396" text-anchor="middle" fill="#4a6880" font-size="7">FILTER_1206[]</text>
+
+  <!-- Row 1300/15 -->
+  <rect x="1010" y="355" width="100" height="50" rx="3" fill="#0d1520" stroke="#b06fff" stroke-width="1"/>
+  <text x="1060" y="370" text-anchor="middle" fill="#b06fff" font-size="9" font-weight="bold">ROW 1300/15</text>
+  <text x="1060" y="383" text-anchor="middle" fill="#b8d0e0" font-size="8">Gates / Portes</text>
+  <text x="1060" y="396" text-anchor="middle" fill="#4a6880" font-size="7">GATES[] lat/lon/hdg</text>
+
+  <!-- Lines from parseAirportBlock to rows -->
+  <line x1="610" y1="320" x2="556" y2="354" stroke="#1c2d3f" stroke-width="1"/>
+  <line x1="610" y1="320" x2="656" y2="354" stroke="#1c2d3f" stroke-width="1"/>
+  <line x1="610" y1="320" x2="756" y2="354" stroke="#1c2d3f" stroke-width="1"/>
+  <line x1="610" y1="320" x2="856" y2="354" stroke="#1c2d3f" stroke-width="1"/>
+  <line x1="610" y1="320" x2="956" y2="354" stroke="#1c2d3f" stroke-width="1"/>
+  <line x1="610" y1="320" x2="1060" y2="354" stroke="#1c2d3f" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 4 — POST-PROCESSING
+  ═══════════════════════════════════════════ -->
+  <rect x="40" y="435" width="195" height="22" rx="3" fill="#0a1520" stroke="#ff4444" stroke-width="0.5" opacity="0.8"/>
+  <text x="50" y="450" fill="#ff4444" font-size="9" letter-spacing="3">PHASE 4 · POST-TRAITEMENT</text>
+
+  <!-- apply1206Filter -->
+  <rect x="40" y="465" width="220" height="85" rx="5" fill="#1a0808" stroke="#ff4444" stroke-width="1.5"/>
+  <rect x="40" y="465" width="220" height="22" rx="5" fill="#ff4444" opacity="0.12"/>
+  <text x="150" y="480" text-anchor="middle" fill="#ff4444" font-size="10" font-weight="bold" letter-spacing="1">apply1206Filter()</text>
+  <text x="150" y="498" text-anchor="middle" fill="#b8d0e0" font-size="9">Nettoyage des nœuds orphelins</text>
+  <text x="150" y="512" text-anchor="middle" fill="#4a6880" font-size="8">1. USED_NODES ← SEGMENTS</text>
+  <text x="150" y="524" text-anchor="middle" fill="#4a6880" font-size="8">2. nodesToRemove si hors 1202</text>
+  <text x="150" y="536" text-anchor="middle" fill="#4a6880" font-size="8">3. Rebuild GRAPH propre</text>
+
+  <!-- Arrow 1206 row down to apply1206Filter -->
+  <line x1="956" y1="405" x2="956" y2="430" stroke="#ff4444" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="956" y1="430" x2="262" y2="460" stroke="#ff4444" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-orange)"/>
+
+  <!-- Phase 2 Virtual nodes -->
+  <rect x="290" y="465" width="220" height="85" rx="5" fill="#0d1a08" stroke="#ff6b35" stroke-width="1.5"/>
+  <rect x="290" y="465" width="220" height="22" rx="5" fill="#ff6b35" opacity="0.12"/>
+  <text x="400" y="480" text-anchor="middle" fill="#ff6b35" font-size="10" font-weight="bold" letter-spacing="1">PHASE 2 · NŒUDS VIRTUELS</text>
+  <text x="400" y="498" text-anchor="middle" fill="#b8d0e0" font-size="9">Seuils de piste (thresholds)</text>
+  <text x="400" y="512" text-anchor="middle" fill="#4a6880" font-size="8">coordIndex{lat_lon → nodeId}</text>
+  <text x="400" y="524" text-anchor="middle" fill="#4a6880" font-size="8">Existant APT ou généré *GEN</text>
+  <text x="400" y="536" text-anchor="middle" fill="#4a6880" font-size="8">THRESH[] + NODES[nextVirtualId]</text>
+
+  <!-- Gate virtual nodes -->
+  <rect x="540" y="465" width="220" height="85" rx="5" fill="#140d1a" stroke="#b06fff" stroke-width="1.5"/>
+  <rect x="540" y="465" width="220" height="22" rx="5" fill="#b06fff" opacity="0.12"/>
+  <text x="650" y="480" text-anchor="middle" fill="#b06fff" font-size="10" font-weight="bold" letter-spacing="1">NŒUDS GATES VIRTUELS</text>
+  <text x="650" y="498" text-anchor="middle" fill="#b8d0e0" font-size="9">Gates → NODES[nextVirtualId++]</text>
+  <text x="650" y="512" text-anchor="middle" fill="#4a6880" font-size="8">isGate=true · isVirtual=true</text>
+  <text x="650" y="524" text-anchor="middle" fill="#4a6880" font-size="8">Extraction code gate (regex)</text>
+  <text x="650" y="536" text-anchor="middle" fill="#4a6880" font-size="8">[A-Z]?\d+$ → nom court</text>
+
+  <!-- Arrow from rows to Phase 4 -->
+  <line x1="556" y1="405" x2="400" y2="464" stroke="#ff6b35" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow-orange)"/>
+  <line x1="1060" y1="405" x2="650" y2="464" stroke="#b06fff" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow-purple)"/>
+
+  <!-- Phase 3 Connections -->
+  <rect x="790" y="465" width="220" height="85" rx="5" fill="#1a1008" stroke="#ffc107" stroke-width="1.5"/>
+  <rect x="790" y="465" width="220" height="22" rx="5" fill="#ffc107" opacity="0.12"/>
+  <text x="900" y="480" text-anchor="middle" fill="#ffc107" font-size="10" font-weight="bold" letter-spacing="1">PHASE 3 · CONNEXIONS</text>
+  <text x="900" y="498" text-anchor="middle" fill="#b8d0e0" font-size="9">Seuils → nœud piste le + proche</text>
+  <text x="900" y="512" text-anchor="middle" fill="#4a6880" font-size="8">BACKTAXI RWY si non connecté</text>
+  <text x="900" y="524" text-anchor="middle" fill="#4a6880" font-size="8">Gates → taxiway (score heading)</text>
+  <text x="900" y="536" text-anchor="middle" fill="#4a6880" font-size="8">d × (1+3·sin²(Δangle/2)) ≤ 600m</text>
+
+  <!-- Connecting arrows phase 4 blocks -->
+  <line x1="260" y1="507" x2="289" y2="507" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <line x1="510" y1="507" x2="539" y2="507" stroke="#b06fff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <line x1="760" y1="507" x2="789" y2="507" stroke="#ffc107" stroke-width="1.5" marker-end="url(#arrow-yellow)"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 5 — GRAPH CONSTRUCTION
+  ═══════════════════════════════════════════ -->
+  <rect x="1040" y="435" width="200" height="22" rx="3" fill="#0a1520" stroke="#00d4ff" stroke-width="0.5" opacity="0.8"/>
+  <text x="1050" y="450" fill="#00d4ff" font-size="9" letter-spacing="3">PHASE 5 · GRAPHE PONDÉRÉ</text>
+
+  <!-- Graph construction -->
+  <rect x="1040" y="465" width="310" height="115" rx="5" fill="#0a1b2a" stroke="#00d4ff" stroke-width="2"/>
+  <rect x="1040" y="465" width="310" height="22" rx="5" fill="#00d4ff" opacity="0.15"/>
+  <text x="1195" y="480" text-anchor="middle" fill="#00d4ff" font-size="10" font-weight="bold" letter-spacing="2">BUILD GRAPH{}</text>
+  <text x="1195" y="498" text-anchor="middle" fill="#b8d0e0" font-size="9">Adjacence pondérée bidirectionnelle</text>
+  <!-- sub details -->
+  <rect x="1052" y="505" width="135" height="65" rx="3" fill="#060c12" stroke="#1c2d3f" stroke-width="1"/>
+  <text x="1120" y="520" text-anchor="middle" fill="#3dff6e" font-size="9" font-weight="bold">TAXIWAYS</text>
+  <text x="1120" y="533" text-anchor="middle" fill="#4a6880" font-size="8">cost = haversine()</text>
+  <text x="1120" y="545" text-anchor="middle" fill="#4a6880" font-size="8">dist réel en mètres</text>
+  <text x="1120" y="558" text-anchor="middle" fill="#3dff6e" font-size="8">poids normal ×1</text>
+  <rect x="1195" y="505" width="143" height="65" rx="3" fill="#060c12" stroke="#1c2d3f" stroke-width="1"/>
+  <text x="1267" y="520" text-anchor="middle" fill="#ffc107" font-size="9" font-weight="bold">PISTES / BACKTAXI</text>
+  <text x="1267" y="533" text-anchor="middle" fill="#4a6880" font-size="8">cost = dist × PENALTY</text>
+  <text x="1267" y="545" text-anchor="middle" fill="#4a6880" font-size="8">RUNWAY_PENALTY = 20</text>
+  <text x="1267" y="558" text-anchor="middle" fill="#ffc107" font-size="8">évite l'usage piste</text>
+
+  <!-- Arrow from phase 4 last block to graph -->
+  <line x1="1010" y1="507" x2="1039" y2="507" stroke="#00d4ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 6 — UI UPDATE
+  ═══════════════════════════════════════════ -->
+  <rect x="40" y="585" width="170" height="22" rx="3" fill="#0a1520" stroke="#3dff6e" stroke-width="0.5" opacity="0.8"/>
+  <text x="50" y="600" fill="#3dff6e" font-size="9" letter-spacing="3">PHASE 6 · INTERFACE</text>
+
+  <!-- updateUI -->
+  <rect x="40" y="615" width="200" height="100" rx="5" fill="#091a14" stroke="#3dff6e" stroke-width="1.5"/>
+  <rect x="40" y="615" width="200" height="22" rx="5" fill="#3dff6e" opacity="0.1"/>
+  <text x="140" y="630" text-anchor="middle" fill="#3dff6e" font-size="10" font-weight="bold" letter-spacing="2">updateUI()</text>
+  <text x="140" y="648" text-anchor="middle" fill="#b8d0e0" font-size="9">Stats · Badge · Titre page</text>
+  <text x="140" y="662" text-anchor="middle" fill="#4a6880" font-size="8">st-nodes / st-segs / st-rwys</text>
+  <text x="140" y="675" text-anchor="middle" fill="#4a6880" font-size="8">buildDropdowns() → FROM / TO</text>
+  <text x="140" y="688" text-anchor="middle" fill="#4a6880" font-size="8">nodeTableBody : GATES/SEUILS/RES</text>
+  <text x="140" y="702" text-anchor="middle" fill="#4a6880" font-size="8">fitCanvas() → draw()</text>
+
+  <!-- NODE TABLE -->
+  <rect x="260" y="615" width="200" height="100" rx="5" fill="#091a14" stroke="#ffc107" stroke-width="1.5"/>
+  <rect x="260" y="615" width="200" height="22" rx="5" fill="#ffc107" opacity="0.1"/>
+  <text x="360" y="630" text-anchor="middle" fill="#ffc107" font-size="10" font-weight="bold" letter-spacing="1">TABLE DES NŒUDS</text>
+  <text x="360" y="648" text-anchor="middle" fill="#b06fff" font-size="9">■ TERMINAUX / PORTES</text>
+  <text x="360" y="662" text-anchor="middle" fill="#ff6b35" font-size="9">■ SEUILS DE PISTE</text>
+  <text x="360" y="676" text-anchor="middle" fill="#00d4ff" font-size="9">■ NŒUDS RÉSEAU</text>
+  <text x="360" y="692" text-anchor="middle" fill="#4a6880" font-size="8">click → selectNode(id)</text>
+  <text x="360" y="706" text-anchor="middle" fill="#4a6880" font-size="8">highlight flash animation</text>
+
+  <!-- LAYERS -->
+  <rect x="480" y="615" width="200" height="100" rx="5" fill="#091a14" stroke="#3dff6e" stroke-width="1.5"/>
+  <rect x="480" y="615" width="200" height="22" rx="5" fill="#3dff6e" opacity="0.1"/>
+  <text x="580" y="630" text-anchor="middle" fill="#3dff6e" font-size="10" font-weight="bold" letter-spacing="2">COUCHES / LAYERS</text>
+  <text x="580" y="648" text-anchor="middle" fill="#ffc107" font-size="8">━━ runway (jaune épais)</text>
+  <text x="580" y="661" text-anchor="middle" fill="#3dff6e" font-size="8">━━ taxiway_E (vert)</text>
+  <text x="580" y="674" text-anchor="middle" fill="#00d4ff" font-size="8">━━ taxiway_C/D (cyan)</text>
+  <text x="580" y="687" text-anchor="middle" fill="#b06fff" font-size="8">╌╌ gate_link (violet)</text>
+  <text x="580" y="700" text-anchor="middle" fill="#ff6b35" font-size="8">╌╌ backtaxi (orange)</text>
+  <text x="580" y="713" text-anchor="middle" fill="#4a6880" font-size="8">toggleL() ON/OFF</text>
+
+  <!-- Arrows updateUI -->
+  <line x1="240" y1="665" x2="259" y2="665" stroke="#3dff6e" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="460" y1="665" x2="479" y2="665" stroke="#3dff6e" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Arrow Phase 5 down to updateUI -->
+  <line x1="1195" y1="580" x2="1195" y2="610" stroke="#00d4ff" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="1195" y1="610" x2="142" y2="614" stroke="#00d4ff" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-cyan)"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 7 — PATHFINDING (DIJKSTRA)
+  ═══════════════════════════════════════════ -->
+  <rect x="700" y="585" width="185" height="22" rx="3" fill="#0a1520" stroke="#ff00aa" stroke-width="0.5" opacity="0.8"/>
+  <text x="710" y="600" fill="#ff00aa" font-size="9" letter-spacing="3">PHASE 7 · PATHFINDING</text>
+
+  <!-- dijkstra -->
+  <rect x="700" y="615" width="220" height="100" rx="5" fill="#1a0812" stroke="#ff00aa" stroke-width="2"/>
+  <rect x="700" y="615" width="220" height="22" rx="5" fill="#ff00aa" opacity="0.15"/>
+  <text x="810" y="630" text-anchor="middle" fill="#ff00aa" font-size="10" font-weight="bold" letter-spacing="2" filter="url(#glow-pink)">dijkstra()</text>
+  <text x="810" y="648" text-anchor="middle" fill="#b8d0e0" font-size="9">Priority Queue · wcost / realDist</text>
+  <text x="810" y="662" text-anchor="middle" fill="#4a6880" font-size="8">wcost = coût pondéré (routing)</text>
+  <text x="810" y="675" text-anchor="middle" fill="#4a6880" font-size="8">realDist = distance physique (m)</text>
+  <text x="810" y="688" text-anchor="middle" fill="#4a6880" font-size="8">prev[] → reconstruit le chemin</text>
+  <text x="810" y="702" text-anchor="middle" fill="#4a6880" font-size="8">return {path[], dist}</text>
+
+  <!-- findPath -->
+  <rect x="940" y="615" width="200" height="100" rx="5" fill="#1a0812" stroke="#ff00aa" stroke-width="1.5"/>
+  <rect x="940" y="615" width="200" height="22" rx="5" fill="#ff00aa" opacity="0.12"/>
+  <text x="1040" y="630" text-anchor="middle" fill="#ff00aa" font-size="10" font-weight="bold" letter-spacing="1">findPath()</text>
+  <text x="1040" y="648" text-anchor="middle" fill="#b8d0e0" font-size="9">Appel dijkstra(FROM, TO)</text>
+  <text x="1040" y="662" text-anchor="middle" fill="#4a6880" font-size="8">⚠ détection backtaxi/piste</text>
+  <text x="1040" y="675" text-anchor="middle" fill="#4a6880" font-size="8">result : N nœuds · dist m/ft</text>
+  <text x="1040" y="688" text-anchor="middle" fill="#4a6880" font-size="8">zoomToPath() · draw()</text>
+  <text x="1040" y="702" text-anchor="middle" fill="#4a6880" font-size="8">path-overlay affichage</text>
+
+  <!-- Arrow dijkstra -> findPath -->
+  <line x1="920" y1="665" x2="939" y2="665" stroke="#ff00aa" stroke-width="1.5" marker-end="url(#arrow-pink)"/>
+
+  <!-- Arrow GRAPH -> dijkstra -->
+  <line x1="1195" y1="580" x2="1195" y2="608" stroke="#ff00aa" stroke-width="0.5" stroke-dasharray="3,3"/>
+  <line x1="810" y1="608" x2="810" y2="614" stroke="#ff00aa" stroke-width="1.5" marker-end="url(#arrow-pink)"/>
+  <line x1="810" y1="608" x2="1195" y2="608" stroke="#ff00aa" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- ═══════════════════════════════════════════
+       PHASE 8 — CANVAS RENDERING
+  ═══════════════════════════════════════════ -->
+  <rect x="40" y="745" width="190" height="22" rx="3" fill="#0a1520" stroke="#b06fff" stroke-width="0.5" opacity="0.8"/>
+  <text x="50" y="760" fill="#b06fff" font-size="9" letter-spacing="3">PHASE 8 · RENDU CANVAS</text>
+
+  <!-- draw() -->
+  <rect x="40" y="775" width="200" height="100" rx="5" fill="#0f0d1a" stroke="#b06fff" stroke-width="1.5"/>
+  <rect x="40" y="775" width="200" height="22" rx="5" fill="#b06fff" opacity="0.12"/>
+  <text x="140" y="790" text-anchor="middle" fill="#b06fff" font-size="10" font-weight="bold" letter-spacing="2">draw()</text>
+  <text x="140" y="808" text-anchor="middle" fill="#b8d0e0" font-size="9">clearRect · grille de fond</text>
+  <text x="140" y="821" text-anchor="middle" fill="#4a6880" font-size="8">Segments → segmentColor(type)</text>
+  <text x="140" y="834" text-anchor="middle" fill="#4a6880" font-size="8">Nœuds · Seuils · Gates</text>
+  <text x="140" y="847" text-anchor="middle" fill="#4a6880" font-size="8">Path (currentPath) en rose ━━</text>
+  <text x="140" y="861" text-anchor="middle" fill="#4a6880" font-size="8">FROM/TO markers visuels</text>
+
+  <!-- toScreen / fromScreen -->
+  <rect x="260" y="775" width="200" height="100" rx="5" fill="#0f0d1a" stroke="#b06fff" stroke-width="1.5"/>
+  <rect x="260" y="775" width="200" height="22" rx="5" fill="#b06fff" opacity="0.12"/>
+  <text x="360" y="790" text-anchor="middle" fill="#b06fff" font-size="10" font-weight="bold" letter-spacing="1">COORDONNÉES</text>
+  <text x="360" y="808" text-anchor="middle" fill="#b8d0e0" font-size="9">toScreen(lat, lon) → {x, y}</text>
+  <text x="360" y="821" text-anchor="middle" fill="#4a6880" font-size="8">lon→x : (lon-lonMin)×scale+cam.x</text>
+  <text x="360" y="834" text-anchor="middle" fill="#4a6880" font-size="8">lat→y : (latMax-lat)×scale+cam.y</text>
+  <text x="360" y="847" text-anchor="middle" fill="#b8d0e0" font-size="9">fromScreen(sx, sy) → {lat, lon}</text>
+  <text x="360" y="861" text-anchor="middle" fill="#4a6880" font-size="8">Tooltip mousemove · hover nodes</text>
+
+  <!-- Interactions -->
+  <rect x="480" y="775" width="200" height="100" rx="5" fill="#0f0d1a" stroke="#b06fff" stroke-width="1.5"/>
+  <rect x="480" y="775" width="200" height="22" rx="5" fill="#b06fff" opacity="0.12"/>
+  <text x="580" y="790" text-anchor="middle" fill="#b06fff" font-size="10" font-weight="bold" letter-spacing="1">INTERACTIONS</text>
+  <text x="580" y="808" text-anchor="middle" fill="#b8d0e0" font-size="9">Pan : mousedown / mousemove</text>
+  <text x="580" y="821" text-anchor="middle" fill="#4a6880" font-size="8">Zoom : wheel · pinch touch</text>
+  <text x="580" y="834" text-anchor="middle" fill="#4a6880" font-size="8">Click canvas → selectNode()</text>
+  <text x="580" y="847" text-anchor="middle" fill="#4a6880" font-size="8">highlightNode() flash ring</text>
+  <text x="580" y="861" text-anchor="middle" fill="#4a6880" font-size="8">resize → fitCanvas() · draw()</text>
+
+  <!-- Arrow draw() connections -->
+  <line x1="240" y1="825" x2="259" y2="825" stroke="#b06fff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <line x1="460" y1="825" x2="479" y2="825" stroke="#b06fff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- Arrow from updateUI to draw() -->
+  <line x1="140" y1="715" x2="140" y2="774" stroke="#3dff6e" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Arrow from findPath to draw() -->
+  <line x1="1040" y1="715" x2="1040" y2="740" stroke="#ff00aa" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="1040" y1="740" x2="580" y2="774" stroke="#ff00aa" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-pink)"/>
+
+  <!-- ═══════════════════════════════════════════
+       UTILITY FUNCTIONS — bottom right
+  ═══════════════════════════════════════════ -->
+  <rect x="700" y="745" width="160" height="22" rx="3" fill="#0a1520" stroke="#3a5570" stroke-width="0.5" opacity="0.8"/>
+  <text x="710" y="760" fill="#3a5570" font-size="9" letter-spacing="3">FONCTIONS UTILITAIRES</text>
+
+  <!-- haversine -->
+  <rect x="700" y="775" width="145" height="55" rx="4" fill="#0a1118" stroke="#3a5570" stroke-width="1"/>
+  <text x="773" y="793" text-anchor="middle" fill="#b8d0e0" font-size="9" font-weight="bold">haversine()</text>
+  <text x="773" y="808" text-anchor="middle" fill="#4a6880" font-size="8">Distance géod. (m)</text>
+  <text x="773" y="820" text-anchor="middle" fill="#4a6880" font-size="8">R=6371000 · sphère</text>
+
+  <!-- geoBearing -->
+  <rect x="855" y="775" width="145" height="55" rx="4" fill="#0a1118" stroke="#3a5570" stroke-width="1"/>
+  <text x="928" y="793" text-anchor="middle" fill="#b8d0e0" font-size="9" font-weight="bold">geoBearing()</text>
+  <text x="928" y="808" text-anchor="middle" fill="#4a6880" font-size="8">Cap vrai 0-360° (N,CW)</text>
+  <text x="928" y="820" text-anchor="middle" fill="#4a6880" font-size="8">atan2 · dLon</text>
+
+  <!-- headingDiff -->
+  <rect x="1010" y="775" width="145" height="55" rx="4" fill="#0a1118" stroke="#3a5570" stroke-width="1"/>
+  <text x="1083" y="793" text-anchor="middle" fill="#b8d0e0" font-size="9" font-weight="bold">headingDiff()</text>
+  <text x="1083" y="808" text-anchor="middle" fill="#4a6880" font-size="8">Différence angulaire</text>
+  <text x="1083" y="820" text-anchor="middle" fill="#4a6880" font-size="8">0–180° (symétrique)</text>
+
+  <!-- clearPath -->
+  <rect x="1165" y="775" width="145" height="55" rx="4" fill="#0a1118" stroke="#3a5570" stroke-width="1"/>
+  <text x="1238" y="793" text-anchor="middle" fill="#b8d0e0" font-size="9" font-weight="bold">clearPath()</text>
+  <text x="1238" y="808" text-anchor="middle" fill="#4a6880" font-size="8">Remet à zéro chemin</text>
+  <text x="1238" y="820" text-anchor="middle" fill="#4a6880" font-size="8">hide overlays · draw()</text>
+
+  <!-- ═══════════════════════════════════════════
+       DATA STRUCTURES LEGEND — bottom
+  ═══════════════════════════════════════════ -->
+  <line x1="40" y1="900" x2="1360" y2="900" stroke="#1c2d3f" stroke-width="1"/>
+  <text x="50" y="918" fill="#3a5570" font-size="9" letter-spacing="3">STRUCTURES DE DONNÉES PRINCIPALES</text>
+
+  <!-- Data legend boxes -->
+  <rect x="40" y="928" width="155" height="40" rx="3" fill="#0a1520" stroke="#00d4ff" stroke-width="1"/>
+  <text x="118" y="943" text-anchor="middle" fill="#00d4ff" font-size="8" font-weight="bold">NODES{}</text>
+  <text x="118" y="957" text-anchor="middle" fill="#4a6880" font-size="7">id → {lat,lon,name,isRwyNode,isThresh,isGate,twName}</text>
+
+  <rect x="210" y="928" width="155" height="40" rx="3" fill="#0a1520" stroke="#3dff6e" stroke-width="1"/>
+  <text x="288" y="943" text-anchor="middle" fill="#3dff6e" font-size="8" font-weight="bold">SEGMENTS[]</text>
+  <text x="288" y="957" text-anchor="middle" fill="#4a6880" font-size="7">{n1,n2,type,name,bidir} + backtaxi + gate_link</text>
+
+  <rect x="380" y="928" width="130" height="40" rx="3" fill="#0a1520" stroke="#ffc107" stroke-width="1"/>
+  <text x="445" y="943" text-anchor="middle" fill="#ffc107" font-size="8" font-weight="bold">RUNWAYS[]</text>
+  <text x="445" y="957" text-anchor="middle" fill="#4a6880" font-size="7">{id, lat, lon} × 2 extrémités</text>
+
+  <rect x="525" y="928" width="130" height="40" rx="3" fill="#0a1520" stroke="#ff6b35" stroke-width="1"/>
+  <text x="590" y="943" text-anchor="middle" fill="#ff6b35" font-size="8" font-weight="bold">THRESH[]</text>
+  <text x="590" y="957" text-anchor="middle" fill="#4a6880" font-size="7">{id,lat,lon,rwy_id,isVirtual}</text>
+
+  <rect x="670" y="928" width="130" height="40" rx="3" fill="#0a1520" stroke="#b06fff" stroke-width="1"/>
+  <text x="735" y="943" text-anchor="middle" fill="#b06fff" font-size="8" font-weight="bold">GATES[]</text>
+  <text x="735" y="957" text-anchor="middle" fill="#4a6880" font-size="7">{lat,lon,heading,name,id}</text>
+
+  <rect x="815" y="928" width="155" height="40" rx="3" fill="#0a1520" stroke="#00d4ff" stroke-width="1"/>
+  <text x="893" y="943" text-anchor="middle" fill="#00d4ff" font-size="8" font-weight="bold">GRAPH{}</text>
+  <text x="893" y="957" text-anchor="middle" fill="#4a6880" font-size="7">nodeId → [{to, dist, cost}] adj. list</text>
+
+  <rect x="985" y="928" width="135" height="40" rx="3" fill="#0a1520" stroke="#ff00aa" stroke-width="1"/>
+  <text x="1053" y="943" text-anchor="middle" fill="#ff00aa" font-size="8" font-weight="bold">currentPath[]</text>
+  <text x="1053" y="957" text-anchor="middle" fill="#4a6880" font-size="7">ids[] nœuds chemin actif</text>
+
+  <rect x="1135" y="928" width="100" height="40" rx="3" fill="#0a1520" stroke="#3a5570" stroke-width="1"/>
+  <text x="1185" y="943" text-anchor="middle" fill="#b8d0e0" font-size="8" font-weight="bold">cam{}</text>
+  <text x="1185" y="957" text-anchor="middle" fill="#4a6880" font-size="7">x, y, scale</text>
+
+  <rect x="1250" y="928" width="110" height="40" rx="3" fill="#0a1520" stroke="#3a5570" stroke-width="1"/>
+  <text x="1305" y="943" text-anchor="middle" fill="#b8d0e0" font-size="8" font-weight="bold">RAW_AIRPORTS{}</text>
+  <text x="1305" y="957" text-anchor="middle" fill="#4a6880" font-size="7">ICAO → texte brut bloc</text>
+
+  <!-- Footer -->
+  <text x="700" y="978" text-anchor="middle" fill="#1c2d3f" font-size="8" letter-spacing="2">TAXIWAY PATHFINDER WOW v6 · ARCHITECTURE ANALYSIS · 2026</text>
+</svg>

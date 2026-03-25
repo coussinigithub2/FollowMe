@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>JavaScript Operators</h1>
+<h2>The = Operator</h2>
+
+<p id="demo"></p>
+
+<script>
+text = "1300  18.56429140 -068.37113944 264.8 gate jets Gate B30A"
+const lines = text.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const p = line.split(/\s+/);
+
+     // Row 1300 / 15: startup / gate locations
+    if (p[0] === '1300') {
+      const lat = parseFloat(p[1]);
+      const lon = parseFloat(p[2]);
+      const heading = parseFloat(p[3]) || 0; // 🔥 IMPORTANT
+
+      const name = p.slice(-1).join(' ').trim();
+
+      let gname = name;
+      const match = name.match(/[A-Z]?\d+$/i);
+      if (match) {
+        gname = match[0].toUpperCase();
+      }
+
+	  console.log(gname);
+    }
+  }
+</script>
+
+</body>
+</html>

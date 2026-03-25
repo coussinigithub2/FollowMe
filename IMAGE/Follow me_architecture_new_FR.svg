@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1100" viewBox="0 0 1500 1100">
+  <rect width="1500" height="1100" fill="white"/>
+
+  <!-- TITLE -->
+  <text x="750" y="38" font-family="Arial" font-size="22" font-weight="bold" fill="#1a1a2e" text-anchor="middle">FollowMe — Architecture Modulaire Restructurée</text>
+  <text x="750" y="60" font-family="Arial" font-size="13" fill="#555" text-anchor="middle">Principe : charger une fois par ICAO · modules indépendants · boucles FlyWithLua</text>
+  <line x1="60" y1="70" x2="1440" y2="70" stroke="#ccc" stroke-width="1.5"/>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 0 : INIT (top) -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="60" y="82" width="1380" height="90" rx="10" fill="#e8f4fd" stroke="#2196F3" stroke-width="2"/>
+  <text x="750" y="102" font-family="Arial" font-size="13" font-weight="bold" fill="#0d47a1" text-anchor="middle">① MODULE INIT  —  Exécution unique au démarrage du plugin</text>
+  <rect x="90" y="110" width="200" height="48" rx="6" fill="#2196F3" opacity="0.85"/>
+  <text x="190" y="129" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">FFI / XPLM</text>
+  <text x="190" y="148" font-family="Arial" font-size="10" fill="#dbeafe" text-anchor="middle">Liaisons SDK X-Plane</text>
+
+  <rect x="310" y="110" width="200" height="48" rx="6" fill="#2196F3" opacity="0.85"/>
+  <text x="410" y="129" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Datarefs &amp; Commandes</text>
+  <text x="410" y="148" font-family="Arial" font-size="10" fill="#dbeafe" text-anchor="middle">Enregistrement XP12</text>
+
+  <rect x="530" y="110" width="200" height="48" rx="6" fill="#2196F3" opacity="0.85"/>
+  <text x="630" y="129" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Variables Globales</text>
+  <text x="630" y="148" font-family="Arial" font-size="10" fill="#dbeafe" text-anchor="middle">État partagé entre modules</text>
+
+  <rect x="750" y="110" width="200" height="48" rx="6" fill="#2196F3" opacity="0.85"/>
+  <text x="850" y="129" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Config / Préférences</text>
+  <text x="850" y="148" font-family="Arial" font-size="10" fill="#dbeafe" text-anchor="middle">Lecture fichier .cfg</text>
+
+  <rect x="970" y="110" width="200" height="48" rx="6" fill="#2196F3" opacity="0.85"/>
+  <text x="1070" y="129" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Sons</text>
+  <text x="1070" y="148" font-family="Arial" font-size="10" fill="#dbeafe" text-anchor="middle">Chargement FMOD</text>
+
+  <rect x="1190" y="110" width="230" height="48" rx="6" fill="#2196F3" opacity="0.85"/>
+  <text x="1305" y="129" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">OBJ3D / Modèles</text>
+  <text x="1305" y="148" font-family="Arial" font-size="10" fill="#dbeafe" text-anchor="middle">Chargement assets voiture</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 1 : AIRPORT DATA  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- Arrow down -->
+  <line x1="750" y1="172" x2="750" y2="192" stroke="#999" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="60" y="192" width="680" height="108" rx="10" fill="#fff8e1" stroke="#FF9800" stroke-width="2"/>
+  <text x="400" y="213" font-family="Arial" font-size="13" font-weight="bold" fill="#e65100" text-anchor="middle">② MODULE AIRPORT DATA  —  Déclenché par changement ICAO (une fois par aéroport)</text>
+
+  <rect x="90" y="222" width="175" height="62" rx="6" fill="#FF9800" opacity="0.85"/>
+  <text x="177" y="244" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Détection ICAO</text>
+  <text x="177" y="260" font-family="Arial" font-size="10" fill="#fff3e0" text-anchor="middle">Surveille dataref</text>
+  <text x="177" y="274" font-family="Arial" font-size="10" fill="#fff3e0" text-anchor="middle">sim/airport/icao</text>
+
+  <rect x="285" y="222" width="175" height="62" rx="6" fill="#FF9800" opacity="0.85"/>
+  <text x="372" y="244" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Lecture apt.dat</text>
+  <text x="372" y="260" font-family="Arial" font-size="10" fill="#fff3e0" text-anchor="middle">Parse lignes 1,10,</text>
+  <text x="372" y="274" font-family="Arial" font-size="10" fill="#fff3e0" text-anchor="middle">100,110,120...</text>
+
+  <rect x="480" y="222" width="175" height="62" rx="6" fill="#FF9800" opacity="0.85"/>
+  <text x="567" y="244" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Construction Graphe</text>
+  <text x="567" y="260" font-family="Arial" font-size="10" fill="#fff3e0" text-anchor="middle">Nœuds, edges,</text>
+  <text x="567" y="274" font-family="Arial" font-size="10" fill="#fff3e0" text-anchor="middle">parkings, runways</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 1b : SIMBRIEF -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="760" y="192" width="680" height="108" rx="10" fill="#fce4ec" stroke="#E91E63" stroke-width="2"/>
+  <text x="1100" y="213" font-family="Arial" font-size="13" font-weight="bold" fill="#880e4f" text-anchor="middle">③ MODULE SIMBRIEF  —  Déclenché sur demande utilisateur</text>
+
+  <rect x="790" y="222" width="175" height="62" rx="6" fill="#E91E63" opacity="0.85"/>
+  <text x="877" y="244" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">HTTP Request</text>
+  <text x="877" y="260" font-family="Arial" font-size="10" fill="#fce4ec" text-anchor="middle">API SimBrief</text>
+  <text x="877" y="274" font-family="Arial" font-size="10" fill="#fce4ec" text-anchor="middle">Fetch OFP data</text>
+
+  <rect x="985" y="222" width="175" height="62" rx="6" fill="#E91E63" opacity="0.85"/>
+  <text x="1072" y="244" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Parse XML/JSON</text>
+  <text x="1072" y="260" font-family="Arial" font-size="10" fill="#fce4ec" text-anchor="middle">Origine, destination</text>
+  <text x="1072" y="274" font-family="Arial" font-size="10" fill="#fce4ec" text-anchor="middle">Gate, runway</text>
+
+  <rect x="1180" y="222" width="240" height="62" rx="6" fill="#E91E63" opacity="0.85"/>
+  <text x="1300" y="244" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Injection dans UI</text>
+  <text x="1300" y="260" font-family="Arial" font-size="10" fill="#fce4ec" text-anchor="middle">Pré-remplit départ/arrivée</text>
+  <text x="1300" y="274" font-family="Arial" font-size="10" fill="#fce4ec" text-anchor="middle">dans ImGui</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 2 : PATHFINDING -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <line x1="400" y1="300" x2="400" y2="320" stroke="#999" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="60" y="320" width="1380" height="100" rx="10" fill="#e8f5e9" stroke="#4CAF50" stroke-width="2"/>
+  <text x="750" y="341" font-family="Arial" font-size="13" font-weight="bold" fill="#1b5e20" text-anchor="middle">④ MODULE PATHFINDING  —  Déclenché par bouton FM (utilise le graphe déjà chargé)</text>
+
+  <rect x="90" y="352" width="210" height="55" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="195" y="374" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Sélection Départ/Arrivée</text>
+  <text x="195" y="390" font-family="Arial" font-size="10" fill="#e8f5e9" text-anchor="middle">Gate, runway, position avion</text>
+
+  <rect x="320" y="352" width="210" height="55" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="425" y="374" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Algorithme A*</text>
+  <text x="425" y="390" font-family="Arial" font-size="10" fill="#e8f5e9" text-anchor="middle">Calcul chemin optimal</text>
+
+  <rect x="550" y="352" width="210" height="55" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="655" y="374" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Liste de Waypoints</text>
+  <text x="655" y="390" font-family="Arial" font-size="10" fill="#e8f5e9" text-anchor="middle">Séquence nœuds ordonnés</text>
+
+  <rect x="780" y="352" width="210" height="55" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="885" y="374" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Instructions Virage</text>
+  <text x="885" y="390" font-family="Arial" font-size="10" fill="#e8f5e9" text-anchor="middle">Gauche / Droite / Tout droit</text>
+
+  <rect x="1010" y="352" width="210" height="55" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="1115" y="374" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Distances &amp; Caps</text>
+  <text x="1115" y="390" font-family="Arial" font-size="10" fill="#e8f5e9" text-anchor="middle">Calcul bearing segment</text>
+
+  <rect x="1240" y="352" width="180" height="55" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="1330" y="374" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">État Mission</text>
+  <text x="1330" y="390" font-family="Arial" font-size="10" fill="#e8f5e9" text-anchor="middle">IDLE/RUNNING/DONE</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 3 : do_every_frame  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <line x1="750" y1="420" x2="750" y2="440" stroke="#999" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="60" y="440" width="1380" height="115" rx="10" fill="#ede7f6" stroke="#7B1FA2" stroke-width="2.5" stroke-dasharray="6,3"/>
+  <!-- badge -->
+  <rect x="60" y="430" width="210" height="22" rx="5" fill="#7B1FA2"/>
+  <text x="165" y="445" font-family="Arial" font-size="12" font-weight="bold" fill="white" text-anchor="middle">⟳  do_every_frame()</text>
+
+  <text x="750" y="465" font-family="Arial" font-size="12" font-weight="bold" fill="#4a148c" text-anchor="middle">⑤ MODULE PHYSIQUE VOITURE  —  Mise à jour chaque frame (calcul seulement, pas de dessin)</text>
+
+  <rect x="90" y="475" width="190" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="185" y="497" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Suivi Waypoint</text>
+  <text x="185" y="513" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">Prochain nœud cible</text>
+  <text x="185" y="527" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">distance &amp; cap</text>
+
+  <rect x="300" y="475" width="190" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="395" y="497" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Vitesse &amp; Accél.</text>
+  <text x="395" y="513" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">Freinage approche</text>
+  <text x="395" y="527" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">nœud / arrêt</text>
+
+  <rect x="510" y="475" width="190" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="605" y="497" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Position / Cap</text>
+  <text x="605" y="513" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">Interpolation lat/lon</text>
+  <text x="605" y="527" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">heading smooth</text>
+
+  <rect x="720" y="475" width="190" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="815" y="497" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Détection Arrivée</text>
+  <text x="815" y="513" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">Rayon de tolérance</text>
+  <text x="815" y="527" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">destination atteinte</text>
+
+  <rect x="930" y="475" width="190" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="1025" y="497" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Animations</text>
+  <text x="1025" y="513" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">Feux, gyrophare</text>
+  <text x="1025" y="527" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">clignotants</text>
+
+  <rect x="1140" y="475" width="190" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="1235" y="497" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Sons Dynamiques</text>
+  <text x="1235" y="513" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">Moteur, klaxon</text>
+  <text x="1235" y="527" font-family="Arial" font-size="10" fill="#f3e5f5" text-anchor="middle">selon vitesse</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 4 : do_often  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <line x1="750" y1="555" x2="750" y2="575" stroke="#999" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="60" y="575" width="670" height="100" rx="10" fill="#fff3e0" stroke="#F57C00" stroke-width="2.5" stroke-dasharray="6,3"/>
+  <rect x="60" y="565" width="175" height="22" rx="5" fill="#F57C00"/>
+  <text x="147" y="580" font-family="Arial" font-size="12" font-weight="bold" fill="white" text-anchor="middle">⟳  do_often()</text>
+
+  <text x="395" y="597" font-family="Arial" font-size="12" font-weight="bold" fill="#bf360c" text-anchor="middle">⑥ SURVEILLANCE ICAO  —  Vérifie changement aéroport (~ 4×/sec)</text>
+
+  <rect x="90" y="608" width="280" height="52" rx="6" fill="#FF6D00" opacity="0.85"/>
+  <text x="230" y="629" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Comparaison ICAO courant vs mémorisé</text>
+  <text x="230" y="647" font-family="Arial" font-size="10" fill="#fff8f0" text-anchor="middle">Si différent → déclenche Module ② Airport Data</text>
+
+  <rect x="390" y="608" width="280" height="52" rx="6" fill="#FF6D00" opacity="0.85"/>
+  <text x="530" y="629" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Vérif. SimBrief status</text>
+  <text x="530" y="647" font-family="Arial" font-size="10" fill="#fff8f0" text-anchor="middle">Réponse HTTP reçue? → parse</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 4b : do_every_draw  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="750" y="575" width="690" height="100" rx="10" fill="#e3f2fd" stroke="#1565C0" stroke-width="2.5" stroke-dasharray="6,3"/>
+  <rect x="750" y="565" width="195" height="22" rx="5" fill="#1565C0"/>
+  <text x="847" y="580" font-family="Arial" font-size="12" font-weight="bold" fill="white" text-anchor="middle">🖼  do_every_draw()</text>
+
+  <text x="1095" y="597" font-family="Arial" font-size="12" font-weight="bold" fill="#0d47a1" text-anchor="middle">⑦ MODULE RENDU  —  Affichage seulement (pas de calcul)</text>
+
+  <rect x="780" y="608" width="190" height="52" rx="6" fill="#1976D2" opacity="0.85"/>
+  <text x="875" y="629" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Rendu 3D XPLM</text>
+  <text x="875" y="647" font-family="Arial" font-size="10" fill="#e3f2fd" text-anchor="middle">Voiture OBJ, feux, ombres</text>
+
+  <rect x="990" y="608" width="190" height="52" rx="6" fill="#1976D2" opacity="0.85"/>
+  <text x="1085" y="629" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Tracé Chemin</text>
+  <text x="1085" y="647" font-family="Arial" font-size="10" fill="#e3f2fd" text-anchor="middle">Ligne waypoints sur sol</text>
+
+  <rect x="1200" y="608" width="220" height="52" rx="6" fill="#1976D2" opacity="0.85"/>
+  <text x="1310" y="629" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">ImGui UI</text>
+  <text x="1310" y="647" font-family="Arial" font-size="10" fill="#e3f2fd" text-anchor="middle">Fenêtre boutons / infos</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- LAYER 5 : do_on_exit  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <line x1="750" y1="675" x2="750" y2="695" stroke="#999" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="60" y="695" width="1380" height="85" rx="10" fill="#ffebee" stroke="#C62828" stroke-width="2.5" stroke-dasharray="6,3"/>
+  <rect x="60" y="685" width="185" height="22" rx="5" fill="#C62828"/>
+  <text x="152" y="700" font-family="Arial" font-size="12" font-weight="bold" fill="white" text-anchor="middle">🚪  do_on_exit()</text>
+
+  <text x="750" y="717" font-family="Arial" font-size="12" font-weight="bold" fill="#b71c1c" text-anchor="middle">⑧ MODULE NETTOYAGE  —  Exécution unique à la fermeture du plugin</text>
+
+  <rect x="90" y="727" width="260" height="45" rx="6" fill="#e53935" opacity="0.85"/>
+  <text x="220" y="745" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Sauvegarde Config</text>
+  <text x="220" y="762" font-family="Arial" font-size="10" fill="#ffcdd2" text-anchor="middle">Écriture fichier .cfg</text>
+
+  <rect x="370" y="727" width="260" height="45" rx="6" fill="#e53935" opacity="0.85"/>
+  <text x="500" y="745" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Libération Mémoire</text>
+  <text x="500" y="762" font-family="Arial" font-size="10" fill="#ffcdd2" text-anchor="middle">Graphe, tableaux, OBJ</text>
+
+  <rect x="650" y="727" width="260" height="45" rx="6" fill="#e53935" opacity="0.85"/>
+  <text x="780" y="745" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Arrêt Sons</text>
+  <text x="780" y="762" font-family="Arial" font-size="10" fill="#ffcdd2" text-anchor="middle">FMOD stop &amp; destroy</text>
+
+  <rect x="930" y="727" width="260" height="45" rx="6" fill="#e53935" opacity="0.85"/>
+  <text x="1060" y="745" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Destroy ImGui</text>
+  <text x="1060" y="762" font-family="Arial" font-size="10" fill="#ffcdd2" text-anchor="middle">Fenêtres et widgets</text>
+
+  <rect x="1210" y="727" width="210" height="45" rx="6" fill="#e53935" opacity="0.85"/>
+  <text x="1315" y="745" font-family="Arial" font-size="11" font-weight="bold" fill="white" text-anchor="middle">Logs finaux</text>
+  <text x="1315" y="762" font-family="Arial" font-size="10" fill="#ffcdd2" text-anchor="middle">Écriture log session</text>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- FLUX DE DONNÉES  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <rect x="60" y="800" width="1380" height="110" rx="10" fill="#f9f9f9" stroke="#bdbdbd" stroke-width="1.5"/>
+  <text x="750" y="820" font-family="Arial" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">FLUX DE DONNÉES ENTRE MODULES</text>
+
+  <!-- flux boxes -->
+  <rect x="80" y="830" width="165" height="65" rx="6" fill="#78909C"/>
+  <text x="162" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">ICAO détecté</text>
+  <text x="162" y="867" font-family="Arial" font-size="9" fill="#eceff1" text-anchor="middle">do_often détecte</text>
+  <text x="162" y="881" font-family="Arial" font-size="9" fill="#eceff1" text-anchor="middle">→ déclenche ②</text>
+
+  <text x="260" y="868" font-family="Arial" font-size="16" fill="#F57C00" text-anchor="middle">→</text>
+
+  <rect x="270" y="830" width="165" height="65" rx="6" fill="#FF9800" opacity="0.85"/>
+  <text x="352" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">Graphe construit</text>
+  <text x="352" y="867" font-family="Arial" font-size="9" fill="#fff3e0" text-anchor="middle">Nœuds + edges</text>
+  <text x="352" y="881" font-family="Arial" font-size="9" fill="#fff3e0" text-anchor="middle">en mémoire</text>
+
+  <text x="450" y="868" font-family="Arial" font-size="16" fill="#4CAF50" text-anchor="middle">→</text>
+
+  <rect x="460" y="830" width="165" height="65" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="542" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">Bouton FM pressé</text>
+  <text x="542" y="867" font-family="Arial" font-size="9" fill="#e8f5e9" text-anchor="middle">ImGui déclenche</text>
+  <text x="542" y="881" font-family="Arial" font-size="9" fill="#e8f5e9" text-anchor="middle">module ④</text>
+
+  <text x="640" y="868" font-family="Arial" font-size="16" fill="#4CAF50" text-anchor="middle">→</text>
+
+  <rect x="650" y="830" width="165" height="65" rx="6" fill="#4CAF50" opacity="0.85"/>
+  <text x="732" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">Waypoints calculés</text>
+  <text x="732" y="867" font-family="Arial" font-size="9" fill="#e8f5e9" text-anchor="middle">Liste A* → table</text>
+  <text x="732" y="881" font-family="Arial" font-size="9" fill="#e8f5e9" text-anchor="middle">Lua ordonnée</text>
+
+  <text x="830" y="868" font-family="Arial" font-size="16" fill="#9C27B0" text-anchor="middle">→</text>
+
+  <rect x="840" y="830" width="165" height="65" rx="6" fill="#9C27B0" opacity="0.85"/>
+  <text x="922" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">Physique active</text>
+  <text x="922" y="867" font-family="Arial" font-size="9" fill="#f3e5f5" text-anchor="middle">do_every_frame</text>
+  <text x="922" y="881" font-family="Arial" font-size="9" fill="#f3e5f5" text-anchor="middle">déplace voiture</text>
+
+  <text x="1020" y="868" font-family="Arial" font-size="16" fill="#1565C0" text-anchor="middle">→</text>
+
+  <rect x="1030" y="830" width="165" height="65" rx="6" fill="#1976D2" opacity="0.85"/>
+  <text x="1112" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">Rendu affiché</text>
+  <text x="1112" y="867" font-family="Arial" font-size="9" fill="#e3f2fd" text-anchor="middle">do_every_draw</text>
+  <text x="1112" y="881" font-family="Arial" font-size="9" fill="#e3f2fd" text-anchor="middle">dessine résultat</text>
+
+  <text x="1210" y="868" font-family="Arial" font-size="16" fill="#C62828" text-anchor="middle">→</text>
+
+  <rect x="1220" y="830" width="200" height="65" rx="6" fill="#e53935" opacity="0.85"/>
+  <text x="1320" y="852" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">Mission terminée</text>
+  <text x="1320" y="867" font-family="Arial" font-size="9" fill="#ffcdd2" text-anchor="middle">État = DONE</text>
+  <text x="1320" y="881" font-family="Arial" font-size="9" fill="#ffcdd2" text-anchor="middle">Reset ou nouveau chemin</text>
+
+  <!-- LÉGENDE bas -->
+  <line x1="60" y1="925" x2="1440" y2="925" stroke="#ccc" stroke-width="1"/>
+  <text x="750" y="945" font-family="Arial" font-size="11" fill="#888" text-anchor="middle">Tirets = boucle FlyWithLua active en permanence   |   Plein = exécution ponctuelle   |   → = transfert de données entre modules</text>
+  <text x="750" y="963" font-family="Arial" font-size="11" fill="#888" text-anchor="middle">⑤ do_every_frame  ·  ⑥ do_often  ·  ⑦ do_every_draw sont des boucles X-Plane — CALCUL et RENDU sont strictement séparés</text>
+
+  <!-- ARROW MARKER -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="4" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#999"/>
+    </marker>
+  </defs>
+</svg>
