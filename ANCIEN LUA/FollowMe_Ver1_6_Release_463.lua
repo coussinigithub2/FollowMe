@@ -5,69 +5,31 @@
 --
 --    VER1.4 Coussini 2026 : Repairs the previous version to works with X-Plane 12
 --    VER1.5 Coussini 2026 : Simbrief Integration using Simbrief ID
---    VER1.6 Coussini 2026 : New preferences file FollowMeXplane12.prf - clean rewrite, no accumulation
---    VER1.7 Coussini 2026 : Fix runways with no direct taxiway connection (e.g. MDPC RWY 27)
---                           Back-taxi runways are now reachable via the runway itself
---    VER1.8 Coussini 2026 : Back-taxi support — car now guides to the actual runway threshold
---                           instead of stopping at the first hotzone node on the runway
---    VER1.9 Coussini 2026 : Back-taxi GPS node — adds a virtual node at the exact runway threshold
---                           coordinates so the car drives in a straight line to the threshold
---                           and stops there with "Arrived at destination"
---    VER1.10 Coussini 2026: Fix back-taxi false detection — a runway with a taxiway exit within
---                           200m of the threshold is NOT a back-taxi (e.g. CYHU RWY 06L via K)
---                           Only truly isolated thresholds (e.g. MDPC RWY 27) trigger back-taxi
---    VER1.11 Coussini 2026: Universal runway entry rule — match_runway() now selects the runway
---                           node WITH a taxiway neighbour closest to the threshold, instead of
---                           the closest node regardless of connectivity. The virtual GPS threshold
---                           node handles all on-runway travel automatically (back-taxi, TNCB, etc.)
---                           is_backtaxi detection simplified: always add virtual node if entry
---                           is more than 50m from the threshold.
---    VER1.12 Coussini 2026: (1) full_reset() — single cleanup entry point that unloads all 3D
+--    VER1.6 Coussini 2026 : (*) New preferences file FollowMeXplane12.prf - clean rewrite, no accumulation
+--                           (*) full_reset() — single cleanup entry point that unloads all 3D
 --                           objects and reinitialises all state variables. Called when X-Plane
 --                           starts a new flight (fm_new_flight resets) and from exit_plugin().
 --                           Fixes double-car bug after location change without restarting X-Plane.
---                           (2) Car proximity fix — if the car would spawn more than 150m from
+--                           (*) Car proximity fix — if the car would spawn more than 150m from
 --                           the aircraft, it is placed directly behind the aircraft instead so
 --                           the pilot can always see it immediately.
---    VER1.15 Coussini 2026: Universal gate fallback — when determine_pos_on_segment() finds no
---                           reachable segment from a gate position (common when apt.dat has isolated
---                           1201 nodes near parking areas with no 1202 segments, e.g. CYQB has 88
---                           such nodes), the function now falls back to the nearest CONNECTED node
---                           (any node with at least one segment). This fixes "no taxiway" and
---                           routing-through-fields for all airports universally without patching
---                           individual airport cases.
---    VER1.16 Coussini 2026: Centreline projection -- last A* node (taxiway/runway junction)
---                           sits on the runway EDGE, not the centreline. Fix: project it
---                           perpendicularly onto the centreline axis (REPLACE in-place).
---                           All back-taxi walk nodes also projected. Car drives to exact
---                           runway centre, then straight to threshold. No curve, no field.
---    VER1.17 Coussini 2026: (1) Crash fix — airport change caused X-Plane access violation.
+--                           (*) Airport change caused X-Plane access violation.
 --                           FlyWithLua restarts the Lua engine on each airport/plane change
 --                           (LUA_RUN increments). XPLMRegisterDataAccessor left dangling
 --                           pointers → crash. Fix: tire datarefs use XPLMFindDataRef +
 --                           XPLMSetDatavf each frame. fm/anim/sign registered once on
 --                           LUA_RUN==1, found via FindDataRef on subsequent runs.
---                           (2) Universal GPS threshold — for ALL departures (back-taxi
---                           or not, intersecting runways or not), the car now always
---                           stops at the exact GPS threshold of the requested runway.
---                           The A* route is followed only for taxiways; at the first
---                           runway/hotzone node the route is cut. The last taxiway node
---                           is projected onto the runway centreline, then a GPS threshold
---                           node is added. Eliminates wrong-runway stops at intersecting
---                           runways (e.g. KSYR RWY 28 stopping at RWY 33 threshold) and
---                           the diagonal-into-grass bug. is_backtaxi removed — no longer
---                           needed since all departures use the same GPS threshold logic.
---    VER1.19 Coussini 2026: Cross-runway taxiway fix — at airports where a taxiway passes
---                           through a runway threshold node (e.g. KSYR: taxiways M and L
---                           connect through the RWY 33 threshold node 126 to reach RWY 28),
---                           the previous code broke the route at node 126 because it was
---                           typed "runway", sending the car straight across the field.
---                           Fix: a runway/hotzone node that still has at least one non-runway
---                           taxiway segment is TRAVERSABLE — the car follows the taxiway
---                           through it normally (hotzone not set). Only a node whose ALL
---                           segments are runway/hotzone triggers the GPS threshold logic.
---                           Result: Y→M→seuil33→L→seuil28 followed on pavement, no field.
---    ---------------------------------------------------------------------------------
+--                           (*) Route node logging + drive node
+--                           (*) Disambiguate duplicate gate names
+--                           (*) 1206 ground vehicle edge filter — apt.dat row 1206 defines
+--                           routing edges reserved for ground vehicles only (not aircraft).
+--                           During apt.dat parsing, all 1206 node pairs are collected in
+--                           t_filter_1206[]. After all 1202 segments are loaded,
+--                           apply_1206_filter() removes any node that appears ONLY in 1206
+--                           edges (never in a 1202 taxiway/runway segment). This keeps the
+--                           taxi network clean: vehicle-only nodes are pruned, their entries
+--                           in t_taxinode[].Segment are cleared so A* never visits them, and
+--                           a logMsg reports how many nodes were filtered per airport.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -212,9 +174,6 @@ typedef struct {
   void XPLMWorldToLocal( double inLatitude, double inLongitude, double inAltitude, double *outX, double *outY, double *outZ);    
   void XPLMLocalToWorld( double inX, double inY, double inZ, double *outLatitude, double *outLongitude, double *outAltitude); 
   void XPLMGetSystemPath(char * outSystemPath); 
-  XPLMDataRef XPLMFindDataRef(const char * inDataRefName);
-  void XPLMSetDataf(XPLMDataRef inDataRef, float inValue);
-  void XPLMSetDatavf(XPLMDataRef inDataRef, float * inValues, int inOffset, int inCount);
 ]]
 
 ffi.cdef(cdefs)
@@ -223,16 +182,16 @@ local char_str = ffi.new("char[256]")
 local datarefs_addr = ffi.new("const char**")
 local dataref_name = ffi.new("char[150]")
 
+local dataref_register1 = ffi.new("XPLMDataRef")
+local dataref_register2 = ffi.new("XPLMDataRef")
+local dataref_register3 = ffi.new("XPLMDataRef")
+local dataref_register4 = ffi.new("XPLMDataRef")
+local dataref_register5 = ffi.new("XPLMDataRef")
+local dataref_register6 = ffi.new("XPLMDataRef")
 local dataref_array = ffi.new("const char*[7]")
 
+local dataref_register7 = ffi.new("XPLMDataRef")
 local dataref_array2 = ffi.new("const char*[2]")
-
--- VER1.17 : handles XPLMFindDataRef + buffers pour sync animation sans RegisterDataAccessor
-local dr_tire_steer    = nil
-local dr_tire_rotate   = nil
-local dr_sign          = nil
-local ffi_steer_buf    = ffi.new("float[2]")
-local ffi_rotate_buf   = ffi.new("float[4]")
 
 local objref = ffi.new("XPLMObjectRef")
 local signboardref = ffi.new("XPLMObjectRef")
@@ -288,7 +247,6 @@ local FM_car_active = false
 
 local depart_arrive = 0
 local depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
-local is_backtaxi = false   -- VER1.8 : true when runway has no direct taxiway exit (back-taxi)
 
 local curr_ICAO, curr_ICAO_Name = "", ""
 local t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
@@ -439,9 +397,6 @@ local turning_is_active = 0
 local prev_taxi_light = 0
 local prev_beacon_light = 0
 local ground_time = 0
-local prev_new_flight = 0   -- VER1.12 : detect new flight when fm_new_flight resets
-local prev_plane_x    = 0   -- VER1.12 : detect teleport (Δpos > 100m in 1 frame)
-local prev_plane_z    = 0
 local taxiway_network = ""
 local play_time = 0
 local play_text = ""
@@ -596,19 +551,6 @@ function start_car()
   car_x = t_node[1].x
   car_y = t_node[1].y
   car_z = t_node[1].z
-
-  -- VER1.12 : if the route startpt is more than 150m away, place the car
-  -- directly behind the aircraft so the pilot can always see it immediately.
-  -- The car will then drive forward to join its route normally.
-  local _, l_dist_to_plane = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
-  if l_dist_to_plane > 150 then
-      local l_behind_heading = add_delta_clockwise(fm_plane_head, 180, 1)
-      car_x, car_z = coordinates_of_adjusted_ref(fm_plane_x, fm_plane_z, 0, 15, l_behind_heading)
-      car_y = probe_y(car_x, car_y, car_z)
-      car_body_heading = fm_plane_head
-      logMsg("FollowMe VER1.12 : car spawned behind aircraft (startpt was " ..
-             string.format("%.0f", l_dist_to_plane) .. "m away)")
-  end
  
   local l_car_is_in_front = false
   local l_plane_is_in_front = false
@@ -968,15 +910,11 @@ function plot_position( in_act_dist )
               end
           end    
           
-          -- VER1.17 : car_sign=1 (stop sign) when approaching runway threshold.
-          -- is_backtaxi is always false now — condition kept for clarity.
-          if depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 then
-              if not is_backtaxi then
-                  car_sign = 1
-                  if not string.find( Err_Msg[1].text, "Arrived at destination" ) then      
-                      update_msg("5")
-                  end
-              end
+          if depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 then    
+              car_sign = 1
+              if not string.find( Err_Msg[1].text, "Arrived at destination" ) then      
+                  update_msg("5")
+              end    
           end
         
       else              
@@ -1001,10 +939,6 @@ function plot_position( in_act_dist )
           
           else
               car_sign = 1
-              -- VER1.9 : send "Arrived at destination" for departures (back-taxi and normal)
-              if not string.find( Err_Msg[1].text or "", "Arrived at destination" ) then
-                  update_msg("5")
-              end
           end        
       end      
   end
@@ -1253,18 +1187,7 @@ function probe_y (in_x, in_y, in_z)
 end
 
 function draw_object( in_x, in_y, in_z, in_heading)
-  -- VER1.17 : remplir dataref_float_value avec les valeurs d'animation de roues
-  dataref_float_value[0] = steering    -- tire_steer_deg[0]
-  dataref_float_value[1] = steering    -- tire_steer_deg[1]
-  dataref_float_value[2] = tire_rotate -- tire_rotation_angle_deg[0]
-  dataref_float_value[3] = tire_rotate -- tire_rotation_angle_deg[1]
-  dataref_float_value[4] = tire_rotate -- tire_rotation_angle_deg[2]
-  dataref_float_value[5] = tire_rotate -- tire_rotation_angle_deg[3]
   dataref_float_addr = dataref_float_value
-
-  -- VER1.17 : synchroniser aussi les datarefs X-Plane pour visibilité externe
-  sync_anim_datarefs()
-
   objpos_value[0].x = in_x   
   objpos_value[0].z = in_z   
   objpos_value[0].y = in_y
@@ -1391,7 +1314,7 @@ function load_object()
       time_to_100 = 3; speed_max = 88.88; place_above_the_car = 1.43; place_Z_of_car = 0
 
   elseif car_type_fmcar == "Van" or (car_type_fmcar == "Auto" and l_auto_sel == 2) then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/fm_van.obj",
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/fm_van.obj",
                 function(inObject, inRefcon) 
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject 
@@ -1402,7 +1325,7 @@ function load_object()
       time_to_100 = 10; speed_max = 70; place_above_the_car = 1.95; place_Z_of_car = -1.625
       
   elseif car_type_fmcar == "Truck" or (car_type_fmcar == "Auto" and l_auto_sel == 3) then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/fm_truck.obj",
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/fm_truck.obj",
                 function(inObject, inRefcon) 
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject 
@@ -1418,7 +1341,7 @@ function load_object()
   dataref_array2[1] = NULL
   datarefs_addr = dataref_array2
   
-  XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/signboard.obj", 
+  XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/signboard.obj",
                       function(inObject, inRefcon) 
                         signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                         signboardref = inObject                        
@@ -1428,7 +1351,7 @@ end
 
 function load_path()
   if FM_car_active and show_path and #t_node > 0 then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/pushpin_yellow.obj", 
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/pushpin_yellow.obj",
                                 function(inObject, inRefcon) 
                                     for i= 0, #t_node-1 do
                                       path_instance[i] = XPLM.XPLMCreateInstance(inObject, NULL)
@@ -1441,7 +1364,7 @@ end
 
 function load_rampstart()
     if rampstart_instance[0] == nil then    
-        XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/diamond_marker.obj", 
+        XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/diamond_marker.obj",
                                   function(inObject, inRefcon) 
                                       rampstart_instance[0] = XPLM.XPLMCreateInstance(inObject, NULL)
                                       rampstartref = inObject
@@ -1534,47 +1457,41 @@ function unload_rampstart()
     rampstart_instance[0] = nil; rampstartref = nil; rampstart_chg = false
 end
 
--- VER1.17 : XPLMRegisterDataAccessor supprimé — cause crash au changement d'aéroport.
--- FlyWithLua redémarre le moteur Lua à chaque changement → les anciens handles sont perdus
--- mais X-Plane garde les pointeurs pendants → access violation.
--- Solution : XPLMFindDataRef pour les datarefs natifs (tire_steer/tire_rotate),
--- et XPLMRegisterDataAccessor protégé par LUA_RUN==1 pour fm/anim/sign.
--- Si LUA_RUN>1, fm/anim/sign existe déjà → FindDataRef pour le récupérer.
 function register_dataref()
-    -- Datarefs natifs X-Plane — FindDataRef, pas RegisterDataAccessor
-    dr_tire_steer  = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_steer_deg")
-    dr_tire_rotate = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg")
+     
+    dataref_register1 = XPLM.XPLMRegisterDataAccessor("sim/graphics/animation/ground_traffic/tire_steer_deg[0]",2, 0,
+                                                      NULL, NULL,
+                                                      function(inRefcon) return steering end,
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 
-    -- fm/anim/sign : custom dataref
-    -- LUA_RUN == 1 → premier démarrage → on l'enregistre
-    -- LUA_RUN  > 1 → reload après changement aéroport → il existe déjà → FindDataRef
-    if LUA_RUN == 1 then
-        dr_sign = XPLM.XPLMRegisterDataAccessor("fm/anim/sign", 2, 0,
-                      NULL, NULL,
-                      function(inRefcon) return car_sign end,
-                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-    else
-        dr_sign = XPLM.XPLMFindDataRef("fm/anim/sign")
-    end
-end
-
--- VER1.17 : appelée chaque frame dans draw_object() pour pousser steering/tire_rotate/car_sign
-function sync_anim_datarefs()
-    if dr_tire_steer ~= nil then
-        ffi_steer_buf[0] = steering
-        ffi_steer_buf[1] = steering
-        XPLM.XPLMSetDatavf(dr_tire_steer, ffi_steer_buf, 0, 2)
-    end
-    if dr_tire_rotate ~= nil then
-        ffi_rotate_buf[0] = tire_rotate
-        ffi_rotate_buf[1] = tire_rotate
-        ffi_rotate_buf[2] = tire_rotate
-        ffi_rotate_buf[3] = tire_rotate
-        XPLM.XPLMSetDatavf(dr_tire_rotate, ffi_rotate_buf, 0, 4)
-    end
-    if dr_sign ~= nil then
-        XPLM.XPLMSetDataf(dr_sign, car_sign)
-    end
+    dataref_register7 = XPLM.XPLMRegisterDataAccessor("sim/graphics/animation/ground_traffic/tire_steer_deg[1]",2, 0,
+                                                      NULL, NULL,
+                                                      function(inRefcon) return steering end,
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    
+    dataref_register2 = XPLM.XPLMRegisterDataAccessor("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[0]",2, 0,
+                                                      NULL, NULL,
+                                                      function(inRefcon) return tire_rotate end, 
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+                                        
+    dataref_register3 = XPLM.XPLMRegisterDataAccessor("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[1]",2, 0,
+                                                      NULL, NULL,
+                                                      function(inRefcon) return tire_rotate end, 
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+                                                    
+    dataref_register4 = XPLM.XPLMRegisterDataAccessor("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[2]",2, 0,
+                                                      NULL, NULL,
+                                                      function(inRefcon) return tire_rotate end, 
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+                                                    
+    dataref_register5 = XPLM.XPLMRegisterDataAccessor("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[3]",2, 0,
+                                                      NULL, NULL,
+                                                      function(inRefcon) return tire_rotate end, 
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+                                                     
+    dataref_register6 = XPLM.XPLMRegisterDataAccessor("fm/anim/sign",1, 0,
+                                                      function(inRefcon) return car_sign end, 
+                                                      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 end
 
 function get_airport_elements()
@@ -1771,10 +1688,10 @@ function decipher_runway(in_str)
                                   "(.*)" )
   t_runway[i].Lat = tonumber(l_str1)
   t_runway[i].Lon = tonumber(l_str2)
-  t_runway[i].Node = -1   -- VER1.7 : -1 = non assigné (0 est un node_id valide)
+  t_runway[i].Node = 0  
   t_runway[i+1].Lat = tonumber(l_str3)
   t_runway[i+1].Lon = tonumber(l_str4)
-  t_runway[i+1].Node = -1  -- VER1.7 : -1 = non assigné (0 est un node_id valide)
+  t_runway[i+1].Node = 0  
   t_runway[i].x, _, t_runway[i].z, world_alt     = get_local_coordinates(t_runway[i].Lat, t_runway[i].Lon, world_alt) 
   t_runway[i+1].x, _, t_runway[i+1].z, world_alt = get_local_coordinates(t_runway[i+1].Lat, t_runway[i+1].Lon, world_alt)   
 end  
@@ -1901,23 +1818,31 @@ function decipher_taxisegment_hotzone(in_str)
 end
 
 function determine_runway_node()
-  -- VER1.11 : Universal rule — for each runway, find the runway node that:
-  --   1. Has at least one taxiway neighbour (accessible from the taxi network)
-  --   2. Is closest to the runway threshold
-  -- This replaces the non-duplicate filtering which excluded valid intersection
-  -- nodes (e.g. CYHU node 59 on taxiway K was a duplicate and got ignored).
-  -- If no node has a taxiway neighbour, fall back to closest node (any type).
-
-  local l_idx = 0
-
-  for l_idx = 1, #t_runway do
-      match_runway(l_idx)
+  local l_duplicate = false
+  local l_idx, l_prev = 0, 0
+  table.sort ( t_runway_node)
+  l_prev = t_runway_node[1]      
+  for l_idx = 2, #t_runway_node do
+      if t_runway_node[l_idx] == l_prev then
+          l_duplicate = true
+      else
+          if l_duplicate == true then
+              l_duplicate = false
+          else
+              match_runway (l_prev)
+          end
+          if l_idx == #t_runway_node then
+              match_runway (t_runway_node[l_idx])   
+          end
+      end  
+      l_prev = t_runway_node[l_idx]
   end
-
-  local l_rows = #t_runway
+    
+  local l_rows = 0 
+  l_rows = #t_runway
   l_idx = 1
   while l_idx <= l_rows do
-    if t_runway[l_idx].Node == -1 then  -- VER1.7 : -1 = non assigné
+    if t_runway[l_idx].Node == 0 then
         t_deleted_runway[#t_deleted_runway+1] = t_runway[l_idx].ID
         table.remove(t_runway,l_idx)
         l_rows = l_rows - 1
@@ -1927,117 +1852,22 @@ function determine_runway_node()
   end
 end  
 
-function match_runway (in_runway_idx)
-  -- VER1.15 : Only consider nodes that appear on a segment belonging to THIS runway.
-  -- VER1.11 searched all runway-typed nodes globally — this caused CYQB RWY 11 to
-  -- pick node 12 (on taxiway H + piste 06/24, 405m from seuil 11) instead of
-  -- node 78 (on taxiway D+G + piste 11/29, 690m from seuil 11). The car then
-  -- entered on 06/24 and cut through the field to reach the threshold.
-  -- Fix: build the candidate set from segments whose ID matches the runway ID.
+function match_runway (in_node)
   local l_idx = 0
-  local l_curr_dist = 0
-  local l_min_dist_twy  = 99999
-  local l_min_dist_any  = 99999
-  local l_best_twy      = -1
-  local l_best_any      = -1
-  local l_rwy_x = t_runway[in_runway_idx].x
-  local l_rwy_z = t_runway[in_runway_idx].z
-  local l_rwy_id = t_runway[in_runway_idx].ID  -- e.g. "11", "29", "06", "24"
+  local l_curr_dist, l_min_dist, l_runway_idx = 0, 99999, 0
+  local l_node_x, l_node_z = t_taxinode[in_node+1].x, t_taxinode[in_node+1].z
 
-  -- Build nodes on THIS runway's segments
-  -- Segment IDs in apt.dat use combined names like "06/24" or "11/29"
-  -- while t_runway[].ID holds individual names like "06" or "11".
-  -- Use string.find to match: "11" matches "11/29".
-  local l_rwy_nodes = {}
-  for l_seg = 1, #t_segment do
-      if t_segment[l_seg].Type == "runway" then
-          local l_seg_id = t_segment[l_seg].ID or ""
-          -- match if rwy_id appears as a component of the segment name
-          local l_match = false
-          for l_part in (l_seg_id .. "/"):gmatch("([^/]+)/") do
-              if l_part == l_rwy_id then l_match = true; break end
+  for l_idx = 1, #t_runway do
+      if t_runway[l_idx].Node == 0 then 
+          _, l_curr_dist = heading_n_dist( l_node_x, l_node_z, t_runway[l_idx].x, t_runway[l_idx].z)
+          if l_curr_dist <=  l_min_dist then
+              l_min_dist = l_curr_dist
+              l_runway_idx = l_idx
           end
-          if l_match then
-              l_rwy_nodes[t_segment[l_seg].Node1] = true
-              l_rwy_nodes[t_segment[l_seg].Node2] = true
-          end
-      end
+      end    
   end
-
-  -- If no segments found for this runway, fall back to global search
-  local l_has_own_segs = false
-  for _ in pairs(l_rwy_nodes) do l_has_own_segs = true; break end
-
-  for l_idx = 1, #t_taxinode do
-      if t_taxinode[l_idx].Type == "runway" then
-          local l_node_id = l_idx - 1
-          -- VER1.15 : only consider nodes on this runway's segments (when available)
-          if l_has_own_segs and not l_rwy_nodes[l_node_id] then
-              -- skip nodes that belong to a different runway
-          else
-              _, l_curr_dist = heading_n_dist(t_taxinode[l_idx].x, t_taxinode[l_idx].z,
-                                              l_rwy_x, l_rwy_z)
-              if l_curr_dist < l_min_dist_any then
-                  l_min_dist_any = l_curr_dist
-                  l_best_any     = l_node_id
-              end
-              local l_has_twy = false
-              for l_seg = 1, #t_segment do
-                  if ( t_segment[l_seg].Node1 == l_node_id or
-                       t_segment[l_seg].Node2 == l_node_id ) and
-                     t_segment[l_seg].Type ~= "runway" then
-                      l_has_twy = true
-                      break
-                  end
-              end
-              if l_has_twy and l_curr_dist < l_min_dist_twy then
-                  l_min_dist_twy = l_curr_dist
-                  l_best_twy     = l_node_id
-              end
-          end
-      end
-  end
-
-  local l_chosen = l_best_twy
-  local l_chosen_dist = l_min_dist_twy
-  if l_chosen == -1 then
-      l_chosen = l_best_any
-      l_chosen_dist = l_min_dist_any
-      logMsg("FollowMe VER1.15 : RWY " .. l_rwy_id ..
-             " — no taxiway-connected node found, using closest node " ..
-             l_chosen .. " (" .. string.format("%.1f", l_chosen_dist) .. "m)")
-  else
-      logMsg("FollowMe VER1.15 : RWY " .. l_rwy_id ..
-             " → node " .. l_chosen ..
-             " (" .. string.format("%.1f", l_chosen_dist) .. "m from threshold)")
-  end
-
-  if l_chosen >= 0 then
-      t_runway[in_runway_idx].Node = l_chosen
-      t_taxinode[l_chosen+1].Runway = l_rwy_id
-  end
-end
-
--- VER1.12 : Single cleanup entry point — called on new flight or location change.
--- Unloads all 3D objects, clears all state variables, ready for fresh use.
--- Does NOT touch dataref registration (that is only done at load/exit).
-function full_reset()
-    if FM_car_active then
-        unload_object()
-        unload_path()
-        unload_rampstart()
-    end
-    FM_car_active        = false
-    prepare_kill_objects = false
-    prepare_show_objects = false
-    kill_is_manual       = false
-    ground_time          = 0
-    flightstart          = 0
-    t_deleted_runway     = {}   -- new airport = fresh runway list
-    curr_ICAO            = ""   -- VER1.12 : force apt.dat reload on next get_airport_elements()
-    initialise_airport()
-    initialise_routes()
-    logMsg("FollowMe VER1.12 : full_reset() completed")
+  t_runway[l_runway_idx].Node = in_node
+  t_taxinode[in_node+1].Runway = t_runway[l_runway_idx].ID
 end
 
 function initialise_airport()
@@ -2051,41 +1881,23 @@ end
 
 function initialise_routes()
     if #t_node > 0 then
-        if depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 
+        if depart_arrive == 1 and curr_node >= #t_node
                     and flightstart ~= 9999 and not kill_is_manual then
+                 logMsg("FollowMe VER1.20 : initialise_routes() play_sound(snd_safeflight_bye)")
                 play_sound(snd_safeflight_bye)
         elseif depart_arrive == 2 and curr_node == #t_node then
+                 logMsg("FollowMe VER1.20 : initialise_routes() play_sound(snd_welcome_bye)")
                  play_sound(snd_welcome_bye)
         end  
     end
     t_node = {}
     Err_Msg[1] = {}; Err_Msg[2] = {}; Err_Msg[3] = {}  
-    depart_arrive = 0
-    is_backtaxi = false   -- VER1.8
+    depart_arrive = 0 
     window_first_access = true
 end
 
 function handle_plugin_window()
-
-    -- VER1.12 : detect new flight / location change — fm_new_flight resets to 0
-    if fm_new_flight < prev_new_flight and prev_new_flight > 5 then
-        full_reset()
-    end
-    prev_new_flight = fm_new_flight
-
-    -- VER1.12 : detect teleport in same flight — position jumps > 100m in 1 frame
-    -- Max realistic speed 250kts = 128m/s at 20fps = 6.4m/frame, never > 100m
-    if prev_plane_x ~= 0 then
-        local _, l_teleport_dist = heading_n_dist(prev_plane_x, prev_plane_z, fm_plane_x, fm_plane_z)
-        if l_teleport_dist >= 1000 then  -- VER1.12 fix: 1000m avoids false reset during scene loading (plane can jump 300-900m)
-            full_reset()
-            logMsg("FollowMe VER1.12 : teleport detected (" ..
-                   string.format("%.0f", l_teleport_dist) .. "m jump) — full_reset()")
-        end
-    end
-    prev_plane_x = fm_plane_x
-    prev_plane_z = fm_plane_z
-
+   
     if ( fm_gear1_gnd == 0 and fm_gear2_gnd == 0 ) and fm_new_flight > 1  then
         if flightstart == 0 then
             flightstart = fm_run_time + 180
@@ -2215,9 +2027,7 @@ function handle_plugin_window()
           unload_rampstart()
           rampstart_chg = false
           kill_is_manual = false
-          -- VER1.9 : say goodbye when user manually cancels
           update_msg("7")
-          -- VER1.12 : force airport reload so window_first_access re-reads apt.dat
           curr_ICAO = ""
           -- Preserve all routing state so the user can immediately re-request
           -- without having to re-select runway, mode, or gate
@@ -2876,9 +2686,6 @@ function update_msg(in_msg)
     if in_msg == "6" then
       in_msg = "Follow Me Car ready. Car is behind you."
       if depart_arrive == 1 then play_sound(snd_followme) else play_sound(snd_welcome) end   
-    elseif in_msg == "7" then
-      in_msg = "Have a safe flight !"
-      play_sound(snd_safeflight_bye)
     elseif in_msg == "5" then
       in_msg = "Arrived at destination"        
       play_sound(snd_arrived) 
@@ -2989,11 +2796,7 @@ function determine_possible_routes()
               l_endpt_node = t_runway[l_index].Node
               break
           end
-        end
-        -- VER1.17 : is_backtaxi supprimé — la nouvelle logique universelle dans
-        -- process_possible_routes() envoie TOUJOURS la voiture au seuil GPS,
-        -- qu'il y ait back-taxi ou pas. is_backtaxi reste false en permanence.
-        is_backtaxi = false
+        end  
     else
         l_found, l_endpt_node, l_endpt_x, l_endpt_z = determine_pos_on_segment( t_gate[arrival_gate].Heading, 
                                                                                 t_gate[arrival_gate].x, 
@@ -3218,30 +3021,10 @@ function process_possible_routes()
         l_bypass = false
         if depart_arrive == 1 and routenode_cnt >= l_last_taxiway then  
             if t_taxinode[l_node+1].Type == "hotzone" or t_taxinode[l_node+1].Type == "runway" then
-                -- VER1.19 : un nœud runway/hotzone avec encore une sortie taxiway est
-                -- TRAVERSABLE (ex : seuil RWY 33 à KSYR, traversé pour atteindre RWY 28).
-                -- On ne break que si TOUS ses segments sont runway/hotzone (vraie entrée piste)
-                -- OU si c'est le nœud destination final (runway_endpt_node).
-                local l_has_taxiway_exit = false
-                for l_seg_str in t_taxinode[l_node+1].Segment:gmatch("[^,]+") do
-                    local l_sidx = tonumber(l_seg_str)
-                    if l_sidx and t_segment[l_sidx] and
-                       t_segment[l_sidx].Type ~= "runway" and
-                       (t_segment[l_sidx].Hotzone == nil or t_segment[l_sidx].Hotzone == "") then
-                        l_has_taxiway_exit = true
-                        break
-                    end
-                end
-                if not l_has_taxiway_exit then
-                    -- Vraie entrée piste, pas de sortie taxiway → c'est le dernier nœud avant GPS seuil
-                    l_hotzone_node_cnt = l_hotzone_node_cnt + 1
-                end
-                -- Si nœud traversable (has_taxiway_exit) → hotzone_node_cnt reste 0 → nœud inclus normalement
+                l_hotzone_node_cnt = l_hotzone_node_cnt + 1
             end    
         end    
-        -- Break au premier nœud de vraie entrée piste (pas de sortie taxiway)
-        -- Jamais sur le nœud destination (runway_endpt_node) — GPS seuil le remplace de toute façon
-        if l_hotzone_node_cnt > 0 then break end
+        if l_hotzone_node_cnt > 2 then break end   
         if l_bypass == false  then
             if l_index > 1  then
                 l_new_head, l_new_dist = heading_n_dist( t_node[l_index-1].x, t_node[l_index-1].z, 
@@ -3294,91 +3077,7 @@ function process_possible_routes()
             t_taxinode[t_segment[#t_segment].Node2 + 1].Segment = string.gsub(t_taxinode[t_segment[#t_segment].Node2 + 1].Segment, ","..tostring(#t_segment), "")
         end          
         t_segment[#t_segment] = nil
-    end
-
-    -- VER1.17 : Universal runway threshold — for ALL departures (back-taxi or not),
-    -- replace the runway portion of the A* route with a direct GPS path to the
-    -- exact runway threshold. This eliminates wrong-runway stops at intersecting
-    -- runways (e.g. KSYR RWY 28 vs 33) and the diagonal-into-grass bug.
-    -- The last t_node is the taxiway/runway junction (edge of runway). We project
-    -- it perpendicularly onto the centreline, then add the GPS threshold node.
-    -- Result: car follows taxiways normally, arrives on centreline, drives straight
-    -- to threshold. Universal — no special case needed for back-taxi.
-    if depart_arrive == 1 and #t_node > 0 then
-        local l_rwy_x, l_rwy_y, l_rwy_z = 0, 0, 0
-        local l_far_x, l_far_z = 0, 0
-        for l_index = 1, #t_runway do
-            if t_runway[l_index].ID == depart_runway then
-                l_rwy_x = t_runway[l_index].x
-                l_rwy_y = probe_y(t_runway[l_index].x, 0, t_runway[l_index].z)
-                l_rwy_z = t_runway[l_index].z
-            else
-                l_far_x = t_runway[l_index].x
-                l_far_z = t_runway[l_index].z
-            end
-        end
-
-        -- Centreline unit vector: far threshold → near threshold (depart_runway)
-        local l_ax = l_rwy_x - l_far_x
-        local l_az = l_rwy_z - l_far_z
-        local l_alen = math.sqrt(l_ax * l_ax + l_az * l_az)
-        if l_alen < 1 then l_alen = 1 end
-        local l_ux = l_ax / l_alen
-        local l_uz = l_az / l_alen
-
-        -- Project last t_node (taxiway/runway junction) onto centreline
-        local l_edge_x = t_node[#t_node].x
-        local l_edge_z = t_node[#t_node].z
-        local l_vx = l_edge_x - l_far_x
-        local l_vz = l_edge_z - l_far_z
-        local l_t  = l_vx * l_ux + l_vz * l_uz
-        local l_proj_x = l_far_x + l_t * l_ux
-        local l_proj_z = l_far_z + l_t * l_uz
-        local _, l_offset      = heading_n_dist(l_edge_x, l_edge_z, l_proj_x, l_proj_z)
-        local _, l_proj_to_thr = heading_n_dist(l_proj_x, l_proj_z, l_rwy_x, l_rwy_z)
-
-        if l_offset > 2 and l_proj_to_thr > 10 then
-            -- Junction is off-centreline → replace last node with centreline projection
-            local l_proj_y = probe_y(l_proj_x, 0, l_proj_z)
-            t_node[#t_node].x = l_proj_x
-            t_node[#t_node].y = l_proj_y
-            t_node[#t_node].z = l_proj_z
-            t_node[#t_node].hotzone = "1"
-            if #t_node >= 2 then
-                t_node[#t_node-1].heading, t_node[#t_node-1].dist =
-                    heading_n_dist(t_node[#t_node-1].x, t_node[#t_node-1].z,
-                                   l_proj_x, l_proj_z)
-            end
-            logMsg("FollowMe VER1.17 : RWY " .. depart_runway ..
-                   " centreline_projection lateral_offset=" ..
-                   string.format("%.1f", l_offset) .. "m" ..
-                   " proj_to_threshold=" .. string.format("%.0f", l_proj_to_thr) .. "m")
-        else
-            -- Already on centreline (or very close)
-            t_node[#t_node].hotzone = "1"
-            logMsg("FollowMe VER1.17 : RWY " .. depart_runway ..
-                   " already_on_centreline offset=" ..
-                   string.format("%.1f", l_offset) .. "m")
-        end
-
-        -- Final node: exact GPS threshold
-        local l_last = #t_node
-        local _, l_gap = heading_n_dist(t_node[l_last].x, t_node[l_last].z, l_rwy_x, l_rwy_z)
-        if l_gap > 5 then
-            t_node[l_last].heading, t_node[l_last].dist =
-                heading_n_dist(t_node[l_last].x, t_node[l_last].z, l_rwy_x, l_rwy_z)
-            t_node[l_last + 1] = {}
-            t_node[l_last + 1].x       = l_rwy_x
-            t_node[l_last + 1].y       = l_rwy_y
-            t_node[l_last + 1].z       = l_rwy_z
-            t_node[l_last + 1].hotzone = "1"
-            t_node[l_last + 1].heading = t_node[l_last].heading
-            t_node[l_last + 1].dist    = 0
-        end
-        logMsg("FollowMe VER1.17 : depart RWY " .. depart_runway ..
-               " total_nodes=" .. (#t_node))
-    end
-
+    end        
 end
 
 function determine_pos_on_segment ( in_heading, in_x, in_z, in_type )
@@ -3466,30 +3165,7 @@ function determine_pos_on_segment ( in_heading, in_x, in_z, in_type )
       l_decision = 2
   end        
   
-  if l_decision == 0 then
-      -- VER1.15 : Universal fallback — when no segment is reachable from the gate
-      -- (e.g. CYQB has 88 isolated nodes near gates, causing "no taxiway"),
-      -- find the nearest CONNECTED node (has at least one segment) instead.
-      -- This works universally for all airports regardless of apt.dat quality.
-      if in_type == "gate" or in_type == "misc" or in_type == "tie_down" or in_type == "hangar" then
-          local l_best_d = 99999
-          local l_best_nid = -1
-          for l_ni = 1, #t_taxinode do
-              if t_taxinode[l_ni] and t_taxinode[l_ni].Segment and t_taxinode[l_ni].Segment ~= "" then
-                  local l_dd = math.sqrt((in_x - t_taxinode[l_ni].x)^2 +
-                                         (in_z - t_taxinode[l_ni].z)^2)
-                  if l_dd < l_best_d and l_dd < 500 then
-                      l_best_d = l_dd
-                      l_best_nid = l_ni - 1  -- 0-based node id
-                  end
-              end
-          end
-          if l_best_nid >= 0 then
-              logMsg("FollowMe VER1.15 : fallback to nearest connected node " ..
-                     l_best_nid .. " (" .. string.format("%.0f", l_best_d) .. "m)")
-              return true, l_best_nid, t_taxinode[l_best_nid+1].x, t_taxinode[l_best_nid+1].z, 0
-          end
-      end
+  if l_decision == 0 then 
       return false, 0, 0, 0, 0
   elseif l_decision == 1 then    
       local l_new_node, l_new_segment = add_new_taxinode_segment (l_ret_segment_index, l_ret_x, l_ret_z, l_ret_intersect_dist)
@@ -3877,15 +3553,17 @@ function trim_str (in_str)
 end
   
 function exit_plugin()
-    full_reset()   -- VER1.12 : clean up all 3D objects and state
-    -- unload_object/path/rampstart already called by full_reset if active
+    unload_object()
     unload_probe()
-    -- VER1.17 : fm/anim/sign est enregistré seulement au LUA_RUN==1.
-    -- On le désenregistre proprement à l'exit total du plugin.
-    if LUA_RUN == 1 and dr_sign ~= nil then
-        XPLM.XPLMUnregisterDataAccessor(dr_sign)
-        dr_sign = nil
-    end
+    unload_path()
+    unload_rampstart()    
+    if dataref_register1 ~= nil then XPLM.XPLMUnregisterDataAccessor(dataref_register1) end
+    if dataref_register7 ~= nil then XPLM.XPLMUnregisterDataAccessor(dataref_register7) end
+    if dataref_register2 ~= nil then XPLM.XPLMUnregisterDataAccessor(dataref_register2) end
+    if dataref_register3 ~= nil then XPLM.XPLMUnregisterDataAccessor(dataref_register3) end
+    if dataref_register4 ~= nil then XPLM.XPLMUnregisterDataAccessor(dataref_register4) end
+    if dataref_register5 ~= nil then XPLM.XPLMUnregisterDataAccessor(dataref_register5) end
+    XPLM.XPLMUnregisterDataAccessor(dataref_register6)     
 end
 
 -- Initialization

@@ -67,6 +67,38 @@
 --                           through it normally (hotzone not set). Only a node whose ALL
 --                           segments are runway/hotzone triggers the GPS threshold logic.
 --                           Result: Y→M→seuil33→L→seuil28 followed on pavement, no field.
+--    VER1.20 Coussini 2026: Route node logging + drive node fix + arrived fix:
+--                           (1) RAW A* ROUTE logMsg : séquence complète des nœuds A*,
+--                               identique à ce qu'affiche l'outil HTML pathfinder.
+--                           (2) RAW A* NODES total=N : compte des nœuds de la route brute.
+--                           (3) DRIVE NODES logMsg : waypoints réellement suivis par la
+--                               voiture. Le compte est maintenant toujours égal au RAW.
+--                           Suppression de la fusion angle<=10° ET du scan l_last_taxiway
+--                           + break hotzone : ces deux mécanismes réduisaient le nombre
+--                           de DRIVE NODES (ex KSYR: 16 RAW → 11 drive). Chaque nœud A*
+--                           est maintenant inséré sans condition. VER1.17 gère seul
+--                           l'entrée piste via projection centreline + GPS seuil.
+--                           Fix "arrived" prématuré : l'ancienne condition
+--                           hotzone=="1" + curr_node>=#t_node-2 déclenchait le son
+--                           arrived.wav et le panneau STOP dès le premier nœud hotzone
+--                           rencontré (ex CYQB: nœud 78, entrée back-taxi RWY 11).
+--                           Depuis VER1.17, le dernier DRIVE NODE est toujours le GPS
+--                           seuil exact. La condition est simplifiée à curr_node>=#t_node
+--                           pour les 3 endroits concernés (car_sign, initialise_routes,
+--                           taxi_light kill). Le son joue maintenant au vrai seuil.
+--    VER1.21 Coussini 2026: Disambiguate duplicate gate names.
+--    VER1.22 Coussini 2026: Add FROM/TO labels in RAW A* ROUTE and DRIVE NODES log lines.
+--                           depart_arrive==1: FROM=gate/ramp  TO=RWY xx
+--                           depart_arrive==2: FROM=RWY xx     TO=gate
+--    VER1.23 Coussini 2026: 1206 ground vehicle edge filter — apt.dat row 1206 defines
+--                           routing edges reserved for ground vehicles only (not aircraft).
+--                           During apt.dat parsing, all 1206 node pairs are collected in
+--                           t_filter_1206[]. After all 1202 segments are loaded,
+--                           apply_1206_filter() removes any node that appears ONLY in 1206
+--                           edges (never in a 1202 taxiway/runway segment). This keeps the
+--                           taxi network clean: vehicle-only nodes are pruned, their entries
+--                           in t_taxinode[].Segment are cleared so A* never visits them, and
+--                           a logMsg reports how many nodes were filtered per airport.
 --    ---------------------------------------------------------------------------------
 --    ---------------------------------------------------------------------------------
 
@@ -296,6 +328,9 @@ local t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {
 -- VER1.3 : Runways without defined routes
 local t_deleted_runway = {}
 
+-- VER1.23 : collected 1206 ground-vehicle-only edge pairs (node1, node2)
+local t_filter_1206 = {}
+
 local t_stack = {}
 local t_possible_route = {}
 local t_node = {}
@@ -507,35 +542,6 @@ function check_SimBrief()
 end
 
 function apply_simbrief_runway()
-
-    if sb_fetch_status ~= "OK" then
-        return
-    end
-
-    local l_rwy = ""
-
-    if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
-        l_rwy = sb_runway_takeoff
-    elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
-        l_rwy = sb_runway_landing
-    end
-
-    if l_rwy == "" then
-        return
-    end
-
-    -- Vérifier si la piste existe dans l'aéroport
-    for i = 1, #t_runway do
-        if t_runway[i].ID == l_rwy then
-            depart_runway = l_rwy
-            return
-        end
-    end
-
-    -- Si la piste n'existe pas → ne rien bloquer
-end
-
-function apply_simbrief_runway()
     -- Apply SimBrief runway based on departure/arrival mode
     -- and verify the runway exists in t_runway (runways with valid routes)
 
@@ -549,10 +555,10 @@ function apply_simbrief_runway()
 
     if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
         -- Departure: use SimBrief takeoff runway
-        l_rwy = sb_runway_takeoff
+        l_rwy = tostring(tonumber(sb_runway_takeoff))
     elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
         -- Arrival: use SimBrief landing runway
-        l_rwy = sb_runway_landing
+        l_rwy = tostring(tonumber(sb_runway_landing))
     end
 
     if l_rwy == "" then
@@ -562,6 +568,7 @@ function apply_simbrief_runway()
     -- Check that runway exists in t_runway (runways with valid routes)
     local l_found = false
     for i = 1, #t_runway do
+        logMsg("FollowMe VER1.22 : i = " .. i .. " t_runway[i].ID = " .. t_runway[i].ID)
         if t_runway[i].ID == l_rwy then
             l_found = true
             break
@@ -573,7 +580,9 @@ function apply_simbrief_runway()
     else
         -- SimBrief runway has no defined route
         depart_runway = ""
-        update_msg("-18")
+        logMsg("FollowMe VER1.22 : l_rwy = "..l_rwy)
+        logMsg("FollowMe VER1.22 : apply_simbrief_runway -19")
+        update_msg("-19")
     end
 
 end
@@ -968,9 +977,9 @@ function plot_position( in_act_dist )
               end
           end    
           
-          -- VER1.17 : car_sign=1 (stop sign) when approaching runway threshold.
-          -- is_backtaxi is always false now — condition kept for clarity.
-          if depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 then
+          -- VER1.20 : arrived condition déclenche uniquement au dernier nœud (#t_node = GPS seuil VER1.17).
+          -- L'ancienne condition hotzone+curr_node>=#t_node-2 déclenchait trop tôt (ex CYQB nœud 78).
+          if depart_arrive == 1 and curr_node >= #t_node then
               if not is_backtaxi then
                   car_sign = 1
                   if not string.find( Err_Msg[1].text, "Arrived at destination" ) then      
@@ -1391,7 +1400,7 @@ function load_object()
       time_to_100 = 3; speed_max = 88.88; place_above_the_car = 1.43; place_Z_of_car = 0
 
   elseif car_type_fmcar == "Van" or (car_type_fmcar == "Auto" and l_auto_sel == 2) then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/fm_van.obj",
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/fm_van.obj",
                 function(inObject, inRefcon) 
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject 
@@ -1402,7 +1411,7 @@ function load_object()
       time_to_100 = 10; speed_max = 70; place_above_the_car = 1.95; place_Z_of_car = -1.625
       
   elseif car_type_fmcar == "Truck" or (car_type_fmcar == "Auto" and l_auto_sel == 3) then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/fm_truck.obj",
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/fm_truck.obj",
                 function(inObject, inRefcon) 
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject 
@@ -1418,7 +1427,7 @@ function load_object()
   dataref_array2[1] = NULL
   datarefs_addr = dataref_array2
   
-  XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/signboard.obj", 
+  XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/signboard.obj",
                       function(inObject, inRefcon) 
                         signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                         signboardref = inObject                        
@@ -1428,7 +1437,7 @@ end
 
 function load_path()
   if FM_car_active and show_path and #t_node > 0 then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/pushpin_yellow.obj", 
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/pushpin_yellow.obj",
                                 function(inObject, inRefcon) 
                                     for i= 0, #t_node-1 do
                                       path_instance[i] = XPLM.XPLMCreateInstance(inObject, NULL)
@@ -1441,7 +1450,7 @@ end
 
 function load_rampstart()
     if rampstart_instance[0] == nil then    
-        XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/diamond_marker.obj", 
+        XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/diamond_marker.obj",
                                   function(inObject, inRefcon) 
                                       rampstart_instance[0] = XPLM.XPLMCreateInstance(inObject, NULL)
                                       rampstartref = inObject
@@ -1600,13 +1609,9 @@ function get_airport_elements()
             sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
         end
     end
-    
-    -- VER1.5 : Apply SimBrief runway if SimBrief mode is active
-    if get_from_SimBrief then
-        apply_simbrief_runway()
-    end  
-    
+
     if #t_deleted_runway > 0 then
+        logMsg("FollowMe VER1.22 : get_airport_elements -18")
         update_msg("-18")
     end    
     
@@ -1623,7 +1628,12 @@ function get_airport_elements()
             depart_arrive = 1
         end  
     end 
- 
+
+    -- VER1.5 : Apply SimBrief runway if SimBrief mode is active
+    if get_from_SimBrief then
+        apply_simbrief_runway()
+    end
+
 end
 
 function read_apt_file(in_ICAO) 
@@ -1702,7 +1712,32 @@ function read_apt_file(in_ICAO)
                           else  
                               if string.find( l_line2,  "^1%s") or l_line2 == "99" then   
                                   table.sort(t_gate,function(a,b) return a.ID<b.ID end)
+                                  -- VER1.21: Disambiguate duplicate gate names
+                                  -- Phase 1: append terminal letter to duplicates
+                                  local l_id_count1 = {}
+                                  for _, g in ipairs(t_gate) do
+                                      l_id_count1[g.ID] = (l_id_count1[g.ID] or 0) + 1
+                                  end
+                                  for _, g in ipairs(t_gate) do
+                                      if l_id_count1[g.ID] > 1 and g.Terminal and g.Terminal ~= "" then
+                                          g.ID = g.ID .. " " .. g.Terminal
+                                      end
+                                  end
+                                  -- Phase 2: if still duplicates, append numeric counter
+                                  local l_id_count2 = {}
+                                  for _, g in ipairs(t_gate) do
+                                      l_id_count2[g.ID] = (l_id_count2[g.ID] or 0) + 1
+                                  end
+                                  local l_id_index = {}
+                                  for _, g in ipairs(t_gate) do
+                                      if l_id_count2[g.ID] > 1 then
+                                          l_id_index[g.ID] = (l_id_index[g.ID] or 0) + 1
+                                          g.ID = g.ID .. " " .. l_id_index[g.ID]
+                                      end
+                                  end
                                   determine_runway_node()
+                                  -- VER1.23 : apply ground-vehicle edge filter after all segments loaded
+                                  apply_1206_filter()
                                   l_terminate_loop = true                         
                                   break 
                               end 
@@ -1713,6 +1748,7 @@ function read_apt_file(in_ICAO)
                           if string.match( l_line2,  "^1300%s" ) then l_processed_1300 = decipher_ramp(l_line2, t_gate) end  
                           if string.match( l_line2,  "^1201%s" ) then decipher_taxinode(l_line2) end  
                           if string.match( l_line2,  "^1202%s" ) then l_processed_1204 = false; decipher_taxisegment(l_line2) end  
+                          if string.match( l_line2,  "^1206%s" ) then decipher_vehicle_edge(l_line2) end  
                           if string.match( l_line2,  "^1204%s" ) then
                               if l_processed_1204 == false then 
                                 decipher_taxisegment_hotzone(l_line2)
@@ -1821,6 +1857,7 @@ function decipher_ramp_operation(in_str)
   l_types = t_gate[i].Types 
   if l_types == "" then return end
   l_str1, l_str2 = string.match(in_str, "1301 %s*(%a)%s*([^%s]+)%s*")
+  t_gate[i].Terminal = l_str1 or ""   -- VER1.21: store terminal letter for disambiguation
   if l_str1 == "E" and string.find(l_types, "1") then 
     t_gate[i].Types = string.sub(l_types, 3)
   end  
@@ -1898,6 +1935,107 @@ function decipher_taxisegment_hotzone(in_str)
     if t_taxinode[t_segment[i].Node1 + 1].Type ~= "runway" then t_taxinode[t_segment[i].Node1 + 1].Type = "hotzone" end
     if t_taxinode[t_segment[i].Node2 + 1].Type ~= "runway" then t_taxinode[t_segment[i].Node2 + 1].Type = "hotzone" end    
   end  
+end
+
+-- VER1.23 : collect a 1206 ground-vehicle routing edge
+-- Format: 1206 <node1> <node2> <direction> [name]
+function decipher_vehicle_edge(in_str)
+  local l_str1, l_str2 = string.match(in_str, "1206 %s*([^%s]+)%s*([^%s]+)%s*")
+  if l_str1 and l_str2 then
+    local l_n1 = tonumber(l_str1)
+    local l_n2 = tonumber(l_str2)
+    if l_n1 ~= nil and l_n2 ~= nil then
+      local l_idx = #t_filter_1206 + 1
+      t_filter_1206[l_idx] = { Node1 = l_n1, Node2 = l_n2 }
+    end
+  end
+end
+
+-- VER1.23 : remove nodes that exist ONLY in 1206 vehicle edges and never in
+-- any 1202 taxiway/runway segment.  These are ground-vehicle-only waypoints
+-- that aircraft should never visit.
+-- Logic mirrors the HTML pathfinder's apply1206Filter():
+--   1. Build the set of nodes referenced by at least one 1202 segment.
+--   2. A 1206 node is removable only if it is NOT in that set.
+--   3. Remove those nodes from t_taxinode (nil them out) and drop any
+--      segment whose endpoint is a removed node.
+--   4. Also scrub the Segment index string of each surviving node so A*
+--      doesn't chase a dangling segment reference.
+function apply_1206_filter()
+  if #t_filter_1206 == 0 then return end
+
+  -- Step 1: build set of nodes used in 1202 segments
+  local l_used = {}
+  for l_s = 1, #t_segment do
+    l_used[t_segment[l_s].Node1] = true
+    l_used[t_segment[l_s].Node2] = true
+  end
+
+  -- Step 2: collect nodes that appear only in 1206 (never in 1202)
+  local l_remove = {}
+  for l_f = 1, #t_filter_1206 do
+    local l_n1 = t_filter_1206[l_f].Node1
+    local l_n2 = t_filter_1206[l_f].Node2
+    if not l_used[l_n1] then l_remove[l_n1] = true end
+    if not l_used[l_n2] then l_remove[l_n2] = true end
+  end
+
+  -- Step 3: count vehicle-only nodes (do NOT nil them — nilling creates holes in t_taxinode
+  --          that crash every loop using  for i=1,#t_taxinode do  without a nil-guard).
+  --          Nodes with no 1202 segment will get Segment="" in Step 5, so A* ignores them.
+  local l_count = 0
+  for l_id, _ in pairs(l_remove) do
+    if t_taxinode[l_id + 1] ~= nil then
+      l_count = l_count + 1   -- count only, do not nil
+    end
+  end
+
+  -- Step 4: remove segments that reference a removed node
+  -- (These are ADD_NEWSEGMENT stubs that may have been built from vehicle nodes;
+  --  regular 1202 segments already survived Step 1.)
+  local l_seg_count = 0
+  local l_new_segments = {}
+  for l_s = 1, #t_segment do
+    if l_remove[t_segment[l_s].Node1] or l_remove[t_segment[l_s].Node2] then
+      l_seg_count = l_seg_count + 1
+    else
+      l_new_segments[#l_new_segments + 1] = t_segment[l_s]
+    end
+  end
+  -- Rebuild t_segment as a clean array (avoids nil holes)
+  for l_s = 1, #l_new_segments do t_segment[l_s] = l_new_segments[l_s] end
+  for l_s = #l_new_segments + 1, #t_segment + l_seg_count do t_segment[l_s] = nil end
+
+  -- Step 5: rebuild Segment index strings for surviving nodes so A* is consistent
+  -- Clear all index strings first
+  for l_idx = 1, #t_taxinode do
+    if t_taxinode[l_idx] ~= nil then
+      t_taxinode[l_idx].Segment = ""
+    end
+  end
+  -- Repopulate from the cleaned segment list
+  for l_s = 1, #t_segment do
+    local l_n1idx = t_segment[l_s].Node1 + 1
+    local l_n2idx = t_segment[l_s].Node2 + 1
+    if t_taxinode[l_n1idx] ~= nil then
+      if t_taxinode[l_n1idx].Segment == "" then
+        t_taxinode[l_n1idx].Segment = tostring(l_s)
+      else
+        t_taxinode[l_n1idx].Segment = t_taxinode[l_n1idx].Segment .. "," .. tostring(l_s)
+      end
+    end
+    if t_taxinode[l_n2idx] ~= nil then
+      if t_taxinode[l_n2idx].Segment == "" then
+        t_taxinode[l_n2idx].Segment = tostring(l_s)
+      else
+        t_taxinode[l_n2idx].Segment = t_taxinode[l_n2idx].Segment .. "," .. tostring(l_s)
+      end
+    end
+  end
+
+  logMsg("FollowMe VER1.23 : apply_1206_filter() removed " .. l_count ..
+         " vehicle-only nodes and " .. l_seg_count ..
+         " orphaned segments at " .. (curr_ICAO ~= "" and curr_ICAO or "unknown"))
 end
 
 function determine_runway_node()
@@ -2042,6 +2180,7 @@ end
 
 function initialise_airport()
     t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
+    t_filter_1206 = {}   -- VER1.23 : reset vehicle edge filter list
     -- VER1.4 Coussini 2026 : t_deleted_runway is intentionally NOT reset here
     -- (runways without routes must persist across airport re-reads)
     -- t_deleted_runway = {}
@@ -2051,10 +2190,12 @@ end
 
 function initialise_routes()
     if #t_node > 0 then
-        if depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 
+        if depart_arrive == 1 and curr_node >= #t_node
                     and flightstart ~= 9999 and not kill_is_manual then
+                 logMsg("FollowMe VER1.20 : initialise_routes() play_sound(snd_safeflight_bye)")
                 play_sound(snd_safeflight_bye)
         elseif depart_arrive == 2 and curr_node == #t_node then
+                 logMsg("FollowMe VER1.20 : initialise_routes() play_sound(snd_welcome_bye)")
                  play_sound(snd_welcome_bye)
         end  
     end
@@ -2117,7 +2258,7 @@ function handle_plugin_window()
     local l_err = ""
     
     if FM_car_active == true and #t_node > 0 and prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 0 then
-      if ( depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 ) or 
+      if ( depart_arrive == 1 and curr_node >= #t_node ) or 
          ( depart_arrive == 2 and curr_node == #t_node ) then
           prepare_kill_objects = true
       end  
@@ -2359,18 +2500,23 @@ function build_window(wnd, x, y)
   -- ===============================================
   -- VER1.5 : Departure/Arrival display from SimBrief at top of panel
   -- ===============================================
-  imgui.SetWindowFontScale(1.1)  
+  imgui.SetWindowFontScale(1.1)
   imgui.SetCursorPosY(5)
   imgui.SetCursorPosX(10)
   imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)  -- gris clair
-  imgui.TextUnformatted("Departure Airport")
-  imgui.PopStyleColor()
 
+  if get_from_SimBrief then
+      imgui.TextUnformatted("Simbrief Departure Airport")
+  else
+      imgui.TextUnformatted("Departure Airport")
+  end
+
+  imgui.PopStyleColor()
   imgui.SetCursorPosY(18)
   imgui.SetCursorPosX(10)
   imgui.SetWindowFontScale(1.2)
 
-  if sb_fetch_status == "OK" and sb_origin_icao ~= "" then
+  if get_from_SimBrief and sb_fetch_status == "OK" and sb_origin_icao ~= "" then
       imgui.TextUnformatted(sb_origin_icao .. "   " .. sb_origin_name)
   else
       -- Fallback: display current sim airport
@@ -2381,14 +2527,20 @@ function build_window(wnd, x, y)
   imgui.SetCursorPosY(35)
   imgui.SetCursorPosX(10)
   imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
-  imgui.TextUnformatted("Arrival Airport")
+
+  if get_from_SimBrief then
+      imgui.TextUnformatted("Simbrief Arrival Airport")
+  else
+      imgui.TextUnformatted("Arrival Airport")
+  end
+
   imgui.PopStyleColor()
 
   imgui.SetCursorPosY(48)
   imgui.SetCursorPosX(10)
   imgui.SetWindowFontScale(1.2)
 
-  if sb_fetch_status == "OK" and sb_dest_icao ~= "" then
+  if get_from_SimBrief and sb_fetch_status == "OK" and sb_dest_icao ~= "" then
       imgui.TextUnformatted(sb_dest_icao .. "   " .. sb_dest_name)
   else
       imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
@@ -2397,7 +2549,6 @@ function build_window(wnd, x, y)
   end
 
   imgui.SetWindowFontScale(1.0)
-
   --=============================================== 
   imgui.SetCursorPosY(65)
   imgui.Separator()
@@ -2409,7 +2560,7 @@ function build_window(wnd, x, y)
   -- ===============================================
   imgui.SetCursorPosY(l_y)
   imgui.SetCursorPosX(18)
-  if imgui.RadioButton(" Departure", depart_arrive == 1, false) then
+  if imgui.RadioButton(" Departure : ", depart_arrive == 1, false) then
       depart_arrive = 1
       flightstart = 0
       rampstart_chg = true
@@ -2418,7 +2569,8 @@ function build_window(wnd, x, y)
   
   if depart_gate > 0 then
       imgui.SameLine()
-      imgui.SetCursorPosX(160)
+      --imgui.SetCursorPosX(160)
+      imgui.SetCursorPosX(134)
       imgui.TextUnformatted(t_gate[depart_gate].ID)
   end
 
@@ -2432,7 +2584,7 @@ function build_window(wnd, x, y)
     
   -- VER1.5 : If 'Get SimBrief data' checked -> ReadOnly field with SimBrief runway
   if get_from_SimBrief then   
-    imgui.InputText("##text_runway", depart_runway, 5, imgui.constant.InputTextFlags.ReadOnly)
+    imgui.InputText("##text_runway", sb_runway_takeoff, 5, imgui.constant.InputTextFlags.ReadOnly)
   else    
     local l_depart_runway = depart_runway
     if imgui.BeginCombo("##select_runway", l_depart_runway) then      
@@ -2791,14 +2943,16 @@ function build_window(wnd, x, y)
   imgui.SetCursorPosY(468)
   imgui.SetCursorPosX(10)
   if sb_fetch_status == "OK" then
-      if get_from_SimBrief and sb_airport_mismatch then
-          imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
-          imgui.TextUnformatted("No SimBrief data for the current airport")
-          imgui.PopStyleColor()
-      else
-          imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
-          imgui.TextUnformatted("SimBrief Runways  Dep:" .. sb_runway_takeoff .. "  Arr:" .. sb_runway_landing)
-          imgui.PopStyleColor()
+      if get_from_SimBrief then
+          if sb_airport_mismatch then
+              imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+              imgui.TextUnformatted("The current airport does not match the Simbrief data")
+              imgui.PopStyleColor()
+          else
+              imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
+              imgui.TextUnformatted("SimBrief Runways  Dep:" .. sb_runway_takeoff .. "  Arr:" .. sb_runway_landing)
+              imgui.PopStyleColor()
+          end
       end
   elseif sb_fetch_status == "LOADING" then
       imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
@@ -2867,6 +3021,18 @@ function update_msg(in_msg)
         end        
         if Err_Msg[1].text ~= nil and Err_Msg[1].text == in_msg then return end  
     end    
+
+    if in_msg == "-19" then
+        if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
+            -- Departure: use SimBrief takeoff runway
+            l_rwy = sb_runway_takeoff
+        elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
+            -- Arrival: use SimBrief landing runway
+            l_rwy = sb_runway_landing
+        end
+        in_msg = "Routes not defined for Simbrief runway "..l_rwy
+        if Err_Msg[1].text ~= nil and Err_Msg[1].text == in_msg then return end
+    end
     
     if Err_Msg[1].text then
       Err_Msg[3].text = Err_Msg[2].text
@@ -2875,17 +3041,21 @@ function update_msg(in_msg)
 
     if in_msg == "6" then
       in_msg = "Follow Me Car ready. Car is behind you."
+      if depart_arrive == 1 then logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_followme)") else logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_welcome)") end
       if depart_arrive == 1 then play_sound(snd_followme) else play_sound(snd_welcome) end   
     elseif in_msg == "7" then
       in_msg = "Have a safe flight !"
+      logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_safeflight_bye)")
       play_sound(snd_safeflight_bye)
     elseif in_msg == "5" then
-      in_msg = "Arrived at destination"        
+      in_msg = "Arrived at destination"
+      logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_arrived)")
       play_sound(snd_arrived) 
     elseif in_msg == "4" then
       in_msg = "No route found. Remove taxiway limitation, trying again."  
     elseif in_msg == "3" then
       in_msg = "Follow Me Car is ready"
+      if depart_arrive == 1 then logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_followme)") else logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_welcome)") end
       if depart_arrive == 1 then play_sound(snd_followme) else play_sound(snd_welcome) end        
     elseif in_msg == "2" then
       in_msg = "Preference Saved"
@@ -2946,7 +3116,10 @@ function determine_XP_route()
                 break
             end
         end
-        if not l_found then return "-18" end  
+        if not l_found then
+            logMsg("FollowMe VER1.22 : determine_XP_route -18")
+            return "-18"
+        end
     end
 
     depart_gate = check_gate()
@@ -3171,107 +3344,62 @@ function transverse(in_startnode, in_endnode, in_heading)
             l_node = t_taxinode[l_node+1].parent   
             t_possible_route[1].Route = l_node .." ".. t_possible_route[1].Route 
         end
+        local l_from_label, l_to_label = "", ""
+        if depart_arrive == 1 then
+            l_from_label = (depart_gate > 0) and t_gate[depart_gate].ID or "ramp"
+            l_to_label   = "RWY " .. depart_runway
+        elseif depart_arrive == 2 then
+            l_from_label = "RWY " .. depart_runway
+            l_to_label   = (arrival_gate > 0) and t_gate[arrival_gate].ID or "gate"
+        end
+        logMsg("FollowMe VER1.22 : RAW A* ROUTE" ..
+               " AIRPORT=" .. curr_ICAO ..
+               " FROM=" .. l_from_label ..
+               " TO=" .. l_to_label)
+        logMsg("FollowMe VER1.22 : RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
+        local l_raw_count = 0
+        for _ in t_possible_route[1].Route:gmatch("[^%s]+") do l_raw_count = l_raw_count + 1 end
+        logMsg("FollowMe VER1.22 : RAW A* NODES TOTAL=" .. l_raw_count)
     end
 end
   
 function process_possible_routes()
     if #t_possible_route == 0 then return end
     
-    local l_bypass = false
     local l_new_head, l_new_dist = 0, 0
-    local l_new_AoR = 0
     local l_index = 1
-    local l_node = 0 
-    local l_hotzone_node_cnt = 0
-    local l_string = ""
-    local l_segment_idx = 0
+    local l_node = 0
     t_node = {}
     local l_min_dist_btw_nodes = min_rot_radius * 2 + car_rear_wheel_to_ref  
     local t_route_nodes = {}
     local routenode_cnt = 1
-    local l_last_taxiway = 0
     
     for l_node in t_possible_route[1].Route:gmatch("[^%s]+") do     
         t_route_nodes[routenode_cnt] = l_node
         routenode_cnt = routenode_cnt + 1
     end     
     
-    if depart_arrive == 1 then
-        for routenode_cnt = #t_route_nodes - 1 , 1, -1 do
-            l_node = t_route_nodes[routenode_cnt]
-            if t_taxinode[l_node+1].Type == "hotzone" or t_taxinode[l_node+1].Type == "runway" then         
-                for l_string in t_taxinode[l_node+1].Segment:gmatch("[^,]+") do
-                    l_segment_idx = tonumber(l_string)   
-                    if t_segment[l_segment_idx].Hotzone ~= "" or t_segment[l_segment_idx].Type == "runway" then
-                    else
-                        l_last_taxiway = routenode_cnt
-                        break
-                    end    
-                end
-            end
-            if l_last_taxiway > 0 then break end    
-        end  
-    end
-      
-    for routenode_cnt = 1, #t_route_nodes do 
+    -- VER1.20 : scan l_last_taxiway et break hotzone supprimés.
+    -- Tous les nœuds A* sont insérés comme DRIVE NODE sans condition.
+    -- VER1.17 gère seul l'entrée piste (projection centreline + GPS seuil).
+    for routenode_cnt = 1, #t_route_nodes do
         l_node = t_route_nodes[routenode_cnt]
-        l_bypass = false
-        if depart_arrive == 1 and routenode_cnt >= l_last_taxiway then  
-            if t_taxinode[l_node+1].Type == "hotzone" or t_taxinode[l_node+1].Type == "runway" then
-                -- VER1.19 : un nœud runway/hotzone avec encore une sortie taxiway est
-                -- TRAVERSABLE (ex : seuil RWY 33 à KSYR, traversé pour atteindre RWY 28).
-                -- On ne break que si TOUS ses segments sont runway/hotzone (vraie entrée piste)
-                -- OU si c'est le nœud destination final (runway_endpt_node).
-                local l_has_taxiway_exit = false
-                for l_seg_str in t_taxinode[l_node+1].Segment:gmatch("[^,]+") do
-                    local l_sidx = tonumber(l_seg_str)
-                    if l_sidx and t_segment[l_sidx] and
-                       t_segment[l_sidx].Type ~= "runway" and
-                       (t_segment[l_sidx].Hotzone == nil or t_segment[l_sidx].Hotzone == "") then
-                        l_has_taxiway_exit = true
-                        break
-                    end
-                end
-                if not l_has_taxiway_exit then
-                    -- Vraie entrée piste, pas de sortie taxiway → c'est le dernier nœud avant GPS seuil
-                    l_hotzone_node_cnt = l_hotzone_node_cnt + 1
-                end
-                -- Si nœud traversable (has_taxiway_exit) → hotzone_node_cnt reste 0 → nœud inclus normalement
-            end    
-        end    
-        -- Break au premier nœud de vraie entrée piste (pas de sortie taxiway)
-        -- Jamais sur le nœud destination (runway_endpt_node) — GPS seuil le remplace de toute façon
-        if l_hotzone_node_cnt > 0 then break end
-        if l_bypass == false  then
-            if l_index > 1  then
-                l_new_head, l_new_dist = heading_n_dist( t_node[l_index-1].x, t_node[l_index-1].z, 
-                                                         t_taxinode[l_node + 1].x, t_taxinode[l_node + 1].z )  
-                if l_index > 2 and l_hotzone_node_cnt == 0 then                                                         
-                    l_new_AoR = compute_angle_diff( t_node[l_index-2].heading , l_new_head )
-                    if l_new_AoR <= 10 then
-                        t_node[l_index-1].x = t_taxinode[l_node + 1].x
-                        t_node[l_index-1].y = t_taxinode[l_node + 1].y              
-                        t_node[l_index-1].z = t_taxinode[l_node + 1].z                           
-                        t_node[l_index-2].heading, t_node[l_index-2].dist = heading_n_dist( t_node[l_index-2].x, t_node[l_index-2].z, 
-                                                                                             t_node[l_index-1].x, t_node[l_index-1].z )  
-                        l_bypass = true
-                    end    
-                end
-            end    
-            if l_bypass == false then
-                t_node[l_index] = {}
-                if l_hotzone_node_cnt > 0 then t_node[l_index].hotzone = "1" else t_node[l_index].hotzone = "" end    
-                t_node[l_index].x = t_taxinode[l_node + 1].x
-                t_node[l_index].y = t_taxinode[l_node + 1].y              
-                t_node[l_index].z = t_taxinode[l_node + 1].z 
-                if l_index > 1 then
-                    t_node[l_index-1].heading = l_new_head
-                    t_node[l_index-1].dist = l_new_dist
-                end
-                l_index = l_index + 1
-            end    
-        end    
+        if l_index > 1 then
+            l_new_head, l_new_dist = heading_n_dist( t_node[l_index-1].x, t_node[l_index-1].z,
+                                                     t_taxinode[l_node + 1].x, t_taxinode[l_node + 1].z )
+        end
+        t_node[l_index] = {}
+        t_node[l_index].hotzone = ""
+        t_node[l_index].x = t_taxinode[l_node + 1].x
+        t_node[l_index].y = t_taxinode[l_node + 1].y
+        t_node[l_index].z = t_taxinode[l_node + 1].z
+        if l_index > 1 then
+            t_node[l_index-1].heading = l_new_head
+            t_node[l_index-1].dist    = l_new_dist
+        end
+        l_index = l_index + 1
     end  
+
 
     for l_index = 1, #t_node - 2 do
         if t_node[l_index].dist < l_min_dist_btw_nodes then
@@ -3375,8 +3503,33 @@ function process_possible_routes()
             t_node[l_last + 1].heading = t_node[l_last].heading
             t_node[l_last + 1].dist    = 0
         end
-        logMsg("FollowMe VER1.17 : depart RWY " .. depart_runway ..
-               " total_nodes=" .. (#t_node))
+    end
+
+    -- VER1.22 : log the final drive waypoints actually followed by the car
+    if #t_node > 0 then
+        local l_from_lbl, l_to_lbl = "", ""
+        if depart_arrive == 1 then
+            l_from_lbl = (depart_gate > 0) and t_gate[depart_gate].ID or "ramp"
+            l_to_lbl   = "RWY " .. depart_runway
+        elseif depart_arrive == 2 then
+            l_from_lbl = "RWY " .. depart_runway
+            l_to_lbl   = (arrival_gate > 0) and t_gate[arrival_gate].ID or "gate"
+        end
+        local l_node_list = ""
+        for l_ni = 1, #t_node do
+            local l_hz = (t_node[l_ni].hotzone == "1") and "[H]" or ""
+            l_node_list = l_node_list .. l_ni .. l_hz ..
+                          "(x=" .. string.format("%.1f", t_node[l_ni].x or 0) ..
+                          " z=" .. string.format("%.1f", t_node[l_ni].z or 0) ..
+                          " hdg=" .. string.format("%.0f", t_node[l_ni].heading or 0) ..
+                          " d=" .. string.format("%.0f", t_node[l_ni].dist or 0) .. "m) "
+        end
+        logMsg("FollowMe VER1.22 : DRIVE ROUTE" ..
+               " AIRPORT=" .. curr_ICAO ..
+               " FROM=" .. l_from_lbl ..
+               " TO=" .. l_to_lbl)
+        logMsg("FollowMe VER1.22 : DRIVE NODES : " .. l_node_list)
+        logMsg("FollowMe VER1.22 : DRIVE NODES TOTAL=" .. #t_node)
     end
 
 end
