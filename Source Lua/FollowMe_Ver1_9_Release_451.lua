@@ -1307,7 +1307,7 @@ function load_object()
       time_to_100 = 3; speed_max = 88.88; place_above_the_car = 1.43; place_Z_of_car = 0
 
   elseif car_type_fmcar == "Van" or (car_type_fmcar == "Auto" and l_auto_sel == 2) then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/fm_van.obj",
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/fm_van.obj",
                 function(inObject, inRefcon) 
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject 
@@ -1318,7 +1318,7 @@ function load_object()
       time_to_100 = 10; speed_max = 70; place_above_the_car = 1.95; place_Z_of_car = -1.625
       
   elseif car_type_fmcar == "Truck" or (car_type_fmcar == "Auto" and l_auto_sel == 3) then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/fm_truck.obj",
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/fm_truck.obj",
                 function(inObject, inRefcon) 
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject 
@@ -1334,7 +1334,7 @@ function load_object()
   dataref_array2[1] = NULL
   datarefs_addr = dataref_array2
   
-  XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/signboard.obj", 
+  XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/signboard.obj",
                       function(inObject, inRefcon) 
                         signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                         signboardref = inObject                        
@@ -1344,7 +1344,7 @@ end
 
 function load_path()
   if FM_car_active and show_path and #t_node > 0 then
-      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/pushpin_yellow.obj", 
+      XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/pushpin_yellow.obj",
                                 function(inObject, inRefcon) 
                                     for i= 0, #t_node-1 do
                                       path_instance[i] = XPLM.XPLMCreateInstance(inObject, NULL)
@@ -1357,7 +1357,7 @@ end
 
 function load_rampstart()
     if rampstart_instance[0] == nil then    
-        XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/diamond_marker.obj", 
+        XPLM.XPLMLoadObjectAsync( SCRIPT_DIRECTORY .. "follow_me/objects/diamond_marker.obj",
                                   function(inObject, inRefcon) 
                                       rampstart_instance[0] = XPLM.XPLMCreateInstance(inObject, NULL)
                                       rampstartref = inObject
