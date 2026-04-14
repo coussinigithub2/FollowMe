@@ -4048,6 +4048,6 @@ syspath = ffi.string(char_str)
 register_dataref() 
 load_probe()
 
-do_every_frame("handle_plugin_window()")
+do_every_draw("handle_plugin_window()")
 do_every_frame("object_physics()")
 do_on_exit("exit_plugin()")
