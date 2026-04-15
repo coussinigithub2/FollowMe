@@ -2,19 +2,21 @@ CLAUDE AI à faire:
 
 1-lorsque le follow me car tourne à gauche ou a droite... il faudrais signaler. il y a que les deux feux qui clignottent et pas de signalisation
 
-2-pourquoi a TNCB je peux partir du terminal 6 mais que le terminal 6 n'est pas dans le choix pour Arrival
+2-Mettre des "commentaires en anglais" expliquant ce que fait une fonction
 
-3-Mettre des "commentaires en anglais" expliquant ce que fait une fonction
+2.1) Exemple des lignes sur une fonction:
 
-A) Exemple de ligne sur une fonction:
-
+-------------------------------------------------------
+-- The function "start_car" allows
+-------------------------------------------------------
 function start_car()
 
-B) Exemple de commentaire avant toute fonction (modèle avec cadre à respecter):
+2.2) Exemple des lignes sur une fonction:
 
---++---------------------------------------------------------------------------------++
---|| start_car() this is a comment for this function                                 || 
---++---------------------------------------------------------------------------------++
+-------------------------------------------------------
+-- The function "start_car" allows
+-- Calculate the heading distance
+-- Adjust coordinates for the follow me car
+-------------------------------------------------------
 function start_car()
 
-C) S'il existe un commentaire, le remplacer par le modèle précédent et mettre des commentaires pertinent

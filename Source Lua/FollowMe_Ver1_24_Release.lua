@@ -1,4 +1,4 @@
---    ---------------------------------------------------------------------------------
+﻿--    ---------------------------------------------------------------------------------
 --          LICENSE
 --    ---------------------------------------------------------------------------------
 --    Copyright (c) 2026, Coussini
@@ -8,28 +8,28 @@
 --    VER1.6 Coussini 2026 : New preferences file FollowMeXplane12.prf - clean rewrite, no accumulation
 --    VER1.7 Coussini 2026 : Fix runways with no direct taxiway connection (e.g. MDPC RWY 27)
 --                           Back-taxi runways are now reachable via the runway itself
---    VER1.8 Coussini 2026 : Back-taxi support — car now guides to the actual runway threshold
+--    VER1.8 Coussini 2026 : Back-taxi support - car now guides to the actual runway threshold
 --                           instead of stopping at the first hotzone node on the runway
---    VER1.9 Coussini 2026 : Back-taxi GPS node — adds a virtual node at the exact runway threshold
+--    VER1.9 Coussini 2026 : Back-taxi GPS node - adds a virtual node at the exact runway threshold
 --                           coordinates so the car drives in a straight line to the threshold
 --                           and stops there with "Arrived at destination"
---    VER1.10 Coussini 2026: Fix back-taxi false detection — a runway with a taxiway exit within
+--    VER1.10 Coussini 2026: Fix back-taxi false detection - a runway with a taxiway exit within
 --                           200m of the threshold is NOT a back-taxi (e.g. CYHU RWY 06L via K)
 --                           Only truly isolated thresholds (e.g. MDPC RWY 27) trigger back-taxi
---    VER1.11 Coussini 2026: Universal runway entry rule — match_runway() now selects the runway
+--    VER1.11 Coussini 2026: Universal runway entry rule - match_runway() now selects the runway
 --                           node WITH a taxiway neighbour closest to the threshold, instead of
 --                           the closest node regardless of connectivity. The virtual GPS threshold
 --                           node handles all on-runway travel automatically (back-taxi, TNCB, etc.)
 --                           is_backtaxi detection simplified: always add virtual node if entry
 --                           is more than 50m from the threshold.
---    VER1.12 Coussini 2026: (1) full_reset() — single cleanup entry point that unloads all 3D
+--    VER1.12 Coussini 2026: (1) full_reset() - single cleanup entry point that unloads all 3D
 --                           objects and reinitialises all state variables. Called when X-Plane
 --                           starts a new flight (fm_new_flight resets) and from exit_plugin().
 --                           Fixes double-car bug after location change without restarting X-Plane.
---                           (2) Car proximity fix — if the car would spawn more than 150m from
+--                           (2) Car proximity fix - if the car would spawn more than 150m from
 --                           the aircraft, it is placed directly behind the aircraft instead so
 --                           the pilot can always see it immediately.
---    VER1.15 Coussini 2026: Universal gate fallback — when determine_pos_on_segment() finds no
+--    VER1.15 Coussini 2026: Universal gate fallback - when determine_pos_on_segment() finds no
 --                           reachable segment from a gate position (common when apt.dat has isolated
 --                           1201 nodes near parking areas with no 1202 segments, e.g. CYQB has 88
 --                           such nodes), the function now falls back to the nearest CONNECTED node
@@ -41,13 +41,13 @@
 --                           perpendicularly onto the centreline axis (REPLACE in-place).
 --                           All back-taxi walk nodes also projected. Car drives to exact
 --                           runway centre, then straight to threshold. No curve, no field.
---    VER1.17 Coussini 2026: (1) Crash fix — airport change caused X-Plane access violation.
+--    VER1.17 Coussini 2026: (1) Crash fix - airport change caused X-Plane access violation.
 --                           FlyWithLua restarts the Lua engine on each airport/plane change
 --                           (LUA_RUN increments). XPLMRegisterDataAccessor left dangling
---                           pointers → crash. Fix: tire datarefs use XPLMFindDataRef +
+--                           pointers -> crash. Fix: tire datarefs use XPLMFindDataRef +
 --                           XPLMSetDatavf each frame. fm/anim/sign registered once on
 --                           LUA_RUN==1, found via FindDataRef on subsequent runs.
---                           (2) Universal GPS threshold — for ALL departures (back-taxi
+--                           (2) Universal GPS threshold - for ALL departures (back-taxi
 --                           or not, intersecting runways or not), the car now always
 --                           stops at the exact GPS threshold of the requested runway.
 --                           The A* route is followed only for taxiways; at the first
@@ -55,27 +55,27 @@
 --                           is projected onto the runway centreline, then a GPS threshold
 --                           node is added. Eliminates wrong-runway stops at intersecting
 --                           runways (e.g. KSYR RWY 28 stopping at RWY 33 threshold) and
---                           the diagonal-into-grass bug. is_backtaxi removed — no longer
+--                           the diagonal-into-grass bug. is_backtaxi removed - no longer
 --                           needed since all departures use the same GPS threshold logic.
---    VER1.19 Coussini 2026: Cross-runway taxiway fix — at airports where a taxiway passes
+--    VER1.19 Coussini 2026: Cross-runway taxiway fix - at airports where a taxiway passes
 --                           through a runway threshold node (e.g. KSYR: taxiways M and L
 --                           connect through the RWY 33 threshold node 126 to reach RWY 28),
 --                           the previous code broke the route at node 126 because it was
 --                           typed "runway", sending the car straight across the field.
 --                           Fix: a runway/hotzone node that still has at least one non-runway
---                           taxiway segment is TRAVERSABLE — the car follows the taxiway
+--                           taxiway segment is TRAVERSABLE - the car follows the taxiway
 --                           through it normally (hotzone not set). Only a node whose ALL
 --                           segments are runway/hotzone triggers the GPS threshold logic.
---                           Result: Y→M→threshold33→L→threshold28 followed on pavement, no field.
+--                           Result: Y->M->threshold33->L->threshold28 followed on pavement, no field.
 --    VER1.20 Coussini 2026: Route node logging + drive node fix + arrived fix:
 --                           (1) RAW A* ROUTE logMsg: complete A* node sequence,
 --                               identical to what the HTML pathfinder tool displays.
 --                           (2) RAW A* NODES total=N: count of nodes in the raw route.
 --                           (3) DRIVE NODES logMsg: waypoints actually followed by the
 --                               car. The count is now always equal to the RAW count.
---                           Removal of the angle<=10° merge AND the l_last_taxiway scan
+--                           Removal of the angle<=10 degree merge AND the l_last_taxiway scan
 --                           + hotzone break: these two mechanisms were reducing the number
---                           of DRIVE NODES (e.g., KSYR: 16 RAW → 11 drive). Every A* node
+--                           of DRIVE NODES (e.g., KSYR: 16 RAW -> 11 drive). Every A* node
 --                           is now inserted unconditionally. VER1.17 alone handles
 --                           runway entry via centerline projection + threshold GPS.
 --                           Premature "arrived" fix: the old condition
@@ -90,7 +90,7 @@
 --    VER1.22 Coussini 2026: Add FROM/TO labels in RAW A* ROUTE and DRIVE NODES log lines.
 --                           depart_arrive==1: FROM=gate/ramp  TO=RWY xx
 --                           depart_arrive==2: FROM=RWY xx     TO=gate
---    VER1.23 Coussini 2026: 1206 ground vehicle edge filter — apt.dat row 1206 defines
+--    VER1.23 Coussini 2026: 1206 ground vehicle edge filter - apt.dat row 1206 defines
 --                           routing edges reserved for ground vehicles only (not aircraft).
 --                           During apt.dat parsing, all 1206 node pairs are collected in
 --                           t_filter_1206[]. After all 1202 segments are loaded,
@@ -101,18 +101,17 @@
 --                           a logMsg reports how many nodes were filtered per airport.
 --    VER1.24 Coussini 2026: Precise centreline projection using exact runway pair.
 --                           VER1.17 searched all t_runway[] entries and kept the last
---                           non-matching one as "far threshold" — at airports with multiple
+--                           non-matching one as "far threshold" - at airports with multiple
 --                           runways (e.g. LOWI has 08/26 and 08L/26R), the far point could
 --                           land on the wrong runway, shifting the centreline axis and causing
 --                           the projected node to miss the centreline.
 --                           Fix: decipher_runway() now stores a Pair index in each t_runway[]
 --                           entry so that process_possible_routes() can find the exact opposite
 --                           threshold of the same physical runway (same apt.dat line 100).
---                           The centreline is then defined by (far_threshold → near_threshold)
+--                           The centreline is then defined by (far_threshold -> near_threshold)
 --                           for that specific runway only.
 --                           DRIVE NODES log now includes GPS lat/lon for each waypoint so the
 --                           pilot can compare with the in-sim position directly.
---    ---------------------------------------------------------------------------------
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -479,7 +478,7 @@ local prev_taxi_light = 0
 local prev_beacon_light = 0
 local ground_time = 0
 local prev_new_flight = 0 -- VER1.12 : detect new flight when fm_new_flight resets
-local prev_plane_x = 0 -- VER1.12 : detect teleport (Δpos > 100m in 1 frame)
+local prev_plane_x = 0 -- VER1.12 : detect teleport (delta pos > 100m in 1 frame)
 local prev_plane_z = 0
 local taxiway_network = ""
 local play_time = 0
@@ -488,9 +487,16 @@ local play_text = ""
 local speed_warn_time = 0
 
 -- VER1.5 : SimBrief functions
--------------------------------------------------------
--- The function "check_SimBrief" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: check_SimBrief
+-- Description:
+-- Performs the check SimBrief routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the check SimBrief logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function check_SimBrief()
     -- Reset minimal state
     sb_fetch_status = ""
@@ -513,7 +519,7 @@ function check_SimBrief()
         redirect = true
     }
 
-    -- If the request fails → do not block anything
+    -- If the request fails -> do not block anything
     if code ~= 200 or not response_body or #response_body == 0 then
         sb_fetch_status = "ERROR"
         return
@@ -537,7 +543,7 @@ function check_SimBrief()
 
     sb_fetch_status = "OK"
 
-    -- Airport check ≠ X-Plane
+    -- Airport check is not equal to X-Plane
     sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
 
     -- Automatic application if enabled
@@ -546,9 +552,16 @@ function check_SimBrief()
     end
 end
 
--------------------------------------------------------
--- The function "apply_simbrief_runway" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: apply_simbrief_runway
+-- Description:
+-- Performs the apply simbrief runway routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the apply simbrief runway logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function apply_simbrief_runway()
     -- Apply SimBrief runway based on departure/arrival mode
     -- and verify the runway exists in t_runway (runways with valid routes)
@@ -594,9 +607,16 @@ function apply_simbrief_runway()
     end
 end
 
--------------------------------------------------------
--- The function "start_car" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: start_car
+-- Description:
+-- Performs the start car routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the start car logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function start_car()
     car_speed = 0
     car_accel = 0
@@ -645,9 +665,16 @@ function start_car()
     end
 end
 
--------------------------------------------------------
--- The function "determine_exit_angle" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_exit_angle
+-- Description:
+-- Performs the determine exit angle routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine exit angle logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_exit_angle(lever_angle)
     local l_prev_deviation, l_curr_deviation = 8888, 0
     local l_angle_btw_circle = 0
@@ -684,9 +711,16 @@ function determine_exit_angle(lever_angle)
     return 90 + l_angle_btw_circle
 end
 
--------------------------------------------------------
--- The function "chk_line_of_sight" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: chk_line_of_sight
+-- Description:
+-- Performs the chk line of sight routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the chk line of sight logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function chk_line_of_sight(
     shooter_heading,
     shooter_left_angle,
@@ -718,9 +752,16 @@ function chk_line_of_sight(
     return l_within_sight, l_heading_to_target, l_dist_to_target
 end
 
--------------------------------------------------------
--- The function "move_car" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: move_car
+-- Description:
+-- Performs the move car routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the move car logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function move_car(in_dist, in_car_in_sight, in_car_is_behind)
     -- VER1.6 fix : when speed_limiter is active, cap the plane speed reference so
     -- the car never accelerates beyond speed_max to follow the aircraft
@@ -773,9 +814,16 @@ function move_car(in_dist, in_car_in_sight, in_car_is_behind)
     manage_car_motion()
 end
 
--------------------------------------------------------
--- The function "manage_car_motion" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: manage_car_motion
+-- Description:
+-- Performs the manage car motion routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the manage car motion logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function manage_car_motion()
     local l_dist = 0
     local l_dist_stop = 0
@@ -831,9 +879,16 @@ function manage_car_motion()
     plot_position(l_dist)
 end
 
--------------------------------------------------------
--- The function "plot_position" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: plot_position
+-- Description:
+-- Performs the plot position routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the plot position logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function plot_position(in_act_dist)
     local l_remaining_turn_dist = 0
     local l_remaining_act_dist = 0
@@ -1091,9 +1146,16 @@ function plot_position(in_act_dist)
     end
 end
 
--------------------------------------------------------
--- The function "CoR_coordinates_using_car_ref" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: CoR_coordinates_using_car_ref
+-- Description:
+-- Performs the CoR coordinates using car ref routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the CoR coordinates using car ref logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function CoR_coordinates_using_car_ref(in_x, in_z, in_heading, in_radius, in_dir)
     local l_angle_rear_to_ref = math.deg(math.atan(car_rear_wheel_to_ref / in_radius))
     local l_ref_to_center_rot = math.sqrt((car_rear_wheel_to_ref ^ 2) + (in_radius ^ 2))
@@ -1103,9 +1165,16 @@ function CoR_coordinates_using_car_ref(in_x, in_z, in_heading, in_radius, in_dir
     return l_rot_x, l_rot_z
 end
 
--------------------------------------------------------
--- The function "determine_dir_of_turn" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_dir_of_turn
+-- Description:
+-- Performs the determine dir of turn routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine dir of turn logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_dir_of_turn(in_head1, in_head2, in_dist)
     local l_AoC = 0
     local l_AoR = 0
@@ -1181,9 +1250,16 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
     end
 end
 
--------------------------------------------------------
--- The function "determine_steering" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_steering
+-- Description:
+-- Performs the determine steering routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine steering logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_steering(in_AoR, in_remaining_turn_dist, in_dir, in_steer_limit)
     local l_prev_steer_angle = math.abs(steering)
     local l_time_in_turn = (in_AoR / 360) * (2 * math.pi * t_node[curr_node + 1].radius)
@@ -1223,9 +1299,16 @@ function determine_steering(in_AoR, in_remaining_turn_dist, in_dir, in_steer_lim
     end
 end
 
--------------------------------------------------------
--- The function "coordinates_of_adjusted_ref" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: coordinates_of_adjusted_ref
+-- Description:
+-- Performs the coordinates of adjusted ref routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the coordinates of adjusted ref logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function coordinates_of_adjusted_ref(in_ref_x, in_ref_z, in_delta_x, in_delta_z, in_heading)
     local l_dist = math.sqrt((in_delta_x ^ 2) + (in_delta_z ^ 2))
     local l_heading = math.fmod((math.deg(math.atan2(in_delta_x, in_delta_z)) + 360), 360)
@@ -1234,18 +1317,32 @@ function coordinates_of_adjusted_ref(in_ref_x, in_ref_z, in_delta_x, in_delta_z,
     return l_shifted_x, l_shifted_z
 end
 
--------------------------------------------------------
--- The function "heading_n_dist" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: heading_n_dist
+-- Description:
+-- Performs the heading n dist routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the heading n dist logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function heading_n_dist(in_from_x1, in_from_z1, in_to_x2, in_to_z2)
     local l_heading = math.fmod((math.deg(math.atan2(in_to_x2 - in_from_x1, -(in_to_z2 - in_from_z1))) + 360), 360)
     local l_dist = math.sqrt(((in_to_x2 - in_from_x1) ^ 2) + ((in_to_z2 - in_from_z1) ^ 2))
     return l_heading, l_dist
 end
 
--------------------------------------------------------
--- The function "minus_delta_clockwise" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: minus_delta_clockwise
+-- Description:
+-- Performs the minus delta clockwise routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the minus delta clockwise logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function minus_delta_clockwise(in_heading, in_delta, in_direction)
     local l_heading
     if in_direction == 1 then
@@ -1261,9 +1358,16 @@ function minus_delta_clockwise(in_heading, in_delta, in_direction)
     end
 end
 
--------------------------------------------------------
--- The function "add_delta_clockwise" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: add_delta_clockwise
+-- Description:
+-- Performs the add delta clockwise routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the add delta clockwise logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function add_delta_clockwise(in_heading, in_delta, in_direction)
     local l_heading = 0
     if in_direction == 1 then
@@ -1279,9 +1383,16 @@ function add_delta_clockwise(in_heading, in_delta, in_direction)
     end
 end
 
--------------------------------------------------------
--- The function "compute_angle_diff" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: compute_angle_diff
+-- Description:
+-- Performs the compute angle diff routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the compute angle diff logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function compute_angle_diff(in_from, in_to)
     if in_to == in_from then
         return 0, 0
@@ -1300,9 +1411,16 @@ function compute_angle_diff(in_from, in_to)
     end
 end
 
--------------------------------------------------------
--- The function "compute_angle_diff_dir" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: compute_angle_diff_dir
+-- Description:
+-- Performs the compute angle diff dir routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the compute angle diff dir logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function compute_angle_diff_dir(in_from, in_to, in_dir)
     if in_to == in_from then
         return 0
@@ -1321,9 +1439,16 @@ function compute_angle_diff_dir(in_from, in_to, in_dir)
     end
 end
 
--------------------------------------------------------
--- The function "local_to_latlon" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: local_to_latlon
+-- Description:
+-- Performs the local to latlon routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the local to latlon logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function local_to_latlon(l_x, l_y, l_z)
     x1_value[0] = l_x
     y1_value[0] = l_y
@@ -1332,9 +1457,16 @@ function local_to_latlon(l_x, l_y, l_z)
     return x1_value[0], y1_value[0], z1_value[0]
 end
 
--------------------------------------------------------
--- The function "latlon_to_local" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: latlon_to_local
+-- Description:
+-- Performs the latlon to local routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the latlon to local logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function latlon_to_local(in_lat, in_lon, in_alt)
     x1_value[0] = in_lat
     y1_value[0] = in_lon
@@ -1343,9 +1475,16 @@ function latlon_to_local(in_lat, in_lon, in_alt)
     return x1_value[0], y1_value[0], z1_value[0]
 end
 
--------------------------------------------------------
--- The function "get_local_coordinates" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: get_local_coordinates
+-- Description:
+-- Performs the get local coordinates routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the get local coordinates logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function get_local_coordinates(in_lat, in_lon, in_alt)
     local l_x, l_y, l_z = 0, 0, 0
     if l_alt == 0 then
@@ -1371,9 +1510,16 @@ function get_local_coordinates(in_lat, in_lon, in_alt)
     return l_x, l_y, l_z, in_alt
 end
 
--------------------------------------------------------
--- The function "probe_y" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: probe_y
+-- Description:
+-- Performs the probe y routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the probe y logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function probe_y(in_x, in_y, in_z)
     local l_lat, l_on, l_alt = 0, 0, 0
     x1_value[0] = in_x
@@ -1387,9 +1533,16 @@ function probe_y(in_x, in_y, in_z)
     return in_y
 end
 
--------------------------------------------------------
--- The function "draw_object" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: draw_object
+-- Description:
+-- Performs the draw object routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the draw object logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function draw_object(in_x, in_y, in_z, in_heading)
     -- VER1.17 : populate dataref_float_value with the wheel animation values
     dataref_float_value[0] = steering -- tire_steer_deg[0]
@@ -1438,9 +1591,16 @@ function draw_object(in_x, in_y, in_z, in_heading)
     end
 end
 
--------------------------------------------------------
--- The function "object_physics" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: object_physics
+-- Description:
+-- Performs the object physics routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the object physics logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function object_physics()
     -- VER1.4 : Corrected delta-time calculation
     local l_now = fm_run_time
@@ -1489,9 +1649,16 @@ function object_physics()
     elapsed_time = fm_run_time
 end
 
--------------------------------------------------------
--- The function "load_probe" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: load_probe
+-- Description:
+-- Performs the load probe routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the load probe logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function load_probe()
     probeinfo_value[0].structSize = ffi.sizeof(probeinfo_value[0])
     probeinfo_addr = probeinfo_value
@@ -1499,9 +1666,16 @@ function load_probe()
     proberef = XPLM.XPLMCreateProbe(probetype[1])
 end
 
--------------------------------------------------------
--- The function "load_object" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: load_object
+-- Description:
+-- Performs the load object routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the load object logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function load_object()
     ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
     dataref_array[0] = dataref_name
@@ -1598,9 +1772,16 @@ function load_object()
     )
 end
 
--------------------------------------------------------
--- The function "load_path" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: load_path
+-- Description:
+-- Performs the load path routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the load path logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function load_path()
     if FM_car_active and show_path and #t_node > 0 then
         XPLM.XPLMLoadObjectAsync(
@@ -1616,9 +1797,16 @@ function load_path()
     end
 end
 
--------------------------------------------------------
--- The function "load_rampstart" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: load_rampstart
+-- Description:
+-- Performs the load rampstart routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the load rampstart logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function load_rampstart()
     if rampstart_instance[0] == nil then
         XPLM.XPLMLoadObjectAsync(
@@ -1632,9 +1820,16 @@ function load_rampstart()
     end
 end
 
--------------------------------------------------------
--- The function "draw_path" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: draw_path
+-- Description:
+-- Performs the draw path routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the draw path logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function draw_path()
     local l_index = 0
     float_value[0] = 0
@@ -1649,9 +1844,16 @@ function draw_path()
     path_is_shown = true
 end
 
--------------------------------------------------------
--- The function "draw_rampstart" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: draw_rampstart
+-- Description:
+-- Performs the draw rampstart routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the draw rampstart logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function draw_rampstart()
     local l_index = 0
     float_value[0] = 0
@@ -1681,9 +1883,16 @@ function draw_rampstart()
     rampstart_chg = false
 end
 
--------------------------------------------------------
--- The function "unload_probe" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: unload_probe
+-- Description:
+-- Performs the unload probe routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the unload probe logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function unload_probe()
     if proberef ~= nil then
         XPLM.XPLMDestroyProbe(proberef)
@@ -1691,9 +1900,16 @@ function unload_probe()
     proberef = nil
 end
 
--------------------------------------------------------
--- The function "unload_object" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: unload_object
+-- Description:
+-- Performs the unload object routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the unload object logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function unload_object()
     if obj_instance[0] ~= nil then
         XPLM.XPLMDestroyInstance(obj_instance[0])
@@ -1713,9 +1929,16 @@ function unload_object()
     signboardref = nil
 end
 
--------------------------------------------------------
--- The function "unload_path" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: unload_path
+-- Description:
+-- Performs the unload path routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the unload path logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function unload_path()
     local l_index = 0
     if path_instance[0] ~= nil then
@@ -1731,9 +1954,16 @@ function unload_path()
     path_is_shown = false
 end
 
--------------------------------------------------------
--- The function "unload_rampstart" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: unload_rampstart
+-- Description:
+-- Performs the unload rampstart routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the unload rampstart logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function unload_rampstart()
     if rampstart_instance[0] ~= nil then
         -- Move the marker underground before destroying so X-Plane removes it visually
@@ -1754,23 +1984,31 @@ function unload_rampstart()
     rampstart_chg = false
 end
 
--- VER1.17: XPLMRegisterDataAccessor removed — causes crashes when changing airports.
--- FlyWithLua restarts the Lua engine with each change → old handles are lost
--- but X-Plane keeps the dangling pointers → access violation.
+-- VER1.17: XPLMRegisterDataAccessor removed - causes crashes when changing airports.
+-- FlyWithLua restarts the Lua engine with each change -> old handles are lost
+-- but X-Plane keeps the dangling pointers -> access violation.
 -- Solution: XPLMFindDataRef for native datarefs (tire_steer/tire_rotate),
 -- and XPLMRegisterDataAccessor protected by LUA_RUN==1 for fm/anim/sign.
--- If LUA_RUN>1, fm/anim/sign already exists → FindDataRef to retrieve it.
--------------------------------------------------------
--- The function "register_dataref" allows
--------------------------------------------------------
+-- If LUA_RUN>1, fm/anim/sign already exists -> FindDataRef to retrieve it.
+
+-- ====================================================
+-- Function: register_dataref
+-- Description:
+-- Performs the register dataref routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the register dataref logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function register_dataref()
-    -- Datarefs natifs X-Plane — FindDataRef, pas RegisterDataAccessor
+    -- Datarefs natifs X-Plane - FindDataRef, pas RegisterDataAccessor
     dr_tire_steer = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_steer_deg")
     dr_tire_rotate = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg")
 
 	-- fm/anim/sign: custom dataref
-	-- LUA_RUN == 1 → first boot → it is registered
-	-- LUA_RUN > 1 → reload after airport change → it already exists → FindDataRef
+	-- LUA_RUN == 1 -> first boot -> it is registered
+	-- LUA_RUN > 1 -> reload after airport change -> it already exists -> FindDataRef
     if LUA_RUN == 1 then
         dr_sign =
             XPLM.XPLMRegisterDataAccessor(
@@ -1800,9 +2038,17 @@ function register_dataref()
 end
 
 -- VER1.17: called every frame in draw_object() to push steering/tire_rotate/car_sign
--------------------------------------------------------
--- The function "sync_anim_datarefs" allows
--------------------------------------------------------
+
+-- ====================================================
+-- Function: sync_anim_datarefs
+-- Description:
+-- Performs the sync anim datarefs routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the sync anim datarefs logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function sync_anim_datarefs()
     if dr_tire_steer ~= nil then
         ffi_steer_buf[0] = steering
@@ -1821,9 +2067,16 @@ function sync_anim_datarefs()
     end
 end
 
--------------------------------------------------------
--- The function "get_airport_elements" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: get_airport_elements
+-- Description:
+-- Performs the get airport elements routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the get airport elements logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function get_airport_elements()
     local l_airport_index = XPLMFindNavAid(nil, nil, LATITUDE, LONGITUDE, nil, xplm_Nav_Airport)
     local l_new_ICAO, l_new_ICAO_name = "", ""
@@ -1872,9 +2125,16 @@ function get_airport_elements()
     end
 end
 
--------------------------------------------------------
--- The function "read_apt_file" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: read_apt_file
+-- Description:
+-- Performs the read apt file routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the read apt file logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function read_apt_file(in_ICAO)
     local l_filename1, l_filename2 = "", ""
     local l_file1, l_file2
@@ -2065,9 +2325,16 @@ function read_apt_file(in_ICAO)
     end
 end
 
--------------------------------------------------------
--- The function "decipher_runway" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: decipher_runway
+-- Description:
+-- Performs the decipher runway routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher runway logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_runway(in_str)
     local l_str1, l_str2, l_str3, l_str4 = "", "", "", ""
     i = #t_runway + 1
@@ -2095,9 +2362,16 @@ function decipher_runway(in_str)
         get_local_coordinates(t_runway[i + 1].Lat, t_runway[i + 1].Lon, world_alt)
 end
 
--------------------------------------------------------
--- The function "decipher_ramp" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: decipher_ramp
+-- Description:
+-- Performs the decipher ramp routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher ramp logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_ramp(in_str)
     local l_str1, l_str2, l_str3, l_str4, l_str5, l_str6 = "", "", "", "", "", ""
     l_str1, l_str2, l_str3, l_str4, l_str5, l_str6 =
@@ -2142,9 +2416,16 @@ function decipher_ramp(in_str)
     return true
 end
 
--------------------------------------------------------
--- The function "decipher_ramp_operation" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: decipher_ramp_operation
+-- Description:
+-- Performs the decipher ramp operation routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher ramp operation logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_ramp_operation(in_str)
     local l_str1, l_str2 = "", ""
     local l_types = ""
@@ -2166,9 +2447,16 @@ function decipher_ramp_operation(in_str)
     end
 end
 
--------------------------------------------------------
--- The function "decipher_taxinode" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: decipher_taxinode
+-- Description:
+-- Performs the decipher taxinode routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher taxinode logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_taxinode(in_str)
     local l_str1, l_str2 = "", ""
     i = #t_taxinode + 1
@@ -2189,9 +2477,16 @@ function decipher_taxinode(in_str)
         get_local_coordinates(t_taxinode[i].Lat, t_taxinode[i].Lon, world_alt)
 end
 
--------------------------------------------------------
--- The function "decipher_taxisegment" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: decipher_taxisegment
+-- Description:
+-- Performs the decipher taxisegment routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher taxisegment logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_taxisegment(in_str)
     local l_str1, l_str2, l_str3, l_str4, l_str5 = "", "", "", "", ""
     local l_idx = 0
@@ -2240,9 +2535,16 @@ function decipher_taxisegment(in_str)
     end
 end
 
--------------------------------------------------------
--- The function "decipher_taxisegment_hotzone" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: decipher_taxisegment_hotzone
+-- Description:
+-- Performs the decipher taxisegment hotzone routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher taxisegment hotzone logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_taxisegment_hotzone(in_str)
     i = #t_segment
     t_segment[i].Hotzone = string.match(in_str, "1204 %s*[^%s]+%s*([^%s]+)%s*")
@@ -2258,9 +2560,17 @@ end
 
 -- VER1.23 : collect a 1206 ground-vehicle routing edge
 -- Format: 1206 <node1> <node2> <direction> [name]
--------------------------------------------------------
--- The function "decipher_vehicle_edge" allows
--------------------------------------------------------
+
+-- ====================================================
+-- Function: decipher_vehicle_edge
+-- Description:
+-- Performs the decipher vehicle edge routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the decipher vehicle edge logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function decipher_vehicle_edge(in_str)
     local l_str1, l_str2 = string.match(in_str, "1206 %s*([^%s]+)%s*([^%s]+)%s*")
     if l_str1 and l_str2 then
@@ -2283,9 +2593,17 @@ end
 --      segment whose endpoint is a removed node.
 --   4. Also scrub the Segment index string of each surviving node so A*
 --      doesn't chase a dangling segment reference.
--------------------------------------------------------
--- The function "apply_1206_filter" allows
--------------------------------------------------------
+
+-- ====================================================
+-- Function: apply_1206_filter
+-- Description:
+-- Performs the apply 1206 filter routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the apply 1206 filter logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function apply_1206_filter()
     if #t_filter_1206 == 0 then
         return
@@ -2311,7 +2629,7 @@ function apply_1206_filter()
         end
     end
 
-    -- Step 3: count vehicle-only nodes (do NOT nil them — nilling creates holes in t_taxinode
+    -- Step 3: count vehicle-only nodes (do NOT nil them - nilling creates holes in t_taxinode
     --          that crash every loop using  for i=1,#t_taxinode do  without a nil-guard).
     --          Nodes with no 1202 segment will get Segment="" in Step 5, so A* ignores them.
     local l_count = 0
@@ -2376,11 +2694,18 @@ function apply_1206_filter()
     )
 end
 
--------------------------------------------------------
--- The function "determine_runway_node" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_runway_node
+-- Description:
+-- Performs the determine runway node routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine runway node logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_runway_node()
-    -- VER1.11 : Universal rule — for each runway, find the runway node that:
+    -- VER1.11 : Universal rule - for each runway, find the runway node that:
     --   1. Has at least one taxiway neighbour (accessible from the taxi network)
     --   2. Is closest to the runway threshold
     -- This replaces the non-duplicate filtering which excluded valid intersection
@@ -2406,12 +2731,19 @@ function determine_runway_node()
     end
 end
 
--------------------------------------------------------
--- The function "match_runway" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: match_runway
+-- Description:
+-- Performs the match runway routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the match runway logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function match_runway(in_runway_idx)
     -- VER1.15 : Only consider nodes that appear on a segment belonging to THIS runway.
-    -- VER1.11 searched all runway-typed nodes globally — this caused CYQB RWY 11 to
+    -- VER1.11 searched all runway-typed nodes globally - this caused CYQB RWY 11 to
     -- pick node 12 (on taxiway H + piste 06/24, 405m from seuil 11) instead of
     -- node 78 (on taxiway D+G + piste 11/29, 690m from seuil 11). The car then
     -- entered on 06/24 and cut through the field to reach the threshold.
@@ -2494,14 +2826,14 @@ function match_runway(in_runway_idx)
         logMsg(
             "FollowMe VER1.15 : RWY " ..
                 l_rwy_id ..
-                    " — no taxiway-connected node found, using closest node " ..
+                    " - no taxiway-connected node found, using closest node " ..
                         l_chosen .. " (" .. string.format("%.1f", l_chosen_dist) .. "m)"
         )
     else
         logMsg(
             "FollowMe VER1.15 : RWY " ..
                 l_rwy_id ..
-                    " → node " .. l_chosen .. " (" .. string.format("%.1f", l_chosen_dist) .. "m from threshold)"
+                    " -> node " .. l_chosen .. " (" .. string.format("%.1f", l_chosen_dist) .. "m from threshold)"
         )
     end
 
@@ -2511,12 +2843,20 @@ function match_runway(in_runway_idx)
     end
 end
 
--- VER1.12 : Single cleanup entry point — called on new flight or location change.
+-- VER1.12 : Single cleanup entry point - called on new flight or location change.
 -- Unloads all 3D objects, clears all state variables, ready for fresh use.
 -- Does NOT touch dataref registration (that is only done at load/exit).
--------------------------------------------------------
--- The function "full_reset" allows
--------------------------------------------------------
+
+-- ====================================================
+-- Function: full_reset
+-- Description:
+-- Performs the full reset routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the full reset logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function full_reset()
     if FM_car_active then
         unload_object()
@@ -2536,9 +2876,16 @@ function full_reset()
     logMsg("FollowMe VER1.12 : full_reset() completed")
 end
 
--------------------------------------------------------
--- The function "initialise_airport" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: initialise_airport
+-- Description:
+-- Performs the initialise airport routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the initialise airport logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function initialise_airport()
     t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
     t_filter_1206 = {} -- VER1.23 : reset vehicle edge filter list
@@ -2549,9 +2896,16 @@ function initialise_airport()
     depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
 end
 
--------------------------------------------------------
--- The function "initialise_routes" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: initialise_routes
+-- Description:
+-- Performs the initialise routes routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the initialise routes logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function initialise_routes()
     if #t_node > 0 then
         if depart_arrive == 1 and curr_node >= #t_node and flightstart ~= 9999 and not kill_is_manual then
@@ -2571,17 +2925,24 @@ function initialise_routes()
     window_first_access = true
 end
 
--------------------------------------------------------
--- The function "handle_plugin_window" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: handle_plugin_window
+-- Description:
+-- Performs the handle plugin window routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the handle plugin window logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function handle_plugin_window()
-    -- VER1.12 : detect new flight / location change — fm_new_flight resets to 0
+    -- VER1.12 : detect new flight / location change - fm_new_flight resets to 0
     if fm_new_flight < prev_new_flight and prev_new_flight > 5 then
         full_reset()
     end
     prev_new_flight = fm_new_flight
 
-    -- VER1.12 : detect teleport in same flight — position jumps > 100m in 1 frame
+    -- VER1.12 : detect teleport in same flight - position jumps > 100m in 1 frame
     -- Max realistic speed 250kts = 128m/s at 20fps = 6.4m/frame, never > 100m
     if prev_plane_x ~= 0 then
         local _, l_teleport_dist = heading_n_dist(prev_plane_x, prev_plane_z, fm_plane_x, fm_plane_z)
@@ -2589,7 +2950,7 @@ function handle_plugin_window()
             full_reset()
             logMsg(
                 "FollowMe VER1.12 : teleport detected (" ..
-                    string.format("%.0f", l_teleport_dist) .. "m jump) — full_reset()"
+                    string.format("%.0f", l_teleport_dist) .. "m jump) - full_reset()"
             )
         end
     end
@@ -2802,9 +3163,16 @@ function handle_plugin_window()
     end
 end
 
--------------------------------------------------------
--- The function "show_holder" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: show_holder
+-- Description:
+-- Performs the show holder routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the show holder logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function show_holder()
     if init_load == 0 then
         load_config()
@@ -2816,9 +3184,16 @@ function show_holder()
     float_wnd_set_onclose(holder_wnd, "closed_holder")
 end
 
--------------------------------------------------------
--- The function "hide_holder" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: hide_holder
+-- Description:
+-- Performs the hide holder routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the hide holder logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function hide_holder()
     if holder_wnd then
         float_wnd_destroy(holder_wnd)
@@ -2826,9 +3201,16 @@ function hide_holder()
     end
 end
 
--------------------------------------------------------
--- The function "show_window" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: show_window
+-- Description:
+-- Performs the show window routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the show window logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function show_window()
     window_first_access = true
     followme_wnd = float_wnd_create(400, 525, 2, true)
@@ -2837,9 +3219,16 @@ function show_window()
     float_wnd_set_onclose(followme_wnd, "closed_window")
 end
 
--------------------------------------------------------
--- The function "hide_window" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: hide_window
+-- Description:
+-- Performs the hide window routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the hide window logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function hide_window()
     if followme_wnd ~= nil then
         float_wnd_destroy(followme_wnd)
@@ -2848,9 +3237,16 @@ function hide_window()
     end
 end
 
--------------------------------------------------------
--- The function "build_window" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: build_window
+-- Description:
+-- Performs the build window routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the build window logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function build_window(wnd, x, y)
     local l_err = ""
     local l_is_selected = false
@@ -2950,9 +3346,11 @@ function build_window(wnd, x, y)
 
     local l_y = 75
 
-    -- ===============================================
+
+-- ====================================================
     -- Departure
-    -- ===============================================
+
+-- ====================================================
     imgui.SetCursorPosY(l_y)
     imgui.SetCursorPosX(18)
     if imgui.RadioButton(" Departure : ", depart_arrive == 1, false) then
@@ -3428,9 +3826,16 @@ function build_window(wnd, x, y)
     end
 end
 
--------------------------------------------------------
--- The function "set_sound_vol" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: set_sound_vol
+-- Description:
+-- Performs the set sound vol routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the set sound vol logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function set_sound_vol()
     set_sound_gain(snd_arrived, vol / 10)
     set_sound_gain(snd_followme, vol / 10)
@@ -3440,9 +3845,16 @@ function set_sound_vol()
     set_sound_gain(snd_keep_speed, vol / 10) -- VER1.6 fix : speed warning
 end
 
--------------------------------------------------------
--- The function "update_msg" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: update_msg
+-- Description:
+-- Performs the update msg routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the update msg logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function update_msg(in_msg)
     if in_msg == nil then
         return
@@ -3561,9 +3973,16 @@ function update_msg(in_msg)
     Err_Msg[1].text = in_msg
 end
 
--------------------------------------------------------
--- The function "determine_XP_route" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_XP_route
+-- Description:
+-- Performs the determine XP route routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine XP route logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_XP_route()
     if #t_taxinode == 0 then
         return "-15"
@@ -3601,9 +4020,16 @@ function determine_XP_route()
     return determine_possible_routes()
 end
 
--------------------------------------------------------
--- The function "determine_possible_routes" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_possible_routes
+-- Description:
+-- Performs the determine possible routes routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine possible routes logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_possible_routes()
     local l_startpt_node, l_startpt_x, l_startpt_z = 0, 0, 0, 0
     local l_endpt_node, l_endpt_x, l_endpt_z = 0, 0, 0
@@ -3696,9 +4122,16 @@ function determine_possible_routes()
     return ""
 end
 
--------------------------------------------------------
--- The function "transverse" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: transverse
+-- Description:
+-- Performs the transverse routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the transverse logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function transverse(in_startnode, in_endnode, in_heading)
     function evaluate_node(in_node, in_size, t_open, t_close)
         local l_in_open, l_in_close = false, false
@@ -3899,9 +4332,16 @@ function transverse(in_startnode, in_endnode, in_heading)
     end
 end
 
--------------------------------------------------------
--- The function "process_possible_routes" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: process_possible_routes
+-- Description:
+-- Performs the process possible routes routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the process possible routes logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function process_possible_routes()
     if #t_possible_route == 0 then
         return
@@ -3983,14 +4423,14 @@ function process_possible_routes()
         t_segment[#t_segment] = nil
     end
 
-    -- VER1.17 : Universal runway threshold — for ALL departures (back-taxi or not),
+    -- VER1.17 : Universal runway threshold - for ALL departures (back-taxi or not),
     -- replace the runway portion of the A* route with a direct GPS path to the
     -- exact runway threshold. This eliminates wrong-runway stops at intersecting
     -- runways (e.g. KSYR RWY 28 vs 33) and the diagonal-into-grass bug.
     -- The last t_node is the taxiway/runway junction (edge of runway). We project
     -- it perpendicularly onto the centreline, then add the GPS threshold node.
     -- Result: car follows taxiways normally, arrives on centreline, drives straight
-    -- to threshold. Universal — no special case needed for back-taxi.
+    -- to threshold. Universal - no special case needed for back-taxi.
     -- VER1.24 : use the exact paired opposite threshold (same apt.dat line 100) to
     -- build the centreline axis, instead of "any other runway entry" which could
     -- hit a different physical runway at airports with multiple parallel runways.
@@ -4042,7 +4482,7 @@ function process_possible_routes()
             logMsg("FollowMe VER1.24 : RWY " .. depart_runway .. " Pair fallback used (scan)")
         end
 
-        -- Centreline unit vector: far threshold → near threshold (depart_runway)
+        -- Centreline unit vector: far threshold -> near threshold (depart_runway)
         local l_ax = l_rwy_x - l_far_x
         local l_az = l_rwy_z - l_far_z
         local l_alen = math.sqrt(l_ax * l_ax + l_az * l_az)
@@ -4064,7 +4504,7 @@ function process_possible_routes()
         local _, l_proj_to_thr = heading_n_dist(l_proj_x, l_proj_z, l_rwy_x, l_rwy_z)
 
         if l_offset > 2 and l_proj_to_thr > 10 then
-            -- Junction is off-centreline → replace last node with centreline projection
+            -- Junction is off-centreline -> replace last node with centreline projection
             local l_proj_y = probe_y(l_proj_x, 0, l_proj_z)
             t_node[#t_node].x = l_proj_x
             t_node[#t_node].y = l_proj_y
@@ -4150,9 +4590,16 @@ function process_possible_routes()
     end
 end
 
--------------------------------------------------------
--- The function "determine_pos_on_segment" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: determine_pos_on_segment
+-- Description:
+-- Performs the determine pos on segment routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the determine pos on segment logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     local l_within_sight, l_intersect_x, l_intersect_z, l_dist_to_intersect = false, 0, 0, 0
     local l_ret_intersect_dist = 9999
@@ -4245,7 +4692,7 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     end
 
     if l_decision == 0 then
-        -- VER1.15 : Universal fallback — when no segment is reachable from the gate
+        -- VER1.15 : Universal fallback - when no segment is reachable from the gate
         -- (e.g. CYQB has 88 isolated nodes near gates, causing "no taxiway"),
         -- find the nearest CONNECTED node (has at least one segment) instead.
         -- This works universally for all airports regardless of apt.dat quality.
@@ -4279,9 +4726,16 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     end
 end
 
--------------------------------------------------------
--- The function "compute_tangent_dist" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: compute_tangent_dist
+-- Description:
+-- Performs the compute tangent dist routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the compute tangent dist logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
     local l_angle, l_dir, l_tangent_heading = 0, 0, 0
     local l_head, l_dist = 0, 0
@@ -4324,9 +4778,16 @@ function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
     end
 end
 
--------------------------------------------------------
--- The function "compute_intersection" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: compute_intersection
+-- Description:
+-- Performs the compute intersection routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the compute intersection logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
     local l_node1_x = t_taxinode[t_segment[in_idx].Node1 + 1].x
     local l_node1_z = t_taxinode[t_segment[in_idx].Node1 + 1].z
@@ -4391,9 +4852,16 @@ function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
     return l_in_sight, l_intersect_x, l_intersect_z, l_dist_to_intersect
 end
 
--------------------------------------------------------
--- The function "check_deadend_node" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: check_deadend_node
+-- Description:
+-- Performs the check deadend node routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the check deadend node logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function check_deadend_node(in_type, in_heading, in_x, in_z, in_idx)
     local l_deadnode = -1
     if not string.find(t_taxinode[t_segment[in_idx].Node1 + 1].Segment, ",") then
@@ -4420,9 +4888,16 @@ function check_deadend_node(in_type, in_heading, in_x, in_z, in_idx)
     end
 end
 
--------------------------------------------------------
--- The function "add_new_taxinode_segment" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: add_new_taxinode_segment
+-- Description:
+-- Performs the add new taxinode segment routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the add new taxinode segment logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dist)
     local l_new_node, l_new_segment = 0, 0
     local l_idx = #t_taxinode + 1
@@ -4491,9 +4966,16 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
     return l_new_node, l_new_segment
 end
 
--------------------------------------------------------
--- The function "auto_assign_gate" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: auto_assign_gate
+-- Description:
+-- Performs the auto assign gate routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the auto assign gate logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function auto_assign_gate()
     local l_index = 0
     if #t_gate == 0 then
@@ -4527,9 +5009,16 @@ function auto_assign_gate()
     end
 end
 
--------------------------------------------------------
--- The function "check_gate" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: check_gate
+-- Description:
+-- Performs the check gate routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the check gate logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function check_gate()
     local l_dist = 0
     local l_dist_min = 9999
@@ -4556,16 +5045,30 @@ function check_gate()
     end
 end
 
--------------------------------------------------------
--- The function "closed_window" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: closed_window
+-- Description:
+-- Performs the closed window routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the closed window logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function closed_window(wnd)
     window_is_open = false
 end
 
--------------------------------------------------------
--- The function "build_holder" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: build_holder
+-- Description:
+-- Performs the build holder routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the build holder logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function build_holder(wnd, x, y)
     local l_win_width = imgui.GetWindowWidth()
     local l_win_height = imgui.GetWindowHeight()
@@ -4604,15 +5107,29 @@ function build_holder(wnd, x, y)
     end
 end
 
--------------------------------------------------------
--- The function "closed_holder" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: closed_holder
+-- Description:
+-- Performs the closed holder routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the closed holder logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function closed_holder(wnd)
 end
 
--------------------------------------------------------
--- The function "load_config" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: load_config
+-- Description:
+-- Performs the load config routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the load config logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function load_config()
     -- VER1.6 : new preferences file FollowMeXplane12.prf
     --          no more Win_Y (holder position is fixed)
@@ -4678,9 +5195,16 @@ function load_config()
     end
 end
 
--------------------------------------------------------
--- The function "save_config" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: save_config
+-- Description:
+-- Performs the save config routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the save config logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function save_config()
     -- VER1.6 : new preferences file FollowMeXplane12.prf
     --          full rewrite every time - no append, no accumulation possible
@@ -4715,9 +5239,16 @@ function save_config()
     return "2"
 end
 
--------------------------------------------------------
--- The function "trim_str" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: trim_str
+-- Description:
+-- Performs the trim str routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the trim str logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function trim_str(in_str)
     local out_str = ""
     if in_str == nil then
@@ -4732,9 +5263,16 @@ function trim_str(in_str)
     return out_str
 end
 
--------------------------------------------------------
--- The function "exit_plugin" allows
--------------------------------------------------------
+-- ====================================================
+-- Function: exit_plugin
+-- Description:
+-- Performs the exit plugin routine used by the FollowMe plugin.
+-- Steps:
+
+-- 1) Reads required inputs and current plugin state for this routine.
+-- 2) Executes the exit plugin logic and applies needed calculations or state updates.
+-- 3) Returns a result or leaves updated state for the caller to use.
+-- ====================================================
 function exit_plugin()
     full_reset() -- VER1.12 : clean up all 3D objects and state
     -- unload_object/path/rampstart already called by full_reset if active
@@ -4747,7 +5285,9 @@ function exit_plugin()
     end
 end
 
--- Initialization
+-- ====================================================
+-- MAIN SECTION (Initialization and flywithlua event
+-- ====================================================
 XPLM.XPLMGetSystemPath(char_str)
 syspath = ffi.string(char_str)
 
