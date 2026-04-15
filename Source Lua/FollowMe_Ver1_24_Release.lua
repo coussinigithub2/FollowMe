@@ -66,26 +66,26 @@
 --                           taxiway segment is TRAVERSABLE — the car follows the taxiway
 --                           through it normally (hotzone not set). Only a node whose ALL
 --                           segments are runway/hotzone triggers the GPS threshold logic.
---                           Result: Y→M→seuil33→L→seuil28 followed on pavement, no field.
+--                           Result: Y→M→threshold33→L→threshold28 followed on pavement, no field.
 --    VER1.20 Coussini 2026: Route node logging + drive node fix + arrived fix:
---                           (1) RAW A* ROUTE logMsg : séquence complète des nœuds A*,
---                               identique à ce qu'affiche l'outil HTML pathfinder.
---                           (2) RAW A* NODES total=N : compte des nœuds de la route brute.
---                           (3) DRIVE NODES logMsg : waypoints réellement suivis par la
---                               voiture. Le compte est maintenant toujours égal au RAW.
---                           Suppression de la fusion angle<=10° ET du scan l_last_taxiway
---                           + break hotzone : ces deux mécanismes réduisaient le nombre
---                           de DRIVE NODES (ex KSYR: 16 RAW → 11 drive). Chaque nœud A*
---                           est maintenant inséré sans condition. VER1.17 gère seul
---                           l'entrée piste via projection centreline + GPS seuil.
---                           Fix "arrived" prématuré : l'ancienne condition
---                           hotzone=="1" + curr_node>=#t_node-2 déclenchait le son
---                           arrived.wav et le panneau STOP dès le premier nœud hotzone
---                           rencontré (ex CYQB: nœud 78, entrée back-taxi RWY 11).
---                           Depuis VER1.17, le dernier DRIVE NODE est toujours le GPS
---                           seuil exact. La condition est simplifiée à curr_node>=#t_node
---                           pour les 3 endroits concernés (car_sign, initialise_routes,
---                           taxi_light kill). Le son joue maintenant au vrai seuil.
+--                           (1) RAW A* ROUTE logMsg: complete A* node sequence,
+--                               identical to what the HTML pathfinder tool displays.
+--                           (2) RAW A* NODES total=N: count of nodes in the raw route.
+--                           (3) DRIVE NODES logMsg: waypoints actually followed by the
+--                               car. The count is now always equal to the RAW count.
+--                           Removal of the angle<=10° merge AND the l_last_taxiway scan
+--                           + hotzone break: these two mechanisms were reducing the number
+--                           of DRIVE NODES (e.g., KSYR: 16 RAW → 11 drive). Every A* node
+--                           is now inserted unconditionally. VER1.17 alone handles
+--                           runway entry via centerline projection + threshold GPS.
+--                           Premature "arrived" fix: the old condition
+--                           hotzone=="1" + curr_node>=#t_node-2 triggered the
+--                           arrived.wav sound and the STOP sign at the first hotzone node
+--                           encountered (e.g., CYQB: node 78, RWY 11 back-taxi entry).
+--                           Since VER1.17, the last DRIVE NODE is always the exact
+--                           threshold GPS. The condition is simplified to curr_node>=#t_node
+--                           for the 3 relevant areas (car_sign, initialise_routes,
+--                           taxi_light kill). The sound now plays at the actual threshold.
 --    VER1.21 Coussini 2026: Disambiguate duplicate gate names.
 --    VER1.22 Coussini 2026: Add FROM/TO labels in RAW A* ROUTE and DRIVE NODES log lines.
 --                           depart_arrive==1: FROM=gate/ramp  TO=RWY xx
@@ -499,6 +499,9 @@ local speed_warn_time = 0
 -- ============================================================
 -- VER1.5 Coussini 2026 : SimBrief functions
 -- ============================================================
+-------------------------------------------------------
+-- The function "check_SimBrief" allows
+-------------------------------------------------------
 function check_SimBrief()
     -- Reset minimal state
     sb_fetch_status = ""
@@ -521,7 +524,7 @@ function check_SimBrief()
         redirect = true
     }
 
-    -- Si la requête échoue → ne rien bloquer
+    -- If the request fails → do not block anything
     if code ~= 200 or not response_body or #response_body == 0 then
         sb_fetch_status = "ERROR"
         return
@@ -529,7 +532,7 @@ function check_SimBrief()
 
     local xml_body = table.concat(response_body)
 
-    -- Extraction sécurisée
+    -- Secure extraction
     sb_origin_icao = string.match(xml_body, "<origin>.-<icao_code>(.-)</icao_code>") or ""
     sb_dest_icao = string.match(xml_body, "<destination>.-<icao_code>(.-)</icao_code>") or ""
     sb_origin_name = string.match(xml_body, "<origin>.-<name>(.-)</name>") or ""
@@ -537,7 +540,7 @@ function check_SimBrief()
     sb_runway_takeoff = string.match(xml_body, "<origin>.-<plan_rwy>(.-)</plan_rwy>") or ""
     sb_runway_landing = string.match(xml_body, "<destination>.-<plan_rwy>(.-)</plan_rwy>") or ""
 
-    -- Vérification minimale
+    -- Minimal verification
     if sb_origin_icao == "" or sb_dest_icao == "" then
         sb_fetch_status = "NO_DATA"
         return
@@ -545,15 +548,18 @@ function check_SimBrief()
 
     sb_fetch_status = "OK"
 
-    -- Vérification aéroport ≠ X‑Plane
+    -- Airport check ≠ X-Plane
     sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
 
-    -- Application automatique si activé
+    -- Automatic application if enabled
     if get_from_SimBrief then
         apply_simbrief_runway()
     end
 end
 
+-------------------------------------------------------
+-- The function "apply_simbrief_runway" allows
+-------------------------------------------------------
 function apply_simbrief_runway()
     -- Apply SimBrief runway based on departure/arrival mode
     -- and verify the runway exists in t_runway (runways with valid routes)
@@ -599,6 +605,9 @@ function apply_simbrief_runway()
     end
 end
 
+-------------------------------------------------------
+-- The function "start_car" allows
+-------------------------------------------------------
 function start_car()
     car_speed = 0
     car_accel = 0
@@ -647,6 +656,9 @@ function start_car()
     end
 end
 
+-------------------------------------------------------
+-- The function "determine_exit_angle" allows
+-------------------------------------------------------
 function determine_exit_angle(lever_angle)
     local l_prev_deviation, l_curr_deviation = 8888, 0
     local l_angle_btw_circle = 0
@@ -683,6 +695,9 @@ function determine_exit_angle(lever_angle)
     return 90 + l_angle_btw_circle
 end
 
+-------------------------------------------------------
+-- The function "chk_line_of_sight" allows
+-------------------------------------------------------
 function chk_line_of_sight(
     shooter_heading,
     shooter_left_angle,
@@ -714,6 +729,9 @@ function chk_line_of_sight(
     return l_within_sight, l_heading_to_target, l_dist_to_target
 end
 
+-------------------------------------------------------
+-- The function "move_car" allows
+-------------------------------------------------------
 function move_car(in_dist, in_car_in_sight, in_car_is_behind)
     -- VER1.6 fix : when speed_limiter is active, cap the plane speed reference so
     -- the car never accelerates beyond speed_max to follow the aircraft
@@ -766,6 +784,9 @@ function move_car(in_dist, in_car_in_sight, in_car_is_behind)
     manage_car_motion()
 end
 
+-------------------------------------------------------
+-- The function "manage_car_motion" allows
+-------------------------------------------------------
 function manage_car_motion()
     local l_dist = 0
     local l_dist_stop = 0
@@ -821,6 +842,9 @@ function manage_car_motion()
     plot_position(l_dist)
 end
 
+-------------------------------------------------------
+-- The function "plot_position" allows
+-------------------------------------------------------
 function plot_position(in_act_dist)
     local l_remaining_turn_dist = 0
     local l_remaining_act_dist = 0
@@ -1031,8 +1055,8 @@ function plot_position(in_act_dist)
                 end
             end
 
-            -- VER1.20 : arrived condition déclenche uniquement au dernier nœud (#t_node = GPS seuil VER1.17).
-            -- L'ancienne condition hotzone+curr_node>=#t_node-2 déclenchait trop tôt (ex CYQB nœud 78).
+			-- VER1.20: The arrived condition only triggers at the last node (#t_node = GPS threshold VER1.17).
+			-- The old hotzone+curr_node>=#t_node-2 condition triggered too early (e.g., CYQB node 78).
             if depart_arrive == 1 and curr_node >= #t_node then
                 if not is_backtaxi then
                     car_sign = 1
@@ -1078,6 +1102,9 @@ function plot_position(in_act_dist)
     end
 end
 
+-------------------------------------------------------
+-- The function "CoR_coordinates_using_car_ref" allows
+-------------------------------------------------------
 function CoR_coordinates_using_car_ref(in_x, in_z, in_heading, in_radius, in_dir)
     local l_angle_rear_to_ref = math.deg(math.atan(car_rear_wheel_to_ref / in_radius))
     local l_ref_to_center_rot = math.sqrt((car_rear_wheel_to_ref ^ 2) + (in_radius ^ 2))
@@ -1087,6 +1114,9 @@ function CoR_coordinates_using_car_ref(in_x, in_z, in_heading, in_radius, in_dir
     return l_rot_x, l_rot_z
 end
 
+-------------------------------------------------------
+-- The function "determine_dir_of_turn" allows
+-------------------------------------------------------
 function determine_dir_of_turn(in_head1, in_head2, in_dist)
     local l_AoC = 0
     local l_AoR = 0
@@ -1162,6 +1192,9 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
     end
 end
 
+-------------------------------------------------------
+-- The function "determine_steering" allows
+-------------------------------------------------------
 function determine_steering(in_AoR, in_remaining_turn_dist, in_dir, in_steer_limit)
     local l_prev_steer_angle = math.abs(steering)
     local l_time_in_turn = (in_AoR / 360) * (2 * math.pi * t_node[curr_node + 1].radius)
@@ -1201,6 +1234,9 @@ function determine_steering(in_AoR, in_remaining_turn_dist, in_dir, in_steer_lim
     end
 end
 
+-------------------------------------------------------
+-- The function "coordinates_of_adjusted_ref" allows
+-------------------------------------------------------
 function coordinates_of_adjusted_ref(in_ref_x, in_ref_z, in_delta_x, in_delta_z, in_heading)
     local l_dist = math.sqrt((in_delta_x ^ 2) + (in_delta_z ^ 2))
     local l_heading = math.fmod((math.deg(math.atan2(in_delta_x, in_delta_z)) + 360), 360)
@@ -1209,12 +1245,18 @@ function coordinates_of_adjusted_ref(in_ref_x, in_ref_z, in_delta_x, in_delta_z,
     return l_shifted_x, l_shifted_z
 end
 
+-------------------------------------------------------
+-- The function "heading_n_dist" allows
+-------------------------------------------------------
 function heading_n_dist(in_from_x1, in_from_z1, in_to_x2, in_to_z2)
     local l_heading = math.fmod((math.deg(math.atan2(in_to_x2 - in_from_x1, -(in_to_z2 - in_from_z1))) + 360), 360)
     local l_dist = math.sqrt(((in_to_x2 - in_from_x1) ^ 2) + ((in_to_z2 - in_from_z1) ^ 2))
     return l_heading, l_dist
 end
 
+-------------------------------------------------------
+-- The function "minus_delta_clockwise" allows
+-------------------------------------------------------
 function minus_delta_clockwise(in_heading, in_delta, in_direction)
     local l_heading
     if in_direction == 1 then
@@ -1230,6 +1272,9 @@ function minus_delta_clockwise(in_heading, in_delta, in_direction)
     end
 end
 
+-------------------------------------------------------
+-- The function "add_delta_clockwise" allows
+-------------------------------------------------------
 function add_delta_clockwise(in_heading, in_delta, in_direction)
     local l_heading = 0
     if in_direction == 1 then
@@ -1245,6 +1290,9 @@ function add_delta_clockwise(in_heading, in_delta, in_direction)
     end
 end
 
+-------------------------------------------------------
+-- The function "compute_angle_diff" allows
+-------------------------------------------------------
 function compute_angle_diff(in_from, in_to)
     if in_to == in_from then
         return 0, 0
@@ -1263,6 +1311,9 @@ function compute_angle_diff(in_from, in_to)
     end
 end
 
+-------------------------------------------------------
+-- The function "compute_angle_diff_dir" allows
+-------------------------------------------------------
 function compute_angle_diff_dir(in_from, in_to, in_dir)
     if in_to == in_from then
         return 0
@@ -1281,6 +1332,9 @@ function compute_angle_diff_dir(in_from, in_to, in_dir)
     end
 end
 
+-------------------------------------------------------
+-- The function "local_to_latlon" allows
+-------------------------------------------------------
 function local_to_latlon(l_x, l_y, l_z)
     x1_value[0] = l_x
     y1_value[0] = l_y
@@ -1289,6 +1343,9 @@ function local_to_latlon(l_x, l_y, l_z)
     return x1_value[0], y1_value[0], z1_value[0]
 end
 
+-------------------------------------------------------
+-- The function "latlon_to_local" allows
+-------------------------------------------------------
 function latlon_to_local(in_lat, in_lon, in_alt)
     x1_value[0] = in_lat
     y1_value[0] = in_lon
@@ -1297,6 +1354,9 @@ function latlon_to_local(in_lat, in_lon, in_alt)
     return x1_value[0], y1_value[0], z1_value[0]
 end
 
+-------------------------------------------------------
+-- The function "get_local_coordinates" allows
+-------------------------------------------------------
 function get_local_coordinates(in_lat, in_lon, in_alt)
     local l_x, l_y, l_z = 0, 0, 0
     if l_alt == 0 then
@@ -1322,6 +1382,9 @@ function get_local_coordinates(in_lat, in_lon, in_alt)
     return l_x, l_y, l_z, in_alt
 end
 
+-------------------------------------------------------
+-- The function "probe_y" allows
+-------------------------------------------------------
 function probe_y(in_x, in_y, in_z)
     local l_lat, l_on, l_alt = 0, 0, 0
     x1_value[0] = in_x
@@ -1335,8 +1398,11 @@ function probe_y(in_x, in_y, in_z)
     return in_y
 end
 
+-------------------------------------------------------
+-- The function "draw_object" allows
+-------------------------------------------------------
 function draw_object(in_x, in_y, in_z, in_heading)
-    -- VER1.17 : remplir dataref_float_value avec les valeurs d'animation de roues
+    -- VER1.17 : populate dataref_float_value with the wheel animation values
     dataref_float_value[0] = steering -- tire_steer_deg[0]
     dataref_float_value[1] = steering -- tire_steer_deg[1]
     dataref_float_value[2] = tire_rotate -- tire_rotation_angle_deg[0]
@@ -1345,7 +1411,7 @@ function draw_object(in_x, in_y, in_z, in_heading)
     dataref_float_value[5] = tire_rotate -- tire_rotation_angle_deg[3]
     dataref_float_addr = dataref_float_value
 
-    -- VER1.17 : synchroniser aussi les datarefs X-Plane pour visibilité externe
+    -- VER1.17 : Also synchronize the X-Plane datarefs for external visibility
     sync_anim_datarefs()
 
     objpos_value[0].x = in_x
@@ -1383,6 +1449,9 @@ function draw_object(in_x, in_y, in_z, in_heading)
     end
 end
 
+-------------------------------------------------------
+-- The function "object_physics" allows
+-------------------------------------------------------
 function object_physics()
     -- VER1.4 Coussini 2026 : Corrected delta-time calculation
     local l_now = fm_run_time
@@ -1431,6 +1500,9 @@ function object_physics()
     elapsed_time = fm_run_time
 end
 
+-------------------------------------------------------
+-- The function "load_probe" allows
+-------------------------------------------------------
 function load_probe()
     probeinfo_value[0].structSize = ffi.sizeof(probeinfo_value[0])
     probeinfo_addr = probeinfo_value
@@ -1438,6 +1510,9 @@ function load_probe()
     proberef = XPLM.XPLMCreateProbe(probetype[1])
 end
 
+-------------------------------------------------------
+-- The function "load_object" allows
+-------------------------------------------------------
 function load_object()
     ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
     dataref_array[0] = dataref_name
@@ -1534,6 +1609,9 @@ function load_object()
     )
 end
 
+-------------------------------------------------------
+-- The function "load_path" allows
+-------------------------------------------------------
 function load_path()
     if FM_car_active and show_path and #t_node > 0 then
         XPLM.XPLMLoadObjectAsync(
@@ -1549,6 +1627,9 @@ function load_path()
     end
 end
 
+-------------------------------------------------------
+-- The function "load_rampstart" allows
+-------------------------------------------------------
 function load_rampstart()
     if rampstart_instance[0] == nil then
         XPLM.XPLMLoadObjectAsync(
@@ -1562,6 +1643,9 @@ function load_rampstart()
     end
 end
 
+-------------------------------------------------------
+-- The function "draw_path" allows
+-------------------------------------------------------
 function draw_path()
     local l_index = 0
     float_value[0] = 0
@@ -1576,6 +1660,9 @@ function draw_path()
     path_is_shown = true
 end
 
+-------------------------------------------------------
+-- The function "draw_rampstart" allows
+-------------------------------------------------------
 function draw_rampstart()
     local l_index = 0
     float_value[0] = 0
@@ -1605,6 +1692,9 @@ function draw_rampstart()
     rampstart_chg = false
 end
 
+-------------------------------------------------------
+-- The function "unload_probe" allows
+-------------------------------------------------------
 function unload_probe()
     if proberef ~= nil then
         XPLM.XPLMDestroyProbe(proberef)
@@ -1612,6 +1702,9 @@ function unload_probe()
     proberef = nil
 end
 
+-------------------------------------------------------
+-- The function "unload_object" allows
+-------------------------------------------------------
 function unload_object()
     if obj_instance[0] ~= nil then
         XPLM.XPLMDestroyInstance(obj_instance[0])
@@ -1631,6 +1724,9 @@ function unload_object()
     signboardref = nil
 end
 
+-------------------------------------------------------
+-- The function "unload_path" allows
+-------------------------------------------------------
 function unload_path()
     local l_index = 0
     if path_instance[0] ~= nil then
@@ -1646,6 +1742,9 @@ function unload_path()
     path_is_shown = false
 end
 
+-------------------------------------------------------
+-- The function "unload_rampstart" allows
+-------------------------------------------------------
 function unload_rampstart()
     if rampstart_instance[0] ~= nil then
         -- Move the marker underground before destroying so X-Plane removes it visually
@@ -1666,20 +1765,23 @@ function unload_rampstart()
     rampstart_chg = false
 end
 
--- VER1.17 : XPLMRegisterDataAccessor supprimé — cause crash au changement d'aéroport.
--- FlyWithLua redémarre le moteur Lua à chaque changement → les anciens handles sont perdus
--- mais X-Plane garde les pointeurs pendants → access violation.
--- Solution : XPLMFindDataRef pour les datarefs natifs (tire_steer/tire_rotate),
--- et XPLMRegisterDataAccessor protégé par LUA_RUN==1 pour fm/anim/sign.
--- Si LUA_RUN>1, fm/anim/sign existe déjà → FindDataRef pour le récupérer.
+-- VER1.17: XPLMRegisterDataAccessor removed — causes crashes when changing airports.
+-- FlyWithLua restarts the Lua engine with each change → old handles are lost
+-- but X-Plane keeps the dangling pointers → access violation.
+-- Solution: XPLMFindDataRef for native datarefs (tire_steer/tire_rotate),
+-- and XPLMRegisterDataAccessor protected by LUA_RUN==1 for fm/anim/sign.
+-- If LUA_RUN>1, fm/anim/sign already exists → FindDataRef to retrieve it.
+-------------------------------------------------------
+-- The function "register_dataref" allows
+-------------------------------------------------------
 function register_dataref()
     -- Datarefs natifs X-Plane — FindDataRef, pas RegisterDataAccessor
     dr_tire_steer = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_steer_deg")
     dr_tire_rotate = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg")
 
-    -- fm/anim/sign : custom dataref
-    -- LUA_RUN == 1 → premier démarrage → on l'enregistre
-    -- LUA_RUN  > 1 → reload après changement aéroport → il existe déjà → FindDataRef
+	-- fm/anim/sign: custom dataref
+	-- LUA_RUN == 1 → first boot → it is registered
+	-- LUA_RUN > 1 → reload after airport change → it already exists → FindDataRef
     if LUA_RUN == 1 then
         dr_sign =
             XPLM.XPLMRegisterDataAccessor(
@@ -1708,7 +1810,10 @@ function register_dataref()
     end
 end
 
--- VER1.17 : appelée chaque frame dans draw_object() pour pousser steering/tire_rotate/car_sign
+-- VER1.17: called every frame in draw_object() to push steering/tire_rotate/car_sign
+-------------------------------------------------------
+-- The function "sync_anim_datarefs" allows
+-------------------------------------------------------
 function sync_anim_datarefs()
     if dr_tire_steer ~= nil then
         ffi_steer_buf[0] = steering
@@ -1727,6 +1832,9 @@ function sync_anim_datarefs()
     end
 end
 
+-------------------------------------------------------
+-- The function "get_airport_elements" allows
+-------------------------------------------------------
 function get_airport_elements()
     local l_airport_index = XPLMFindNavAid(nil, nil, LATITUDE, LONGITUDE, nil, xplm_Nav_Airport)
     local l_new_ICAO, l_new_ICAO_name = "", ""
@@ -1775,6 +1883,9 @@ function get_airport_elements()
     end
 end
 
+-------------------------------------------------------
+-- The function "read_apt_file" allows
+-------------------------------------------------------
 function read_apt_file(in_ICAO)
     local l_filename1, l_filename2 = "", ""
     local l_file1, l_file2
@@ -1965,6 +2076,9 @@ function read_apt_file(in_ICAO)
     end
 end
 
+-------------------------------------------------------
+-- The function "decipher_runway" allows
+-------------------------------------------------------
 function decipher_runway(in_str)
     local l_str1, l_str2, l_str3, l_str4 = "", "", "", ""
     i = #t_runway + 1
@@ -1980,10 +2094,10 @@ function decipher_runway(in_str)
     )
     t_runway[i].Lat = tonumber(l_str1)
     t_runway[i].Lon = tonumber(l_str2)
-    t_runway[i].Node = -1 -- VER1.7 : -1 = non assigné (0 est un node_id valide)
+    t_runway[i].Node = -1 -- VER1.7: -1 = not assigned (0 is a valid node_id)
     t_runway[i + 1].Lat = tonumber(l_str3)
     t_runway[i + 1].Lon = tonumber(l_str4)
-    t_runway[i + 1].Node = -1 -- VER1.7 : -1 = non assigné (0 est un node_id valide)
+    t_runway[i + 1].Node = -1 -- VER1.7: -1 = not assigned (0 is a valid node_id)
     -- VER1.24 : store cross-references so each threshold knows its opposite (same apt.dat line 100)
     t_runway[i].Pair = i + 1 -- index of the opposite threshold
     t_runway[i + 1].Pair = i -- index of the opposite threshold
@@ -1992,6 +2106,9 @@ function decipher_runway(in_str)
         get_local_coordinates(t_runway[i + 1].Lat, t_runway[i + 1].Lon, world_alt)
 end
 
+-------------------------------------------------------
+-- The function "decipher_ramp" allows
+-------------------------------------------------------
 function decipher_ramp(in_str)
     local l_str1, l_str2, l_str3, l_str4, l_str5, l_str6 = "", "", "", "", "", ""
     l_str1, l_str2, l_str3, l_str4, l_str5, l_str6 =
@@ -2036,6 +2153,9 @@ function decipher_ramp(in_str)
     return true
 end
 
+-------------------------------------------------------
+-- The function "decipher_ramp_operation" allows
+-------------------------------------------------------
 function decipher_ramp_operation(in_str)
     local l_str1, l_str2 = "", ""
     local l_types = ""
@@ -2057,6 +2177,9 @@ function decipher_ramp_operation(in_str)
     end
 end
 
+-------------------------------------------------------
+-- The function "decipher_taxinode" allows
+-------------------------------------------------------
 function decipher_taxinode(in_str)
     local l_str1, l_str2 = "", ""
     i = #t_taxinode + 1
@@ -2077,6 +2200,9 @@ function decipher_taxinode(in_str)
         get_local_coordinates(t_taxinode[i].Lat, t_taxinode[i].Lon, world_alt)
 end
 
+-------------------------------------------------------
+-- The function "decipher_taxisegment" allows
+-------------------------------------------------------
 function decipher_taxisegment(in_str)
     local l_str1, l_str2, l_str3, l_str4, l_str5 = "", "", "", "", ""
     local l_idx = 0
@@ -2125,6 +2251,9 @@ function decipher_taxisegment(in_str)
     end
 end
 
+-------------------------------------------------------
+-- The function "decipher_taxisegment_hotzone" allows
+-------------------------------------------------------
 function decipher_taxisegment_hotzone(in_str)
     i = #t_segment
     t_segment[i].Hotzone = string.match(in_str, "1204 %s*[^%s]+%s*([^%s]+)%s*")
@@ -2140,6 +2269,9 @@ end
 
 -- VER1.23 : collect a 1206 ground-vehicle routing edge
 -- Format: 1206 <node1> <node2> <direction> [name]
+-------------------------------------------------------
+-- The function "decipher_vehicle_edge" allows
+-------------------------------------------------------
 function decipher_vehicle_edge(in_str)
     local l_str1, l_str2 = string.match(in_str, "1206 %s*([^%s]+)%s*([^%s]+)%s*")
     if l_str1 and l_str2 then
@@ -2162,6 +2294,9 @@ end
 --      segment whose endpoint is a removed node.
 --   4. Also scrub the Segment index string of each surviving node so A*
 --      doesn't chase a dangling segment reference.
+-------------------------------------------------------
+-- The function "apply_1206_filter" allows
+-------------------------------------------------------
 function apply_1206_filter()
     if #t_filter_1206 == 0 then
         return
@@ -2252,6 +2387,9 @@ function apply_1206_filter()
     )
 end
 
+-------------------------------------------------------
+-- The function "determine_runway_node" allows
+-------------------------------------------------------
 function determine_runway_node()
     -- VER1.11 : Universal rule — for each runway, find the runway node that:
     --   1. Has at least one taxiway neighbour (accessible from the taxi network)
@@ -2279,6 +2417,9 @@ function determine_runway_node()
     end
 end
 
+-------------------------------------------------------
+-- The function "match_runway" allows
+-------------------------------------------------------
 function match_runway(in_runway_idx)
     -- VER1.15 : Only consider nodes that appear on a segment belonging to THIS runway.
     -- VER1.11 searched all runway-typed nodes globally — this caused CYQB RWY 11 to
@@ -2384,6 +2525,9 @@ end
 -- VER1.12 : Single cleanup entry point — called on new flight or location change.
 -- Unloads all 3D objects, clears all state variables, ready for fresh use.
 -- Does NOT touch dataref registration (that is only done at load/exit).
+-------------------------------------------------------
+-- The function "full_reset" allows
+-------------------------------------------------------
 function full_reset()
     if FM_car_active then
         unload_object()
@@ -2403,6 +2547,9 @@ function full_reset()
     logMsg("FollowMe VER1.12 : full_reset() completed")
 end
 
+-------------------------------------------------------
+-- The function "initialise_airport" allows
+-------------------------------------------------------
 function initialise_airport()
     t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
     t_filter_1206 = {} -- VER1.23 : reset vehicle edge filter list
@@ -2413,6 +2560,9 @@ function initialise_airport()
     depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
 end
 
+-------------------------------------------------------
+-- The function "initialise_routes" allows
+-------------------------------------------------------
 function initialise_routes()
     if #t_node > 0 then
         if depart_arrive == 1 and curr_node >= #t_node and flightstart ~= 9999 and not kill_is_manual then
@@ -2432,6 +2582,9 @@ function initialise_routes()
     window_first_access = true
 end
 
+-------------------------------------------------------
+-- The function "handle_plugin_window" allows
+-------------------------------------------------------
 function handle_plugin_window()
     -- VER1.12 : detect new flight / location change — fm_new_flight resets to 0
     if fm_new_flight < prev_new_flight and prev_new_flight > 5 then
@@ -2660,6 +2813,9 @@ function handle_plugin_window()
     end
 end
 
+-------------------------------------------------------
+-- The function "show_holder" allows
+-------------------------------------------------------
 function show_holder()
     if init_load == 0 then
         load_config()
@@ -2671,6 +2827,9 @@ function show_holder()
     float_wnd_set_onclose(holder_wnd, "closed_holder")
 end
 
+-------------------------------------------------------
+-- The function "hide_holder" allows
+-------------------------------------------------------
 function hide_holder()
     if holder_wnd then
         float_wnd_destroy(holder_wnd)
@@ -2678,6 +2837,9 @@ function hide_holder()
     end
 end
 
+-------------------------------------------------------
+-- The function "show_window" allows
+-------------------------------------------------------
 function show_window()
     window_first_access = true
     followme_wnd = float_wnd_create(400, 525, 2, true)
@@ -2686,6 +2848,9 @@ function show_window()
     float_wnd_set_onclose(followme_wnd, "closed_window")
 end
 
+-------------------------------------------------------
+-- The function "hide_window" allows
+-------------------------------------------------------
 function hide_window()
     if followme_wnd ~= nil then
         float_wnd_destroy(followme_wnd)
@@ -2694,6 +2859,9 @@ function hide_window()
     end
 end
 
+-------------------------------------------------------
+-- The function "build_window" allows
+-------------------------------------------------------
 function build_window(wnd, x, y)
     local l_err = ""
     local l_is_selected = false
@@ -2739,13 +2907,10 @@ function build_window(wnd, x, y)
         end
     end
 
-    -- ===============================================
-    -- VER1.5 : Departure/Arrival display from SimBrief at top of panel
-    -- ===============================================
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888) -- gris clair
+    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888) -- light gray
 
     if get_from_SimBrief then
         imgui.TextUnformatted("Simbrief Departure Airport")
@@ -2791,7 +2956,6 @@ function build_window(wnd, x, y)
     end
 
     imgui.SetWindowFontScale(1.0)
-    --===============================================
     imgui.SetCursorPosY(65)
     imgui.Separator()
 
@@ -3277,6 +3441,9 @@ function build_window(wnd, x, y)
     end
 end
 
+-------------------------------------------------------
+-- The function "set_sound_vol" allows
+-------------------------------------------------------
 function set_sound_vol()
     set_sound_gain(snd_arrived, vol / 10)
     set_sound_gain(snd_followme, vol / 10)
@@ -3286,6 +3453,9 @@ function set_sound_vol()
     set_sound_gain(snd_keep_speed, vol / 10) -- VER1.6 fix : speed warning
 end
 
+-------------------------------------------------------
+-- The function "update_msg" allows
+-------------------------------------------------------
 function update_msg(in_msg)
     if in_msg == nil then
         return
@@ -3404,6 +3574,9 @@ function update_msg(in_msg)
     Err_Msg[1].text = in_msg
 end
 
+-------------------------------------------------------
+-- The function "determine_XP_route" allows
+-------------------------------------------------------
 function determine_XP_route()
     if #t_taxinode == 0 then
         return "-15"
@@ -3441,6 +3614,9 @@ function determine_XP_route()
     return determine_possible_routes()
 end
 
+-------------------------------------------------------
+-- The function "determine_possible_routes" allows
+-------------------------------------------------------
 function determine_possible_routes()
     local l_startpt_node, l_startpt_x, l_startpt_z = 0, 0, 0, 0
     local l_endpt_node, l_endpt_x, l_endpt_z = 0, 0, 0
@@ -3482,9 +3658,9 @@ function determine_possible_routes()
                 break
             end
         end
-        -- VER1.17 : is_backtaxi supprimé — la nouvelle logique universelle dans
-        -- process_possible_routes() envoie TOUJOURS la voiture au seuil GPS,
-        -- qu'il y ait back-taxi ou pas. is_backtaxi reste false en permanence.
+-- VER1.17: is_backtaxi removed
+-- the new universal logic in process_possible_routes() ALWAYS sends the car to the GPS threshold,
+-- whether there is a backtaxi or not. is_backtaxi remains permanently false.
         is_backtaxi = false
     else
         l_found, l_endpt_node, l_endpt_x, l_endpt_z =
@@ -3533,6 +3709,9 @@ function determine_possible_routes()
     return ""
 end
 
+-------------------------------------------------------
+-- The function "transverse" allows
+-------------------------------------------------------
 function transverse(in_startnode, in_endnode, in_heading)
     function evaluate_node(in_node, in_size, t_open, t_close)
         local l_in_open, l_in_close = false, false
@@ -3733,6 +3912,9 @@ function transverse(in_startnode, in_endnode, in_heading)
     end
 end
 
+-------------------------------------------------------
+-- The function "process_possible_routes" allows
+-------------------------------------------------------
 function process_possible_routes()
     if #t_possible_route == 0 then
         return
@@ -3751,9 +3933,9 @@ function process_possible_routes()
         routenode_cnt = routenode_cnt + 1
     end
 
-    -- VER1.20 : scan l_last_taxiway et break hotzone supprimés.
-    -- Tous les nœuds A* sont insérés comme DRIVE NODE sans condition.
-    -- VER1.17 gère seul l'entrée piste (projection centreline + GPS seuil).
+	-- VER1.20: Scan l_last_taxiway and break hotzone removed.
+	-- All A* nodes are inserted as DRIVE NODE unconditionally.
+	-- VER1.17 handles runway entry independently (centerline projection + GPS threshold).
     for routenode_cnt = 1, #t_route_nodes do
         l_node = t_route_nodes[routenode_cnt]
         if l_index > 1 then
@@ -3981,6 +4163,9 @@ function process_possible_routes()
     end
 end
 
+-------------------------------------------------------
+-- The function "determine_pos_on_segment" allows
+-------------------------------------------------------
 function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     local l_within_sight, l_intersect_x, l_intersect_z, l_dist_to_intersect = false, 0, 0, 0
     local l_ret_intersect_dist = 9999
@@ -4107,6 +4292,9 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     end
 end
 
+-------------------------------------------------------
+-- The function "compute_tangent_dist" allows
+-------------------------------------------------------
 function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
     local l_angle, l_dir, l_tangent_heading = 0, 0, 0
     local l_head, l_dist = 0, 0
@@ -4149,6 +4337,9 @@ function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
     end
 end
 
+-------------------------------------------------------
+-- The function "compute_intersection" allows
+-------------------------------------------------------
 function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
     local l_node1_x = t_taxinode[t_segment[in_idx].Node1 + 1].x
     local l_node1_z = t_taxinode[t_segment[in_idx].Node1 + 1].z
@@ -4213,6 +4404,9 @@ function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
     return l_in_sight, l_intersect_x, l_intersect_z, l_dist_to_intersect
 end
 
+-------------------------------------------------------
+-- The function "check_deadend_node" allows
+-------------------------------------------------------
 function check_deadend_node(in_type, in_heading, in_x, in_z, in_idx)
     local l_deadnode = -1
     if not string.find(t_taxinode[t_segment[in_idx].Node1 + 1].Segment, ",") then
@@ -4239,6 +4433,9 @@ function check_deadend_node(in_type, in_heading, in_x, in_z, in_idx)
     end
 end
 
+-------------------------------------------------------
+-- The function "add_new_taxinode_segment" allows
+-------------------------------------------------------
 function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dist)
     local l_new_node, l_new_segment = 0, 0
     local l_idx = #t_taxinode + 1
@@ -4307,6 +4504,9 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
     return l_new_node, l_new_segment
 end
 
+-------------------------------------------------------
+-- The function "auto_assign_gate" allows
+-------------------------------------------------------
 function auto_assign_gate()
     local l_index = 0
     if #t_gate == 0 then
@@ -4340,6 +4540,9 @@ function auto_assign_gate()
     end
 end
 
+-------------------------------------------------------
+-- The function "check_gate" allows
+-------------------------------------------------------
 function check_gate()
     local l_dist = 0
     local l_dist_min = 9999
@@ -4366,10 +4569,16 @@ function check_gate()
     end
 end
 
+-------------------------------------------------------
+-- The function "closed_window" allows
+-------------------------------------------------------
 function closed_window(wnd)
     window_is_open = false
 end
 
+-------------------------------------------------------
+-- The function "build_holder" allows
+-------------------------------------------------------
 function build_holder(wnd, x, y)
     local l_win_width = imgui.GetWindowWidth()
     local l_win_height = imgui.GetWindowHeight()
@@ -4408,9 +4617,15 @@ function build_holder(wnd, x, y)
     end
 end
 
+-------------------------------------------------------
+-- The function "closed_holder" allows
+-------------------------------------------------------
 function closed_holder(wnd)
 end
 
+-------------------------------------------------------
+-- The function "load_config" allows
+-------------------------------------------------------
 function load_config()
     -- VER1.6 : new preferences file FollowMeXplane12.prf
     --          no more Win_Y (holder position is fixed)
@@ -4476,6 +4691,9 @@ function load_config()
     end
 end
 
+-------------------------------------------------------
+-- The function "save_config" allows
+-------------------------------------------------------
 function save_config()
     -- VER1.6 : new preferences file FollowMeXplane12.prf
     --          full rewrite every time - no append, no accumulation possible
@@ -4510,6 +4728,9 @@ function save_config()
     return "2"
 end
 
+-------------------------------------------------------
+-- The function "trim_str" allows
+-------------------------------------------------------
 function trim_str(in_str)
     local out_str = ""
     if in_str == nil then
@@ -4524,12 +4745,15 @@ function trim_str(in_str)
     return out_str
 end
 
+-------------------------------------------------------
+-- The function "exit_plugin" allows
+-------------------------------------------------------
 function exit_plugin()
     full_reset() -- VER1.12 : clean up all 3D objects and state
     -- unload_object/path/rampstart already called by full_reset if active
     unload_probe()
-    -- VER1.17 : fm/anim/sign est enregistré seulement au LUA_RUN==1.
-    -- On le désenregistre proprement à l'exit total du plugin.
+	-- VER1.17: fm/anim/sign is only registered when LUA_RUN==1.
+	-- It is properly unregistered upon complete plugin exit.
     if LUA_RUN == 1 and dr_sign ~= nil then
         XPLM.XPLMUnregisterDataAccessor(dr_sign)
         dr_sign = nil
