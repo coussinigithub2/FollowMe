@@ -325,7 +325,7 @@ local text_was_chg = false
 
 local prepare_show_objects = false
 local prepare_kill_objects = false
-local kill_is_manual = false -- VER1.4 Coussini 2026 : true=manual cancel, false=auto (takeoff)
+local kill_is_manual = false -- VER1.4 : true=manual cancel, false=auto (takeoff)
 
 local init_load = 0
 local window_first_access = false
@@ -371,11 +371,9 @@ local ac_types = {
     "8 - LIGHT PROP - GA prop planes"
 }
 
---===========================================================================================================
 -- Preference / Config Values
-
 local Win_Y = 400 -- VER1.6 : fixed position - no longer saved/loaded from preferences
-local Aircraft_Type = "8" -- VER1.4 Coussini : default LIGHT PROP for Cessna
+local Aircraft_Type = "8" -- VER1.4 : default LIGHT PROP for Cessna
 local t_aircraft = {} -- VER1.6 : aircraft types table { ICAO = type } loaded from FollowMeXplane12.prf
 local get_from_SimBrief = false -- VER1.5 : replaces get_from_FMS
 local show_path = false
@@ -387,9 +385,7 @@ local speed_limiter = false
 
 local car_type_fmcar = "Auto"
 
--- ============================================================
--- VER1.5 Coussini 2026 : SimBrief variables
--- ============================================================
+-- VER1.5 : SimBrief variables
 local simbrief_id = "" -- User's SimBrief numeric ID (max 10 chars)
 local sb_origin_icao = "" -- SimBrief departure airport ICAO (4 letters)
 local sb_origin_name = "" -- SimBrief departure airport name
@@ -400,7 +396,6 @@ local sb_runway_landing = "" -- SimBrief landing runway
 local sb_fetch_status = "" -- Last fetch status: "", "OK", "ERROR", "LOADING"
 local sb_airport_mismatch = false -- true if SimBrief departure airport != current sim airport
 
---===========================================================================================================
 dataref("viewext", "sim/graphics/view/view_is_external")
 dataref("camera_z_position", "sim/graphics/view/pilots_head_z")
 dataref("fm_gear1_gnd", "sim/flightmodel2/gear/on_ground", "readonly", 0)
@@ -417,7 +412,7 @@ dataref("fm_plane_z", "sim/flightmodel/position/local_z")
 dataref("fm_gnd_spd", "sim/flightmodel/position/groundspeed", "readonly")
 dataref("fm_plane_head", "sim/flightmodel/position/psi", "readonly")
 
--- VER1.4 Coussini 2026 : Automatic detection of Toliss vs other aircraft
+-- VER1.4 : Automatic detection of Toliss vs other aircraft
 local fm_taxi_light = 0
 local fm_beacon_light = 0
 
@@ -429,8 +424,6 @@ else
     dataref("fm_beacon_light", "sim/cockpit/electrical/strobe_lights_on", "readonly")
 end
 
---===========================================================================================================
-
 local snd_arrived = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/arrived.wav")
 local snd_followme = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/followme.wav")
 local snd_safeflight_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safeflight_goodbye.wav")
@@ -438,8 +431,6 @@ local snd_welcome = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_
 local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcomeagain_goodbye.wav")
 -- VER1.6 fix : speed warning sound (played when aircraft exceeds 20 kts and speed_limiter is active)
 local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/KeepYourSpeed20Kts.wav")
-
---===========================================================================================================
 
 local path_is_shown = false
 local rampstart_chg = false
@@ -496,9 +487,7 @@ local play_text = ""
 -- VER1.6 fix : cooldown timer to avoid repeating speed warning every frame
 local speed_warn_time = 0
 
--- ============================================================
--- VER1.5 Coussini 2026 : SimBrief functions
--- ============================================================
+-- VER1.5 : SimBrief functions
 -------------------------------------------------------
 -- The function "check_SimBrief" allows
 -------------------------------------------------------
@@ -1453,7 +1442,7 @@ end
 -- The function "object_physics" allows
 -------------------------------------------------------
 function object_physics()
-    -- VER1.4 Coussini 2026 : Corrected delta-time calculation
+    -- VER1.4 : Corrected delta-time calculation
     local l_now = fm_run_time
 
     if elapsed_time == 0 then
@@ -2407,7 +2396,7 @@ function determine_runway_node()
     local l_rows = #t_runway
     l_idx = 1
     while l_idx <= l_rows do
-        if t_runway[l_idx].Node == -1 then -- VER1.7 : -1 = non assigné
+        if t_runway[l_idx].Node == -1 then -- VER1.7 : -1 = unassigned
             t_deleted_runway[#t_deleted_runway + 1] = t_runway[l_idx].ID
             table.remove(t_runway, l_idx)
             l_rows = l_rows - 1
@@ -2553,7 +2542,7 @@ end
 function initialise_airport()
     t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
     t_filter_1206 = {} -- VER1.23 : reset vehicle edge filter list
-    -- VER1.4 Coussini 2026 : t_deleted_runway is intentionally NOT reset here
+    -- VER1.4 : t_deleted_runway is intentionally NOT reset here
     -- (runways without routes must persist across airport re-reads)
     -- t_deleted_runway = {}
     depart_arrive = 0
@@ -2733,7 +2722,7 @@ function handle_plugin_window()
         FM_car_active = false
         unload_object()
         unload_path()
-        -- VER1.4 Coussini 2026 : behavior based on cancel type
+        -- VER1.4 : behavior based on cancel type
         if kill_is_manual then
             unload_rampstart()
             rampstart_chg = false
@@ -3355,9 +3344,7 @@ function build_window(wnd, x, y)
         car_type_fmcar = "Auto"
     end
 
-    -- ===============================================
     -- VER1.5 : SimBrief ID row
-    -- ===============================================
     imgui.SetCursorPosY(438)
     imgui.Separator()
 
@@ -3596,7 +3583,7 @@ function determine_XP_route()
             return "-5"
         end
 
-        -- VER1.4 Coussini : Verify the runway exists in t_runway (with valid route)
+        -- VER1.4 : Verify the runway exists in t_runway (with valid route)
         local l_found = false
         for i = 1, #t_runway do
             if t_runway[i].ID == depart_runway then
@@ -3658,9 +3645,9 @@ function determine_possible_routes()
                 break
             end
         end
--- VER1.17: is_backtaxi removed
--- the new universal logic in process_possible_routes() ALWAYS sends the car to the GPS threshold,
--- whether there is a backtaxi or not. is_backtaxi remains permanently false.
+		-- VER1.17: is_backtaxi removed
+		-- the new universal logic in process_possible_routes() ALWAYS sends the car to the GPS threshold,
+		-- whether there is a backtaxi or not. is_backtaxi remains permanently false.
         is_backtaxi = false
     else
         l_found, l_endpt_node, l_endpt_x, l_endpt_z =
