@@ -3550,6 +3550,27 @@ function build_window(wnd, x, y)
         end
     end
 
+    -- VER2.0 : ARROW POINTER FOLLOW ME CAR
+	if FM_car_active and car_x ~= 0 then
+	    -- Heading airplane thru FM car
+	    local l_bearing_to_car, l_dist_to_car = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
+
+	    -- Relativ angle airplane Heading
+	    local l_rel_angle = l_bearing_to_car - fm_plane_head
+	    -- Normaliser entre -180 et +180
+	    while l_rel_angle > 180 do l_rel_angle = l_rel_angle - 360 end
+	    while l_rel_angle < -180 do l_rel_angle = l_rel_angle + 360 end
+
+	    -- Draw yellow line
+	    local cx, cy = 350, l_y + 145
+	    local radius = 18
+	    local rad = math.rad(l_rel_angle - 90)
+	    local tip_x = cx + math.cos(rad) * radius
+	    local tip_y = cy + math.sin(rad) * radius
+
+	    imgui.DrawList_AddLine(cx, cy, tip_x, tip_y, 0xFF00FFFF, 2)
+	end
+
     -- VER1.6 : Speed display zone - reserved read-only row below button
     imgui.SetCursorPosY(l_y + 162)
     imgui.SetCursorPosX(20)
