@@ -112,6 +112,20 @@
 --                           for that specific runway only.
 --                           DRIVE NODES log now includes GPS lat/lon for each waypoint so the
 --                           pilot can compare with the in-sim position directly.
+--    VER1.25 Coussini 2026: Car initial heading fix - align car toward the aircraft at spawn.
+--                           When the pilot was standing behind the car at route start, the car
+--                           heading (t_node[1].heading) pointed away from the plane. This caused
+--                           move_car() to enter the "too far + in_sight → accel=0" branch and
+--                           freeze the car (car_speed=0, no accel possible). The car would not
+--                           move until the pilot walked far enough behind it to trigger the
+--                           l_car_is_behind cone (45°), which could take 20-30 seconds.
+--                           Fix: start_car() now re-orients car_body_heading toward the plane
+--                           whenever the car is NOT already in front of the aircraft. The car
+--                           immediately begins driving toward its first node and the pilot sees
+--                           the correct sign from the very first frame of the run.
+--                           Add a log to check the car_sign process
+--    VER2.0 Coussini 2026:  Major version that fix several follow me car situation.
+--                           Remove unwanted log.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -343,15 +357,9 @@ local t_deleted_runway = {}
 -- VER1.23 : collected 1206 ground-vehicle-only edge pairs (node1, node2)
 local t_filter_1206 = {}
 
-local t_stack = {}
 local t_possible_route = {}
 local t_node = {}
 local t_suitable_gates = {}
-
-local dist_prev_steerpt = 9999
-local dist_min_steerpt = 9999
-local target_filename = ""
-local target_index = 0
 
 local Err_Msg = {}
 Err_Msg[1] = {}
@@ -436,7 +444,6 @@ local rampstart_chg = false
 local world_alt = 0
 
 local gravity = 9.81
-local reaction_time = 0.68
 local cof = 0.35
 local deccel_max = -8.9
 local deccel_avg = -4
@@ -589,7 +596,6 @@ function apply_simbrief_runway()
     -- Check that runway exists in t_runway (runways with valid routes)
     local l_found = false
     for i = 1, #t_runway do
-        logMsg("FollowMe VER1.22 : i = " .. i .. " t_runway[i].ID = " .. t_runway[i].ID)
         if t_runway[i].ID == l_rwy then
             l_found = true
             break
@@ -601,8 +607,6 @@ function apply_simbrief_runway()
     else
         -- SimBrief runway has no defined route
         depart_runway = ""
-        logMsg("FollowMe VER1.22 : l_rwy = " .. l_rwy)
-        logMsg("FollowMe VER1.22 : apply_simbrief_runway -19")
         update_msg("-19")
     end
 end
@@ -646,10 +650,6 @@ function start_car()
         car_x, car_z = coordinates_of_adjusted_ref(fm_plane_x, fm_plane_z, 0, 15, l_behind_heading)
         car_y = probe_y(car_x, car_y, car_z)
         car_body_heading = fm_plane_head
-        logMsg(
-            "FollowMe VER1.12 : car spawned behind aircraft (startpt was " ..
-                string.format("%.0f", l_dist_to_plane) .. "m away)"
-        )
     end
 
     local l_car_is_in_front = false
@@ -657,6 +657,19 @@ function start_car()
 
     l_car_is_in_front = chk_line_of_sight(fm_plane_head, 120, 120, fm_plane_x, fm_plane_z, car_x, car_z)
     l_plane_is_in_front = chk_line_of_sight(car_body_heading, 120, 120, car_x, car_z, fm_plane_x, fm_plane_z)
+
+    -- VER1.25 : align car_body_heading toward the aircraft at spawn when the car
+    -- is NOT already visible in front of the plane.  Without this, if the pilot
+    -- stands behind (or to the side of) the car, move_car() enters the
+    -- "dist > max_dist AND in_sight" branch which sets accel=0 when speed is
+    -- already 0 - freezing the car until the pilot happens to walk far enough
+    -- behind it to trigger the l_car_is_behind 45-degree cone.
+    -- Pointing the car toward the plane ensures it immediately falls into the
+    -- correct speed-control branch and starts moving on frame 1.
+    if not l_car_is_in_front then
+        local l_head_to_plane, _ = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
+        car_body_heading = l_head_to_plane
+    end
 
     if l_car_is_in_front == false and depart_gate == 0 then
         update_msg("6")
@@ -897,11 +910,10 @@ function plot_position(in_act_dist)
     local l_head1 = 0
     local l_head2 = 0
     local l_dist = 0
-    local l_heading_from_center, l_heading_to_center, l_radius = 0, 0, 0
+    local l_heading_from_center, l_heading_to_center = 0, 0
     local l_goto_nextnode = false
     local l_AoR = 0
     local l_act_dist = 0
-    local l_rear_wheel_heading = 0
 
     if curr_node == #t_node then
         return
@@ -1099,8 +1111,8 @@ function plot_position(in_act_dist)
                 end
             end
 
-			-- VER1.20: The arrived condition only triggers at the last node (#t_node = GPS threshold VER1.17).
-			-- The old hotzone+curr_node>=#t_node-2 condition triggered too early (e.g., CYQB node 78).
+            -- VER1.20: The arrived condition only triggers at the last node (#t_node = GPS threshold VER1.17).
+            -- The old hotzone+curr_node>=#t_node-2 condition triggered too early (e.g., CYQB node 78).
             if depart_arrive == 1 and curr_node >= #t_node then
                 if not is_backtaxi then
                     car_sign = 1
@@ -1178,7 +1190,6 @@ end
 function determine_dir_of_turn(in_head1, in_head2, in_dist)
     local l_AoC = 0
     local l_AoR = 0
-    local l_turn_radius = 0
     local l_speed_skid = math.sqrt(cof * gravity * min_rot_radius)
 
     l_AoR, t_node[curr_node + 1].dir = compute_angle_diff(in_head1, in_head2)
@@ -1521,7 +1532,7 @@ end
 -- 3) Returns a result or leaves updated state for the caller to use.
 -- ====================================================
 function probe_y(in_x, in_y, in_z)
-    local l_lat, l_on, l_alt = 0, 0, 0
+    local l_lat, l_lon, l_alt = 0, 0, 0
     x1_value[0] = in_x
     y1_value[0] = in_y
     z1_value[0] = in_z
@@ -2002,6 +2013,7 @@ end
 -- 3) Returns a result or leaves updated state for the caller to use.
 -- ====================================================
 function register_dataref()
+
     -- Datarefs natifs X-Plane - FindDataRef, pas RegisterDataAccessor
     dr_tire_steer = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_steer_deg")
     dr_tire_rotate = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg")
@@ -2009,32 +2021,28 @@ function register_dataref()
 	-- fm/anim/sign: custom dataref
 	-- LUA_RUN == 1 -> first boot -> it is registered
 	-- LUA_RUN > 1 -> reload after airport change -> it already exists -> FindDataRef
-    if LUA_RUN == 1 then
-        dr_sign =
-            XPLM.XPLMRegisterDataAccessor(
-            "fm/anim/sign",
-            2,
-            0,
-            NULL,
-            NULL,
-            function(inRefcon)
-                return car_sign
-            end,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL
-        )
-    else
-        dr_sign = XPLM.XPLMFindDataRef("fm/anim/sign")
-    end
+    dr_sign =
+        XPLM.XPLMRegisterDataAccessor(
+        "fm/anim/sign",
+        2,
+        0,
+        NULL,
+        NULL,
+        function(inRefcon)
+            return car_sign
+        end,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    )
 end
 
 -- VER1.17: called every frame in draw_object() to push steering/tire_rotate/car_sign
@@ -2101,7 +2109,6 @@ function get_airport_elements()
     end
 
     if #t_deleted_runway > 0 then
-        logMsg("FollowMe VER1.22 : get_airport_elements -18")
         update_msg("-18")
     end
 
@@ -2685,13 +2692,6 @@ function apply_1206_filter()
             end
         end
     end
-
-    logMsg(
-        "FollowMe VER1.23 : apply_1206_filter() removed " ..
-            l_count ..
-                " vehicle-only nodes and " ..
-                    l_seg_count .. " orphaned segments at " .. (curr_ICAO ~= "" and curr_ICAO or "unknown")
-    )
 end
 
 -- ====================================================
@@ -2823,18 +2823,6 @@ function match_runway(in_runway_idx)
     if l_chosen == -1 then
         l_chosen = l_best_any
         l_chosen_dist = l_min_dist_any
-        logMsg(
-            "FollowMe VER1.15 : RWY " ..
-                l_rwy_id ..
-                    " - no taxiway-connected node found, using closest node " ..
-                        l_chosen .. " (" .. string.format("%.1f", l_chosen_dist) .. "m)"
-        )
-    else
-        logMsg(
-            "FollowMe VER1.15 : RWY " ..
-                l_rwy_id ..
-                    " -> node " .. l_chosen .. " (" .. string.format("%.1f", l_chosen_dist) .. "m from threshold)"
-        )
     end
 
     if l_chosen >= 0 then
@@ -2909,10 +2897,8 @@ end
 function initialise_routes()
     if #t_node > 0 then
         if depart_arrive == 1 and curr_node >= #t_node and flightstart ~= 9999 and not kill_is_manual then
-            logMsg("FollowMe VER1.20 : initialise_routes() play_sound(snd_safeflight_bye)")
             play_sound(snd_safeflight_bye)
         elseif depart_arrive == 2 and curr_node == #t_node then
-            logMsg("FollowMe VER1.20 : initialise_routes() play_sound(snd_welcome_bye)")
             play_sound(snd_welcome_bye)
         end
     end
@@ -2948,10 +2934,6 @@ function handle_plugin_window()
         local _, l_teleport_dist = heading_n_dist(prev_plane_x, prev_plane_z, fm_plane_x, fm_plane_z)
         if l_teleport_dist >= 1000 then -- VER1.12 fix: 1000m avoids false reset during scene loading (plane can jump 300-900m)
             full_reset()
-            logMsg(
-                "FollowMe VER1.12 : teleport detected (" ..
-                    string.format("%.0f", l_teleport_dist) .. "m jump) - full_reset()"
-            )
         end
     end
     prev_plane_x = fm_plane_x
@@ -3902,32 +3884,20 @@ function update_msg(in_msg)
     if in_msg == "6" then
         in_msg = "Follow Me Car ready. Car is behind you."
         if depart_arrive == 1 then
-            logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_followme)")
-        else
-            logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_welcome)")
-        end
-        if depart_arrive == 1 then
             play_sound(snd_followme)
         else
             play_sound(snd_welcome)
         end
     elseif in_msg == "7" then
         in_msg = "Have a safe flight !"
-        logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_safeflight_bye)")
         play_sound(snd_safeflight_bye)
     elseif in_msg == "5" then
         in_msg = "Arrived at destination"
-        logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_arrived)")
         play_sound(snd_arrived)
     elseif in_msg == "4" then
         in_msg = "No route found. Remove taxiway limitation, trying again."
     elseif in_msg == "3" then
         in_msg = "Follow Me Car is ready"
-        if depart_arrive == 1 then
-            logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_followme)")
-        else
-            logMsg("FollowMe VER1.20 : update_msg() play_sound(snd_welcome)")
-        end
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
@@ -4011,7 +3981,6 @@ function determine_XP_route()
             end
         end
         if not l_found then
-            logMsg("FollowMe VER1.22 : determine_XP_route -18")
             return "-18"
         end
     end
@@ -4514,20 +4483,9 @@ function process_possible_routes()
                 t_node[#t_node - 1].heading, t_node[#t_node - 1].dist =
                     heading_n_dist(t_node[#t_node - 1].x, t_node[#t_node - 1].z, l_proj_x, l_proj_z)
             end
-            logMsg(
-                "FollowMe VER1.17 : RWY " ..
-                    depart_runway ..
-                        " centreline_projection lateral_offset=" ..
-                            string.format("%.1f", l_offset) ..
-                                "m" .. " proj_to_threshold=" .. string.format("%.0f", l_proj_to_thr) .. "m"
-            )
         else
             -- Already on centreline (or very close)
             t_node[#t_node].hotzone = "1"
-            logMsg(
-                "FollowMe VER1.17 : RWY " ..
-                    depart_runway .. " already_on_centreline offset=" .. string.format("%.1f", l_offset) .. "m"
-            )
         end
 
         -- Final node: exact GPS threshold
@@ -4609,8 +4567,6 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     local l_ret_nodesegment_index, l_ret_deadnode = 0, 0
     local l_in_rev_heading = 0
     local l_goto_node = 0
-    local l_bypass = false
-
     local l_min_dist = 25
     local l_max_dist = 300
     local l_max_dist_node = 130
@@ -4709,10 +4665,6 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
                 end
             end
             if l_best_nid >= 0 then
-                logMsg(
-                    "FollowMe VER1.15 : fallback to nearest connected node " ..
-                        l_best_nid .. " (" .. string.format("%.0f", l_best_d) .. "m)"
-                )
                 return true, l_best_nid, t_taxinode[l_best_nid + 1].x, t_taxinode[l_best_nid + 1].z, 0
             end
         end
@@ -5277,12 +5229,8 @@ function exit_plugin()
     full_reset() -- VER1.12 : clean up all 3D objects and state
     -- unload_object/path/rampstart already called by full_reset if active
     unload_probe()
-	-- VER1.17: fm/anim/sign is only registered when LUA_RUN==1.
-	-- It is properly unregistered upon complete plugin exit.
-    if LUA_RUN == 1 and dr_sign ~= nil then
-        XPLM.XPLMUnregisterDataAccessor(dr_sign)
-        dr_sign = nil
-    end
+    XPLM.XPLMUnregisterDataAccessor(dr_sign)
+    dr_sign = nil
 end
 
 -- ====================================================
@@ -5294,6 +5242,6 @@ syspath = ffi.string(char_str)
 register_dataref()
 load_probe()
 
-do_every_draw("handle_plugin_window()")
+do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
 do_on_exit("exit_plugin()")

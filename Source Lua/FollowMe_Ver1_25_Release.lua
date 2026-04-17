@@ -112,6 +112,18 @@
 --                           for that specific runway only.
 --                           DRIVE NODES log now includes GPS lat/lon for each waypoint so the
 --                           pilot can compare with the in-sim position directly.
+--    VER1.25 Coussini 2026: Car initial heading fix - align car toward the aircraft at spawn.
+--                           When the pilot was standing behind the car at route start, the car
+--                           heading (t_node[1].heading) pointed away from the plane. This caused
+--                           move_car() to enter the "too far + in_sight → accel=0" branch and
+--                           freeze the car (car_speed=0, no accel possible). The car would not
+--                           move until the pilot walked far enough behind it to trigger the
+--                           l_car_is_behind cone (45°), which could take 20-30 seconds.
+--                           Fix: start_car() now re-orients car_body_heading toward the plane
+--                           whenever the car is NOT already in front of the aircraft. The car
+--                           immediately begins driving toward its first node and the pilot sees
+--                           the correct sign from the very first frame of the run.
+--                           Add a log to check the car_sign process
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -658,6 +670,23 @@ function start_car()
     l_car_is_in_front = chk_line_of_sight(fm_plane_head, 120, 120, fm_plane_x, fm_plane_z, car_x, car_z)
     l_plane_is_in_front = chk_line_of_sight(car_body_heading, 120, 120, car_x, car_z, fm_plane_x, fm_plane_z)
 
+    -- VER1.25 : align car_body_heading toward the aircraft at spawn when the car
+    -- is NOT already visible in front of the plane.  Without this, if the pilot
+    -- stands behind (or to the side of) the car, move_car() enters the
+    -- "dist > max_dist AND in_sight" branch which sets accel=0 when speed is
+    -- already 0 - freezing the car until the pilot happens to walk far enough
+    -- behind it to trigger the l_car_is_behind 45-degree cone.
+    -- Pointing the car toward the plane ensures it immediately falls into the
+    -- correct speed-control branch and starts moving on frame 1.
+    if not l_car_is_in_front then
+        local l_head_to_plane, _ = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
+        car_body_heading = l_head_to_plane
+        logMsg(
+            "FollowMe VER1.25 : car heading realigned toward aircraft (" ..
+                string.format("%.1f", l_head_to_plane) .. "deg) - plane was not in front of car at spawn"
+        )
+    end
+
     if l_car_is_in_front == false and depart_gate == 0 then
         update_msg("6")
     else
@@ -1086,7 +1115,45 @@ function plot_position(in_act_dist)
     car_y = probe_y(car_x, car_y, car_z)
     tire_rotate = math.fmod(tire_rotate + (in_act_dist * 360 / (tire_diameter * math.pi)), 360)
 
+    -- LOG car_sign: throttle to 1 log per 120 frames to avoid flooding
+    if car_sign_log_frame == nil then car_sign_log_frame = 0 end
+    car_sign_log_frame = car_sign_log_frame + 1
+    local l_sign_log_now = (car_sign_log_frame % 120 == 0)
+
+    if l_sign_log_now then
+        local l_next_dir = "nil"
+        local l_next_AoC = "nil"
+        local l_next_hotzone = "nil"
+        if curr_node < #t_node and t_node[curr_node + 1] ~= nil then
+            l_next_dir = tostring(t_node[curr_node + 1].dir)
+            l_next_AoC = tostring(t_node[curr_node + 1].AoC)
+            l_next_hotzone = tostring(t_node[curr_node + 1].hotzone)
+        end
+        logMsg(
+            "FollowMe car_sign STATUS : car_sign=" .. tostring(car_sign) ..
+            " curr=" .. tostring(curr_node) .. "/" .. tostring(#t_node) ..
+            " remain=" .. string.format("%.1f", remaining_dist_leg) ..
+            " avg=" .. tostring(avg_dist_from_plane) ..
+            " turning=" .. tostring(turning_is_active) ..
+            " da=" .. tostring(depart_arrive) ..
+            " next_dir=" .. l_next_dir ..
+            " next_AoC=" .. l_next_AoC ..
+            " next_hz=" .. l_next_hotzone
+        )
+    end
+
+    local l_car_sign_before = car_sign
+
     if car_sign == 0 or curr_node >= #t_node - 2 then
+
+        logMsg(
+            "FollowMe car_sign BLOCK : reason=" ..
+            (car_sign == 0 and "sign_zero" or "near_end") ..
+            " sign=" .. tostring(car_sign) ..
+            " curr=" .. tostring(curr_node) .. "/" .. tostring(#t_node) ..
+            " remain=" .. string.format("%.1f", remaining_dist_leg)
+        )
+
         if curr_node ~= #t_node then
             if
                 remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
@@ -1097,13 +1164,30 @@ function plot_position(in_act_dist)
                 elseif t_node[curr_node + 1].dir == 1 then
                     car_sign = 2
                 end
+                logMsg(
+                    "FollowMe car_sign TURN_SIGNAL : sign=" .. tostring(car_sign) ..
+                    " dir=" .. tostring(t_node[curr_node + 1].dir) ..
+                    " AoC=" .. tostring(t_node[curr_node + 1].AoC) ..
+                    " curr=" .. tostring(curr_node)
+                )
+            else
+                -- LOG: turn condition not met - sign stays unchanged (possible stuck at 3)
+                logMsg(
+                    "FollowMe car_sign NO_SIGNAL : sign_stays=" .. tostring(car_sign) ..
+                    " remain=" .. string.format("%.1f", remaining_dist_leg) ..
+                    " avg=" .. tostring(avg_dist_from_plane) ..
+                    " next_dir=" .. tostring(t_node[curr_node + 1] and t_node[curr_node + 1].dir or "nil") ..
+                    " next_AoC=" .. tostring(t_node[curr_node + 1] and t_node[curr_node + 1].AoC or "nil") ..
+                    " curr=" .. tostring(curr_node) .. "/" .. tostring(#t_node)
+                )
             end
 
-			-- VER1.20: The arrived condition only triggers at the last node (#t_node = GPS threshold VER1.17).
-			-- The old hotzone+curr_node>=#t_node-2 condition triggered too early (e.g., CYQB node 78).
+            -- VER1.20: The arrived condition only triggers at the last node (#t_node = GPS threshold VER1.17).
+            -- The old hotzone+curr_node>=#t_node-2 condition triggered too early (e.g., CYQB node 78).
             if depart_arrive == 1 and curr_node >= #t_node then
                 if not is_backtaxi then
                     car_sign = 1
+                    logMsg("FollowMe car_sign ARRIVED_DEP : sign=1 curr=" .. tostring(curr_node))
                     if not string.find(Err_Msg[1].text, "Arrived at destination") then
                         update_msg("5")
                     end
@@ -1123,6 +1207,7 @@ function plot_position(in_act_dist)
                 )
                 if l_gate_in_sight then
                     car_sign = 1
+                    logMsg("FollowMe car_sign ARRIVED_ARR : sign=1 gate_in_sight")
                 else
                     local l_turn_dir = 0
                     _, l_turn_dir = compute_angle_diff(car_body_heading, l_to_gate_heading)
@@ -1131,17 +1216,31 @@ function plot_position(in_act_dist)
                     else
                         car_sign = 3
                     end
+                    logMsg(
+                        "FollowMe car_sign ARRIVED_ARR_TURN : sign=" .. tostring(car_sign) ..
+                        " turn_dir=" .. tostring(l_turn_dir) ..
+                        " hdg_to_gate=" .. string.format("%.1f", l_to_gate_heading)
+                    )
                 end
 
                 flightstart = 0
                 update_msg("5")
             else
                 car_sign = 1
+                logMsg("FollowMe car_sign ARRIVED_DEP_LAST : sign=1 curr=" .. tostring(curr_node))
                 -- VER1.9 : send "Arrived at destination" for departures (back-taxi and normal)
                 if not string.find(Err_Msg[1].text or "", "Arrived at destination") then
                     update_msg("5")
                 end
             end
+        end
+
+        if car_sign ~= l_car_sign_before then
+            logMsg(
+                "FollowMe car_sign DELTA : " .. tostring(l_car_sign_before) ..
+                " -> " .. tostring(car_sign) ..
+                " curr=" .. tostring(curr_node) .. "/" .. tostring(#t_node)
+            )
         end
     end
 end
@@ -2002,6 +2101,9 @@ end
 -- 3) Returns a result or leaves updated state for the caller to use.
 -- ====================================================
 function register_dataref()
+    logMsg("FollowMe VER1.25 : REGISTER_DATAREF()")
+    logMsg("FollowMe VER1.25 : LUA_RUN = "..LUA_RUN)
+
     -- Datarefs natifs X-Plane - FindDataRef, pas RegisterDataAccessor
     dr_tire_steer = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_steer_deg")
     dr_tire_rotate = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg")
@@ -2009,32 +2111,28 @@ function register_dataref()
 	-- fm/anim/sign: custom dataref
 	-- LUA_RUN == 1 -> first boot -> it is registered
 	-- LUA_RUN > 1 -> reload after airport change -> it already exists -> FindDataRef
-    if LUA_RUN == 1 then
-        dr_sign =
-            XPLM.XPLMRegisterDataAccessor(
-            "fm/anim/sign",
-            2,
-            0,
-            NULL,
-            NULL,
-            function(inRefcon)
-                return car_sign
-            end,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL
-        )
-    else
-        dr_sign = XPLM.XPLMFindDataRef("fm/anim/sign")
-    end
+    dr_sign =
+        XPLM.XPLMRegisterDataAccessor(
+        "fm/anim/sign",
+        2,
+        0,
+        NULL,
+        NULL,
+        function(inRefcon)
+            return car_sign
+        end,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    )
 end
 
 -- VER1.17: called every frame in draw_object() to push steering/tire_rotate/car_sign
@@ -2063,6 +2161,7 @@ function sync_anim_datarefs()
         XPLM.XPLMSetDatavf(dr_tire_rotate, ffi_rotate_buf, 0, 4)
     end
     if dr_sign ~= nil then
+        --logMsg("FollowMe VER1.25 : Met a jour dr_sign avec la valeur "..car_sign)
         XPLM.XPLMSetDataf(dr_sign, car_sign)
     end
 end
@@ -5277,12 +5376,8 @@ function exit_plugin()
     full_reset() -- VER1.12 : clean up all 3D objects and state
     -- unload_object/path/rampstart already called by full_reset if active
     unload_probe()
-	-- VER1.17: fm/anim/sign is only registered when LUA_RUN==1.
-	-- It is properly unregistered upon complete plugin exit.
-    if LUA_RUN == 1 and dr_sign ~= nil then
-        XPLM.XPLMUnregisterDataAccessor(dr_sign)
-        dr_sign = nil
-    end
+    XPLM.XPLMUnregisterDataAccessor(dr_sign)
+    dr_sign = nil
 end
 
 -- ====================================================
@@ -5294,6 +5389,6 @@ syspath = ffi.string(char_str)
 register_dataref()
 load_probe()
 
-do_every_draw("handle_plugin_window()")
+do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
 do_on_exit("exit_plugin()")
