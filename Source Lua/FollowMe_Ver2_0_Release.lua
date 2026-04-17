@@ -3195,8 +3195,8 @@ end
 -- ====================================================
 function show_window()
     window_first_access = true
-    followme_wnd = float_wnd_create(400, 525, 2, true)
-    float_wnd_set_position(followme_wnd, screen_width - 400 - Holder_len, Win_Y)
+    followme_wnd = float_wnd_create(405, 525, 2, true)
+    float_wnd_set_position(followme_wnd, screen_width - 405 - Holder_len, Win_Y)
     float_wnd_set_imgui_builder(followme_wnd, "build_window")
     float_wnd_set_onclose(followme_wnd, "closed_window")
 end
@@ -3259,10 +3259,10 @@ function build_window(wnd, x, y)
         end
         if FM_car_active == true then
             imgui.SetNextWindowPos(0, 75)
-            imgui.SetNextWindowSize(400, 120)
+            imgui.SetNextWindowSize(405, 120)
         else
             imgui.SetNextWindowPos(0, 75)
-            imgui.SetNextWindowSize(400, 170)
+            imgui.SetNextWindowSize(405, 170)
         end
         if imgui.Begin("##Disabled", nil, l_flags) then
             imgui.End()
@@ -3335,7 +3335,7 @@ function build_window(wnd, x, y)
 -- ====================================================
     imgui.SetCursorPosY(l_y)
     imgui.SetCursorPosX(18)
-    if imgui.RadioButton(" Departure : ", depart_arrive == 1, false) then
+    if imgui.RadioButton(" Departure", depart_arrive == 1, false) then
         depart_arrive = 1
         flightstart = 0
         rampstart_chg = true
@@ -3562,7 +3562,7 @@ function build_window(wnd, x, y)
 	    while l_rel_angle < -180 do l_rel_angle = l_rel_angle + 360 end
 
 	    -- Draw yellow line
-	    local cx, cy = 350, l_y + 145
+	    local cx, cy = 370, l_y + 145
 	    local radius = 18
 	    local rad = math.rad(l_rel_angle - 90)
 	    local tip_x = cx + math.cos(rad) * radius
@@ -3572,7 +3572,7 @@ function build_window(wnd, x, y)
 	end
 
     -- VER1.6 : Speed display zone - reserved read-only row below button
-    imgui.SetCursorPosY(l_y + 162)
+    imgui.SetCursorPosY(l_y + 164)
     imgui.SetCursorPosX(20)
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
     imgui.TextUnformatted("GND SPD")
@@ -3749,7 +3749,7 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosY(438)
     imgui.Separator()
 
-    imgui.SetCursorPosY(445)
+    imgui.SetCursorPosY(446)
     imgui.SetCursorPosX(10)
     imgui.TextUnformatted("SimBrief ID")
 
@@ -3810,8 +3810,8 @@ function build_window(wnd, x, y)
 
     local l_y2 = 16
     for i = 1, 3 do
-        imgui.SetCursorPosY(483 + l_y2 * i)
-        imgui.SetCursorPosX(20)
+        imgui.SetCursorPosY(480 + l_y2 * i)
+        imgui.SetCursorPosX(10)
         if not Err_Msg[i].text then
             break
         end
