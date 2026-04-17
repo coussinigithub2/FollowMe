@@ -129,7 +129,7 @@
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
-    logMsg("imgui not supported by your FlyWithLua version")
+    logMsg("FollowMe : imgui not supported by your FlyWithLua version")
     return
 end
 
@@ -140,7 +140,7 @@ local socket_ok, socket = pcall(require, "socket")
 local http_ok, http = pcall(require, "socket.http")
 
 if not socket_ok or not http_ok then
-    logMsg("ERROR - socket.lua or socket.http not found")
+    logMsg("FollowMe : ERROR - socket.lua or socket.http not found")
 end
 
 local ffi = require("ffi")
@@ -2861,7 +2861,7 @@ function full_reset()
     curr_ICAO = "" -- VER1.12 : force apt.dat reload on next get_airport_elements()
     initialise_airport()
     initialise_routes()
-    logMsg("FollowMe VER1.12 : full_reset() completed")
+    logMsg("FollowMe : full_reset() completed")
 end
 
 -- ====================================================
@@ -4289,15 +4289,15 @@ function transverse(in_startnode, in_endnode, in_heading)
             l_to_label = (arrival_gate > 0) and t_gate[arrival_gate].ID or "gate"
         end
         logMsg(
-            "FollowMe VER1.24 : RAW A* ROUTE" ..
+            "FollowMe : RAW A* ROUTE" ..
                 " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_label .. " TO=" .. l_to_label
         )
-        logMsg("FollowMe VER1.24 : RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
+        logMsg("FollowMe : RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
         local l_raw_count = 0
         for _ in t_possible_route[1].Route:gmatch("[^%s]+") do
             l_raw_count = l_raw_count + 1
         end
-        logMsg("FollowMe VER1.24 : RAW A* NODES TOTAL=" .. l_raw_count)
+        logMsg("FollowMe : RAW A* NODES TOTAL=" .. l_raw_count)
     end
 end
 
@@ -4427,7 +4427,7 @@ function process_possible_routes()
                 l_far_x = t_runway[l_pair_idx].x
                 l_far_z = t_runway[l_pair_idx].z
                 logMsg(
-                    "FollowMe VER1.24 : RWY " ..
+                    "FollowMe : RWY " ..
                         depart_runway ..
                             " centreline from pair idx=" ..
                                 l_pair_idx ..
@@ -4448,7 +4448,7 @@ function process_possible_routes()
                     l_far_z = t_runway[l_index].z
                 end
             end
-            logMsg("FollowMe VER1.24 : RWY " .. depart_runway .. " Pair fallback used (scan)")
+            logMsg("FollowMe : RWY " .. depart_runway .. " Pair fallback used (scan)")
         end
 
         -- Centreline unit vector: far threshold -> near threshold (depart_runway)
@@ -4541,10 +4541,10 @@ function process_possible_routes()
                                                                         "m) "
         end
         logMsg(
-            "FollowMe VER1.24 : DRIVE ROUTE" .. " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
+            "FollowMe : DRIVE ROUTE" .. " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
         )
-        logMsg("FollowMe VER1.24 : DRIVE NODES : " .. l_node_list)
-        logMsg("FollowMe VER1.24 : DRIVE NODES TOTAL=" .. #t_node)
+        logMsg("FollowMe : DRIVE NODES : " .. l_node_list)
+        logMsg("FollowMe : DRIVE NODES TOTAL=" .. #t_node)
     end
 end
 
