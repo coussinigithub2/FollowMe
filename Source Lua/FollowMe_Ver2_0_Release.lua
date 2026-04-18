@@ -124,8 +124,18 @@
 --                           immediately begins driving toward its first node and the pilot sees
 --                           the correct sign from the very first frame of the run.
 --                           Add a log to check the car_sign process
---    VER2.0 Coussini 2026:  Major version that fix several follow me car situation.
---                           Remove unwanted log.
+--    VER2.0 Coussini 2026:  Major version that combine several follow me car situation and bug.
+--                           Arrow pointer: replaced the yellow line with a filled
+--                           arrowhead triangle (tip points toward the FM car,
+--                           direction is aircraft-heading-relative, 0-360 normalised).
+--                           Direction message: "Follow Me Car is ready" replaced by
+--                           four context-aware messages based on the relative bearing
+--                           of the car to the aircraft nose
+--
+--                           1-Front (300-360 and 0-60 deg) : "Follow Me Car is ahead"
+--                           2-Right (60-120 deg)           : "Follow Me Car is on the right"
+--                           3-Rear  (120-240 deg)          : "Follow Me Car is behind"
+--                           4-Left  (240-300 deg)          : "Follow Me Car is on the left"
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -332,13 +342,15 @@ local Holder_len = 30
 -- VER1.6 : prev_mouse_Y removed - holder position is fixed
 local holder_drag = 0
 local toggle_window = false
-local ignore_next_release = 0 -- counter to block parasitic IsMouseReleased after hide_window
+-- counter to block parasitic IsMouseReleased after hide_window
+local ignore_next_release = 0
 local window_is_open = false
 local text_was_chg = false
 
 local prepare_show_objects = false
 local prepare_kill_objects = false
-local kill_is_manual = false -- VER1.4 : true=manual cancel, false=auto (takeoff)
+-- VER1.4 : true=manual cancel, false=auto (takeoff)
+local kill_is_manual = false
 
 local init_load = 0
 local window_first_access = false
@@ -346,7 +358,8 @@ local FM_car_active = false
 
 local depart_arrive = 0
 local depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
-local is_backtaxi = false -- VER1.8 : true when runway has no direct taxiway exit (back-taxi)
+-- VER1.8 : true when runway has no direct taxiway exit (back-taxi)
+local is_backtaxi = false
 
 local curr_ICAO, curr_ICAO_Name = "", ""
 local t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
@@ -379,10 +392,14 @@ local ac_types = {
 }
 
 -- Preference / Config Values
-local Win_Y = 400 -- VER1.6 : fixed position - no longer saved/loaded from preferences
-local Aircraft_Type = "8" -- VER1.4 : default LIGHT PROP for Cessna
-local t_aircraft = {} -- VER1.6 : aircraft types table { ICAO = type } loaded from FollowMeXplane12.prf
-local get_from_SimBrief = false -- VER1.5 : replaces get_from_FMS
+-- VER1.6 : fixed position - no longer saved/loaded from preferences
+local Win_Y = 400
+-- VER1.4 : default LIGHT PROP for Cessna
+local Aircraft_Type = "8"
+-- VER1.6 : aircraft types table { ICAO = type } loaded from FollowMeXplane12.prf
+local t_aircraft = {}
+-- VER1.5 : replaces get_from_FMS
+local get_from_SimBrief = false
 local show_path = false
 local show_rampstart = false
 local impose_restriction_chk = true
@@ -393,15 +410,24 @@ local speed_limiter = false
 local car_type_fmcar = "Auto"
 
 -- VER1.5 : SimBrief variables
-local simbrief_id = "" -- User's SimBrief numeric ID (max 10 chars)
-local sb_origin_icao = "" -- SimBrief departure airport ICAO (4 letters)
-local sb_origin_name = "" -- SimBrief departure airport name
-local sb_dest_icao = "" -- SimBrief arrival airport ICAO (4 letters)
-local sb_dest_name = "" -- SimBrief arrival airport name
-local sb_runway_takeoff = "" -- SimBrief takeoff runway
-local sb_runway_landing = "" -- SimBrief landing runway
-local sb_fetch_status = "" -- Last fetch status: "", "OK", "ERROR", "LOADING"
-local sb_airport_mismatch = false -- true if SimBrief departure airport != current sim airport
+-- User's SimBrief numeric ID (max 10 chars)
+local simbrief_id = ""
+-- SimBrief departure airport ICAO (4 letters)
+local sb_origin_icao = ""
+-- SimBrief departure airport name
+local sb_origin_name = ""
+-- SimBrief arrival airport ICAO (4 letters)
+local sb_dest_icao = ""
+-- SimBrief arrival airport name
+local sb_dest_name = ""
+-- SimBrief takeoff runway
+local sb_runway_takeoff = ""
+-- SimBrief landing runway
+local sb_runway_landing = ""
+-- Last fetch status: "", "OK", "ERROR", "LOADING"
+local sb_fetch_status = ""
+-- true if SimBrief departure airport != current sim airport
+local sb_airport_mismatch = false
 
 dataref("viewext", "sim/graphics/view/view_is_external")
 dataref("camera_z_position", "sim/graphics/view/pilots_head_z")
@@ -484,8 +510,10 @@ local turning_is_active = 0
 local prev_taxi_light = 0
 local prev_beacon_light = 0
 local ground_time = 0
-local prev_new_flight = 0 -- VER1.12 : detect new flight when fm_new_flight resets
-local prev_plane_x = 0 -- VER1.12 : detect teleport (delta pos > 100m in 1 frame)
+-- VER1.12 : detect new flight when fm_new_flight resets
+local prev_new_flight = 0
+-- VER1.12 : detect teleport (delta pos > 100m in 1 frame)
+local prev_plane_x = 0
 local prev_plane_z = 0
 local taxiway_network = ""
 local play_time = 0
@@ -1556,12 +1584,12 @@ end
 -- ====================================================
 function draw_object(in_x, in_y, in_z, in_heading)
     -- VER1.17 : populate dataref_float_value with the wheel animation values
-    dataref_float_value[0] = steering -- tire_steer_deg[0]
-    dataref_float_value[1] = steering -- tire_steer_deg[1]
-    dataref_float_value[2] = tire_rotate -- tire_rotation_angle_deg[0]
-    dataref_float_value[3] = tire_rotate -- tire_rotation_angle_deg[1]
-    dataref_float_value[4] = tire_rotate -- tire_rotation_angle_deg[2]
-    dataref_float_value[5] = tire_rotate -- tire_rotation_angle_deg[3]
+    dataref_float_value[0] = steering
+    dataref_float_value[1] = steering
+    dataref_float_value[2] = tire_rotate
+    dataref_float_value[3] = tire_rotate
+    dataref_float_value[4] = tire_rotate
+    dataref_float_value[5] = tire_rotate
     dataref_float_addr = dataref_float_value
 
     -- VER1.17 : Also synchronize the X-Plane datarefs for external visibility
@@ -2357,13 +2385,15 @@ function decipher_runway(in_str)
     )
     t_runway[i].Lat = tonumber(l_str1)
     t_runway[i].Lon = tonumber(l_str2)
-    t_runway[i].Node = -1 -- VER1.7: -1 = not assigned (0 is a valid node_id)
+	-- VER1.7: -1 = not assigned (0 is a valid node_id)
+    t_runway[i].Node = -1
     t_runway[i + 1].Lat = tonumber(l_str3)
     t_runway[i + 1].Lon = tonumber(l_str4)
-    t_runway[i + 1].Node = -1 -- VER1.7: -1 = not assigned (0 is a valid node_id)
+	-- VER1.7: -1 = not assigned (0 is a valid node_id)
+    t_runway[i + 1].Node = -1
     -- VER1.24 : store cross-references so each threshold knows its opposite (same apt.dat line 100)
-    t_runway[i].Pair = i + 1 -- index of the opposite threshold
-    t_runway[i + 1].Pair = i -- index of the opposite threshold
+    t_runway[i].Pair = i + 1
+    t_runway[i + 1].Pair = i
     t_runway[i].x, _, t_runway[i].z, world_alt = get_local_coordinates(t_runway[i].Lat, t_runway[i].Lon, world_alt)
     t_runway[i + 1].x, _, t_runway[i + 1].z, world_alt =
         get_local_coordinates(t_runway[i + 1].Lat, t_runway[i + 1].Lon, world_alt)
@@ -2442,7 +2472,8 @@ function decipher_ramp_operation(in_str)
         return
     end
     l_str1, l_str2 = string.match(in_str, "1301 %s*(%a)%s*([^%s]+)%s*")
-    t_gate[i].Terminal = l_str1 or "" -- VER1.21: store terminal letter for disambiguation
+	-- VER1.21: store terminal letter for disambiguation
+    t_gate[i].Terminal = l_str1 or ""
     if l_str1 == "E" and string.find(l_types, "1") then
         t_gate[i].Types = string.sub(l_types, 3)
     end
@@ -2642,7 +2673,7 @@ function apply_1206_filter()
     local l_count = 0
     for l_id, _ in pairs(l_remove) do
         if t_taxinode[l_id + 1] ~= nil then
-            l_count = l_count + 1 -- count only, do not nil
+            l_count = l_count + 1
         end
     end
 
@@ -2721,7 +2752,8 @@ function determine_runway_node()
     local l_rows = #t_runway
     l_idx = 1
     while l_idx <= l_rows do
-        if t_runway[l_idx].Node == -1 then -- VER1.7 : -1 = unassigned
+		-- VER1.7 : -1 = unassigned
+        if t_runway[l_idx].Node == -1 then
             t_deleted_runway[#t_deleted_runway + 1] = t_runway[l_idx].ID
             table.remove(t_runway, l_idx)
             l_rows = l_rows - 1
@@ -2756,7 +2788,8 @@ function match_runway(in_runway_idx)
     local l_best_any = -1
     local l_rwy_x = t_runway[in_runway_idx].x
     local l_rwy_z = t_runway[in_runway_idx].z
-    local l_rwy_id = t_runway[in_runway_idx].ID -- e.g. "11", "29", "06", "24"
+	-- l_rwy_id : e.g. "11", "29", "06", "24"
+    local l_rwy_id = t_runway[in_runway_idx].ID
 
     -- Build nodes on THIS runway's segments
     -- Segment IDs in apt.dat use combined names like "06/24" or "11/29"
@@ -2857,8 +2890,10 @@ function full_reset()
     kill_is_manual = false
     ground_time = 0
     flightstart = 0
-    t_deleted_runway = {} -- new airport = fresh runway list
-    curr_ICAO = "" -- VER1.12 : force apt.dat reload on next get_airport_elements()
+	-- new airport = fresh runway list
+    t_deleted_runway = {}
+	-- VER1.12 : force apt.dat reload on next get_airport_elements()
+    curr_ICAO = ""
     initialise_airport()
     initialise_routes()
     logMsg("FollowMe : full_reset() completed")
@@ -2907,7 +2942,8 @@ function initialise_routes()
     Err_Msg[2] = {}
     Err_Msg[3] = {}
     depart_arrive = 0
-    is_backtaxi = false -- VER1.8
+	-- VER1.8
+    is_backtaxi = false
     window_first_access = true
 end
 
@@ -2932,7 +2968,8 @@ function handle_plugin_window()
     -- Max realistic speed 250kts = 128m/s at 20fps = 6.4m/frame, never > 100m
     if prev_plane_x ~= 0 then
         local _, l_teleport_dist = heading_n_dist(prev_plane_x, prev_plane_z, fm_plane_x, fm_plane_z)
-        if l_teleport_dist >= 1000 then -- VER1.12 fix: 1000m avoids false reset during scene loading (plane can jump 300-900m)
+		-- VER1.12 fix: 1000m avoids false reset during scene loading (plane can jump 300-900m)
+        if l_teleport_dist >= 1000 then
             full_reset()
         end
     end
@@ -3006,7 +3043,8 @@ function handle_plugin_window()
             fm_run_time > speed_warn_time
      then
         play_sound(snd_keep_speed)
-        speed_warn_time = fm_run_time + 15 -- repeat at most every 15 seconds
+		-- repeat at most every 15 seconds
+        speed_warn_time = fm_run_time + 15
     end
 
     if
@@ -3277,7 +3315,8 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888) -- light gray
+	-- light gray
+    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
 
     if get_from_SimBrief then
         imgui.TextUnformatted("Simbrief Departure Airport")
@@ -3524,7 +3563,8 @@ function build_window(wnd, x, y)
     if l_changed then
         speed_limiter = l_newval
         if speed_limiter == true then
-            speed_max = 10.288 -- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
+			-- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
+            speed_max = 10.288
         else
             speed_max = car_default_speed
         end
@@ -3551,24 +3591,48 @@ function build_window(wnd, x, y)
     end
 
     -- VER2.0 : ARROW POINTER FOLLOW ME CAR
+    -- Replaced simple line with a filled arrowhead triangle pointing toward the FM car
+    -- relative to the aircraft heading. The tip points in the car direction.
 	if FM_car_active and car_x ~= 0 then
-	    -- Heading airplane thru FM car
+	    -- Absolute bearing from aircraft to FM car
 	    local l_bearing_to_car, l_dist_to_car = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
 
-	    -- Relativ angle airplane Heading
+	    -- Relative angle: 0=front, 90=right, 180=rear, 270=left  (aircraft-relative, 0-360)
 	    local l_rel_angle = l_bearing_to_car - fm_plane_head
-	    -- Normaliser entre -180 et +180
-	    while l_rel_angle > 180 do l_rel_angle = l_rel_angle - 360 end
-	    while l_rel_angle < -180 do l_rel_angle = l_rel_angle + 360 end
+	    while l_rel_angle < 0   do l_rel_angle = l_rel_angle + 360 end
+	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
 
-	    -- Draw yellow line
-	    local cx, cy = 370, l_y + 145
-	    local radius = 18
-	    local rad = math.rad(l_rel_angle - 90)
-	    local tip_x = cx + math.cos(rad) * radius
-	    local tip_y = cy + math.sin(rad) * radius
+	    -- Draw a filled yellow arrow triangle pointing toward the car
+	    local cx, cy    = 370, l_y + 145
+		-- distance from center to tip
+	    local tip_len   = 18
+		-- half-width of arrow base
+	    local wing_len  = 10
+		-- distance from center to base (behind center)
+	    local tail_len  = 8
 
-	    imgui.DrawList_AddLine(cx, cy, tip_x, tip_y, 0xFF00FFFF, 2)
+	    -- Tip direction (0 deg = up = north = forward)
+	    local tip_rad   = math.rad(l_rel_angle - 90)
+	    -- Base direction (opposite of tip)
+	    local base_rad  = math.rad(l_rel_angle + 90)
+	    -- Wing perpendicular directions
+		-- perpendicular left
+	    local left_rad  = math.rad(l_rel_angle - 90 + 90)
+		-- perpendicular right
+	    local right_rad = math.rad(l_rel_angle - 90 - 90)
+
+	    local tip_x  = cx + math.cos(tip_rad)   * tip_len
+	    local tip_y  = cy + math.sin(tip_rad)   * tip_len
+	    local base_x = cx + math.cos(base_rad)  * tail_len
+	    local base_y = cy + math.sin(base_rad)  * tail_len
+
+	    local lw_x = base_x + math.cos(left_rad)  * wing_len
+	    local lw_y = base_y + math.sin(left_rad)  * wing_len
+	    local rw_x = base_x + math.cos(right_rad) * wing_len
+	    local rw_y = base_y + math.sin(right_rad) * wing_len
+
+	    -- Filled yellow triangle (tip, left-wing, right-wing)
+	    imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, 0xFF00FFFF)
 	end
 
     -- VER1.6 : Speed display zone - reserved read-only row below button
@@ -3808,6 +3872,32 @@ function build_window(wnd, x, y)
         update_msg(l_err)
     end
 
+    -- VER2.0 : Real-time directional message - updated every frame when FM car is active.
+    -- Overrides Err_Msg[1] with the current direction of the car relative to the aircraft.
+    -- The four zones match the arrow pointer zones exactly:
+    --   Front (300-360 / 0-60 deg) : "Follow Me Car is ahead"
+    --   Right (60-120 deg)         : "Follow Me Car is on the right"
+    --   Rear  (120-240 deg)        : "Follow Me Car is behind"
+    --   Left  (240-300 deg)        : "Follow Me Car is on the left"
+    if FM_car_active and car_x ~= 0 then
+        local l_bear_rt, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
+        local l_rel_rt = l_bear_rt - fm_plane_head
+        while l_rel_rt < 0   do l_rel_rt = l_rel_rt + 360 end
+        while l_rel_rt >= 360 do l_rel_rt = l_rel_rt - 360 end
+        local l_dir_msg
+        if l_rel_rt > 300 or l_rel_rt < 60 then
+            l_dir_msg = "Follow Me Car is ahead"
+        elseif l_rel_rt >= 60 and l_rel_rt < 120 then
+            l_dir_msg = "Follow Me Car is on the right"
+        elseif l_rel_rt >= 120 and l_rel_rt < 240 then
+            l_dir_msg = "Follow Me Car is behind"
+        else
+            l_dir_msg = "Follow Me Car is on the left"
+        end
+        Err_Msg[1].text  = l_dir_msg
+        Err_Msg[1].color = "GREEN"
+    end
+
     local l_y2 = 16
     for i = 1, 3 do
         imgui.SetCursorPosY(480 + l_y2 * i)
@@ -3845,7 +3935,8 @@ function set_sound_vol()
     set_sound_gain(snd_safeflight_bye, vol / 10)
     set_sound_gain(snd_welcome, vol / 10)
     set_sound_gain(snd_welcome_bye, vol / 10)
-    set_sound_gain(snd_keep_speed, vol / 10) -- VER1.6 fix : speed warning
+	-- VER1.6 fix : speed warning
+    set_sound_gain(snd_keep_speed, vol / 10)
 end
 
 -- ====================================================
@@ -3918,7 +4009,31 @@ function update_msg(in_msg)
     elseif in_msg == "4" then
         in_msg = "No route found. Remove taxiway limitation, trying again."
     elseif in_msg == "3" then
-        in_msg = "Follow Me Car is ready"
+        -- VER2.0 : Replace static "Follow Me Car is ready" with a direction-aware message.
+        -- Compute the absolute bearing from the aircraft to the FM car (0-360),
+        -- then map it to one of four compass zones relative to the aircraft heading:
+        --   Front : bearing within 60 deg on each side of the aircraft nose (300-360 and 0-60)
+        --   Right : bearing 60 to 120 deg (right side)
+        --   Rear  : bearing 120 to 240 deg (behind)
+        --   Left  : bearing 240 to 300 deg (left side)
+        if FM_car_active and car_x ~= 0 then
+            local l_bear, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
+            local l_rel = l_bear - fm_plane_head
+            while l_rel < 0   do l_rel = l_rel + 360 end
+            while l_rel >= 360 do l_rel = l_rel - 360 end
+            if l_rel > 300 or l_rel < 60 then
+                in_msg = "Follow Me Car is ahead"
+            elseif l_rel >= 60 and l_rel < 120 then
+                in_msg = "Follow Me Car is on the right"
+            elseif l_rel >= 120 and l_rel < 240 then
+                in_msg = "Follow Me Car is behind"
+            else
+                -- 240 <= l_rel <= 300
+                in_msg = "Follow Me Car is on the left"
+            end
+        else
+            in_msg = "Follow Me Car is ready"
+        end
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
@@ -3983,7 +4098,7 @@ function determine_XP_route()
     end
     if depart_arrive == 0 then
         return "-5"
-    end -- no mode selected yet
+    end
     if depart_arrive == 2 and arrival_gate == 0 then
         return "-6"
     end
@@ -4681,7 +4796,7 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
                     local l_dd = math.sqrt((in_x - t_taxinode[l_ni].x) ^ 2 + (in_z - t_taxinode[l_ni].z) ^ 2)
                     if l_dd < l_best_d and l_dd < 500 then
                         l_best_d = l_dd
-                        l_best_nid = l_ni - 1 -- 0-based node id
+                        l_best_nid = l_ni - 1
                     end
                 end
             end
@@ -5066,7 +5181,6 @@ function build_holder(wnd, x, y)
     end
 
     -- VER1.6 : drag mechanic removed - holder position is fixed at Win_Y = 400
-
     -- DEBUG : log every mouse event on the holder (not every frame)
     if imgui.IsMouseReleased(0) then
         if ignore_next_release > 0 then
@@ -5247,7 +5361,8 @@ end
 -- 3) Returns a result or leaves updated state for the caller to use.
 -- ====================================================
 function exit_plugin()
-    full_reset() -- VER1.12 : clean up all 3D objects and state
+	-- VER1.12 : clean up all 3D objects and state
+    full_reset()
     -- unload_object/path/rampstart already called by full_reset if active
     unload_probe()
     XPLM.XPLMUnregisterDataAccessor(dr_sign)
