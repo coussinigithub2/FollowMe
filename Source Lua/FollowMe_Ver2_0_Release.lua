@@ -3293,7 +3293,7 @@ end
 -- ====================================================
 function show_window()
     window_first_access = true
-    followme_wnd = float_wnd_create(405, 525, 2, true)
+    followme_wnd = float_wnd_create(405, 530, 2, true)
     float_wnd_set_position(followme_wnd, screen_width - 405 - Holder_len, Win_Y)
     float_wnd_set_imgui_builder(followme_wnd, "build_window")
     float_wnd_set_onclose(followme_wnd, "closed_window")
@@ -3375,6 +3375,9 @@ function build_window(wnd, x, y)
         end
     end
 
+    --=====================================================
+    -- Show Departure and Arrival airport (ICAO + name)
+    --=====================================================
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
@@ -3402,6 +3405,7 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(35)
     imgui.SetCursorPosX(10)
+	-- light gray
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
 
     if get_from_SimBrief then
@@ -3428,14 +3432,13 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosY(65)
     imgui.Separator()
 
-    local l_y = 75
-
-
--- ====================================================
-    -- Departure
-
--- ====================================================
-    imgui.SetCursorPosY(l_y)
+    --=====================================================
+    -- Allow selection for Departure & Arrival
+    -- Show "Request Follow Me Car" button or "Cancel Follow Me Car"
+    -- Show Aircraft Speed and Follow Me car Speed
+    -- Show Follow Me car Pointer (yellow triangle)
+    --=====================================================
+    imgui.SetCursorPosY(75)
     imgui.SetCursorPosX(18)
     if imgui.RadioButton(" Departure", depart_arrive == 1, false) then
         depart_arrive = 1
@@ -3453,7 +3456,7 @@ function build_window(wnd, x, y)
         imgui.TextUnformatted(t_gate[depart_gate].ID)
     end
 
-    imgui.SetCursorPosY(l_y + 25)
+    imgui.SetCursorPosY(100)
     imgui.SetCursorPosX(48)
     imgui.TextUnformatted("To Runway : ")
 
@@ -3505,7 +3508,7 @@ function build_window(wnd, x, y)
     imgui.SameLine()
     imgui.TextUnformatted("Get SimBrief data")
 
-    imgui.SetCursorPosY(l_y + 60)
+    imgui.SetCursorPosY(135)
     imgui.SetCursorPosX(18)
 
     if imgui.RadioButton(" Arrival", depart_arrive == 2, false) then
@@ -3534,7 +3537,7 @@ function build_window(wnd, x, y)
     imgui.SameLine()
     imgui.TextUnformatted("Auto Assign")
 
-    imgui.SetCursorPosY(l_y + 85)
+    imgui.SetCursorPosY(160)
     imgui.SetCursorPosX(48)
     imgui.TextUnformatted("To Gate/Ramp : ")
 
@@ -3555,7 +3558,7 @@ function build_window(wnd, x, y)
 
     if combo_filter_list == true then
         imgui.SetNextWindowFocus()
-        imgui.SetNextWindowPos(160, l_y + 105)
+        imgui.SetNextWindowPos(160, 180)
         imgui.SetNextWindowSize(150, 80)
         if imgui.Begin("##combo_filter", nil, l_flags) then
             local l_gate = ""
@@ -3620,7 +3623,7 @@ function build_window(wnd, x, y)
         rampstart_chg = true
     end
 
-    imgui.SetCursorPosY(l_y + 125)
+    imgui.SetCursorPosY(200)
     imgui.SetCursorPosX(230)
     l_changed, l_newval = imgui.Checkbox("##Limit Car Speed", speed_limiter)
     if l_changed then
@@ -3635,7 +3638,11 @@ function build_window(wnd, x, y)
     imgui.SameLine()
     imgui.TextUnformatted("Limit speed \nto 20kts")
 
-    imgui.SetCursorPosY(l_y + 125)
+    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
+    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
+    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
+
+    imgui.SetCursorPosY(200)
     imgui.SetCursorPosX(48)
 
     if FM_car_active == false then
@@ -3653,6 +3660,8 @@ function build_window(wnd, x, y)
         end
     end
 
+    imgui.PopStyleColor(3)
+
     -- VER2.0 : ARROW POINTER FOLLOW ME CAR
     -- Replaced simple line with a filled arrowhead triangle pointing toward the FM car
     -- relative to the aircraft heading. The tip points in the car direction.
@@ -3666,7 +3675,7 @@ function build_window(wnd, x, y)
 	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
 
 	    -- Draw a filled yellow arrow triangle pointing toward the car
-	    local cx, cy    = 370, l_y + 145
+	    local cx, cy    = 370, 220
 		-- distance from center to tip
 	    local tip_len   = 18
 		-- half-width of arrow base
@@ -3699,13 +3708,13 @@ function build_window(wnd, x, y)
 	end
 
     -- VER1.6 : Speed display zone - reserved read-only row below button
-    imgui.SetCursorPosY(l_y + 164)
-    imgui.SetCursorPosX(20)
+    imgui.SetCursorPosY(239)
+    imgui.SetCursorPosX(48)
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
     imgui.TextUnformatted("GND SPD")
     imgui.PopStyleColor()
     imgui.SameLine()
-    imgui.SetCursorPosX(80)
+    imgui.SetCursorPosX(108)
     if FM_car_active then
         local l_plane_kts = fm_gnd_spd * 1.94384
         local l_spd_color = (speed_limiter and l_plane_kts > 20) and 0xFF0000FF or 0xFF00FF00
@@ -3718,12 +3727,12 @@ function build_window(wnd, x, y)
         imgui.PopStyleColor()
     end
     imgui.SameLine()
-    imgui.SetCursorPosX(185)
+    imgui.SetCursorPosX(216)
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
     imgui.TextUnformatted("FM Car")
     imgui.PopStyleColor()
     imgui.SameLine()
-    imgui.SetCursorPosX(235)
+    imgui.SetCursorPosX(263)
     if FM_car_active then
         local l_car_kts = car_speed * 1.94384
         imgui.PushStyleColor(imgui.constant.Col.Text, 0xFFCCCCCC)
@@ -3826,11 +3835,21 @@ function build_window(wnd, x, y)
         end
     end
 
-    imgui.SetCursorPosY(335)
-    imgui.SetCursorPosX(300)
-    if imgui.Button("Save Pref.", 80, 35) then
-        l_err = save_config()
-    end
+	-- Dark green (RGBA hex)
+	imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
+	-- Lighter green on hover
+	imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
+	-- Green when clicked
+	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
+
+	imgui.SetCursorPosY(335)
+	imgui.SetCursorPosX(220)
+	if imgui.Button("Save Preferences", 130, 30) then
+	    l_err = save_config()
+	end
+
+	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
+	imgui.PopStyleColor(3)
 
     imgui.SetCursorPosY(385)
     imgui.SetCursorPosX(20)
@@ -3846,7 +3865,7 @@ function build_window(wnd, x, y)
     end
     imgui.SetCursorPosY(380)
     imgui.SetCursorPosX(220)
-    if imgui.Button("Test Vol", 65, 30) then
+    if imgui.Button("Test Volume", 90, 30) then
         play_sound(snd_welcome)
     end
 
@@ -3895,7 +3914,7 @@ function build_window(wnd, x, y)
 
     imgui.SameLine()
     imgui.SetCursorPosX(195)
-    if imgui.Button("Fetch SimBrief", 120, 20) then
+    if imgui.Button("Fetch SimBrief", 120, 30) then
         if simbrief_id ~= "" then
             check_SimBrief()
         else
@@ -3904,7 +3923,7 @@ function build_window(wnd, x, y)
     end
 
     -- SimBrief fetch status display
-    imgui.SetCursorPosY(468)
+    imgui.SetCursorPosY(480)
     imgui.SetCursorPosX(10)
     if sb_fetch_status == "OK" then
         if get_from_SimBrief then
@@ -3928,7 +3947,7 @@ function build_window(wnd, x, y)
         imgui.PopStyleColor()
     end
 
-    imgui.SetCursorPosY(488)
+    imgui.SetCursorPosY(500)
     imgui.Separator()
 
     if l_err ~= "" then
@@ -3963,7 +3982,7 @@ function build_window(wnd, x, y)
 
     local l_y2 = 16
     for i = 1, 3 do
-        imgui.SetCursorPosY(480 + l_y2 * i)
+        imgui.SetCursorPosY(488 + l_y2 * i)
         imgui.SetCursorPosX(10)
         if not Err_Msg[i].text then
             break
