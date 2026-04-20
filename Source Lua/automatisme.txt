@@ -1,0 +1,40 @@
+Ce qui se passe automatiquement (sans clic de ta part)
+✈️ Au décollage (roues quittent le sol)
+
+La fenêtre principale se ferme immédiatement
+Après 3 minutes en vol → le Follow Me Car est détruit si encore actif
+flightstart passe à 9999 (mode "en vol")
+
+
+🛬 À l'atterrissage (roues touchent le sol) — mode Arrival
+Si random_gate == true ou qu'une gate est déjà sélectionnée, dès que tu allumes la taxi light :
+
+Attribution automatique d'une gate (aléatoire si random_gate)
+Calcul automatique de la route
+Le Follow Me Car apparaît tout seul et démarre
+
+
+🚖 En mode SimBrief
+Dès que tu allumes la taxi light OU le beacon au sol :
+
+Le programme récupère la route SimBrief et lance le car automatiquement
+
+
+🚗 Pendant le suivi
+
+Taxi light éteinte à destination → le car se détruit automatiquement
+Vitesse > 20 kts → avertissement sonore répété toutes les 15 secondes
+
+
+🔄 Réinitialisations automatiques
+
+Nouveau vol chargé (fm_new_flight repart à 0) → full_reset() complet
+Téléportation détectée (saut > 1000m en 1 frame) → full_reset() complet
+
+
+🏷️ Choix du véhicule
+
+Si car_type = "Auto" → le programme choisit aléatoirement Ferrari, Van ou Truck à chaque fois
+
+
+En résumé, le programme est déjà très automatisé, surtout pour le cas Arrival. Le cas Departure est plus manuel (tu dois choisir la piste et cliquer).

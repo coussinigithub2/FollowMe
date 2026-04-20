@@ -178,7 +178,7 @@ end
 local XPLM = ffi.load(XPLMlib)
 
 local cdefs =
-    [[ 
+[[
 enum {
 	xplm_ControlCameraUntilViewChanges       = 1
 	,xplm_ControlCameraForever                = 2
@@ -555,10 +555,10 @@ function check_SimBrief()
 
     local res, code =
         http.request {
-        url = url,
-        sink = ltn12.sink.table(response_body),
-        redirect = true
-    }
+            url = url,
+            sink = ltn12.sink.table(response_body),
+            redirect = true
+        }
 
     -- If the request fails -> do not block anything
     if code ~= 200 or not response_body or #response_body == 0 then
@@ -795,15 +795,13 @@ function chk_line_of_sight(
     l_left_arc = add_delta_clockwise(shooter_heading, shooter_left_angle, -1)
     l_right_arc = math.fmod(shooter_heading + shooter_right_angle, 360)
 
-    if
-        l_heading_to_target >= l_left_arc and
-            l_heading_to_target <= l_left_arc + shooter_left_angle + shooter_right_angle
-     then
+    if l_heading_to_target >= l_left_arc and
+        l_heading_to_target <= l_left_arc + shooter_left_angle + shooter_right_angle
+    then
         l_within_sight = true
-    elseif
-        l_heading_to_target <= l_right_arc and
-            l_heading_to_target >= l_right_arc - (shooter_left_angle + shooter_right_angle)
-     then
+    elseif l_heading_to_target <= l_right_arc and
+        l_heading_to_target >= l_right_arc - (shooter_left_angle + shooter_right_angle)
+    then
         l_within_sight = true
     end
 
@@ -1022,12 +1020,12 @@ function plot_position(in_act_dist)
                 turning_is_active = 1
                 t_node[curr_node + 1].rot_x, t_node[curr_node + 1].rot_z =
                     CoR_coordinates_using_car_ref(
-                    car_x,
-                    car_z,
-                    l_head1,
-                    t_node[curr_node + 1].radius,
-                    t_node[curr_node + 1].dir
-                )
+                        car_x,
+                        car_z,
+                        l_head1,
+                        t_node[curr_node + 1].radius,
+                        t_node[curr_node + 1].dir
+                    )
             else
                 l_goto_nextnode = true
             end
@@ -1038,11 +1036,11 @@ function plot_position(in_act_dist)
         if t_node[curr_node + 1].head1_exit == nil then
             l_head2, l_dist =
                 heading_n_dist(
-                t_node[curr_node + 1].rot_x,
-                t_node[curr_node + 1].rot_z,
-                t_node[curr_node + 2].x,
-                t_node[curr_node + 2].z
-            )
+                    t_node[curr_node + 1].rot_x,
+                    t_node[curr_node + 1].rot_z,
+                    t_node[curr_node + 2].x,
+                    t_node[curr_node + 2].z
+                )
             l_AoR = math.deg(math.acos(t_node[curr_node + 1].radius / l_dist))
             l_heading_from_center = minus_delta_clockwise(l_head2, l_AoR, t_node[curr_node + 1].dir)
             t_node[curr_node + 1].head1_exit = add_delta_clockwise(l_heading_from_center, 90, t_node[curr_node + 1].dir)
@@ -1069,10 +1067,10 @@ function plot_position(in_act_dist)
         car_body_heading = add_delta_clockwise(car_body_heading, l_AoR, t_node[curr_node + 1].dir)
         l_heading_from_center =
             minus_delta_clockwise(
-            car_body_heading,
-            90 - t_node[curr_node + 1].angle_rear_to_ref,
-            t_node[curr_node + 1].dir
-        )
+                car_body_heading,
+                90 - t_node[curr_node + 1].angle_rear_to_ref,
+                t_node[curr_node + 1].dir
+            )
         car_x =
             t_node[curr_node + 1].rot_x +
             math.sin(math.rad(l_heading_from_center)) * t_node[curr_node + 1].ref_rot_radius
@@ -1085,19 +1083,19 @@ function plot_position(in_act_dist)
             l_head1 = heading_n_dist(car_x, car_z, t_node[curr_node + 2].x, t_node[curr_node + 2].z)
             t_node[curr_node + 1].rot2_x, t_node[curr_node + 1].rot2_z =
                 CoR_coordinates_using_car_ref(
-                car_x,
-                car_z,
-                car_body_heading,
-                t_node[curr_node + 1].radius,
-                t_node[curr_node + 1].dir * -1
-            )
+                    car_x,
+                    car_z,
+                    car_body_heading,
+                    t_node[curr_node + 1].radius,
+                    t_node[curr_node + 1].dir * -1
+                )
             l_head2, l_dist =
                 heading_n_dist(
-                t_node[curr_node + 1].rot2_x,
-                t_node[curr_node + 1].rot2_z,
-                t_node[curr_node + 2].x,
-                t_node[curr_node + 2].z
-            )
+                    t_node[curr_node + 1].rot2_x,
+                    t_node[curr_node + 1].rot2_z,
+                    t_node[curr_node + 2].x,
+                    t_node[curr_node + 2].z
+                )
             l_AoR = math.deg(math.acos(t_node[curr_node + 1].radius / l_dist))
             l_heading_from_center = minus_delta_clockwise(l_head2, l_AoR, t_node[curr_node + 1].dir * -1)
             t_node[curr_node + 1].head1_exit =
@@ -1122,10 +1120,10 @@ function plot_position(in_act_dist)
         car_body_heading = add_delta_clockwise(car_body_heading, l_AoR, t_node[curr_node + 1].dir * -1)
         l_heading_from_center =
             minus_delta_clockwise(
-            car_body_heading,
-            90 - t_node[curr_node + 1].angle_rear_to_ref,
-            t_node[curr_node + 1].dir * -1
-        )
+                car_body_heading,
+                90 - t_node[curr_node + 1].angle_rear_to_ref,
+                t_node[curr_node + 1].dir * -1
+            )
         car_x =
             t_node[curr_node + 1].rot2_x +
             math.sin(math.rad(l_heading_from_center)) * t_node[curr_node + 1].ref_rot_radius
@@ -1156,10 +1154,9 @@ function plot_position(in_act_dist)
 
     if car_sign == 0 or curr_node >= #t_node - 2 then
         if curr_node ~= #t_node then
-            if
-                remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
-                    t_node[curr_node + 1].AoC < 160
-             then
+            if remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
+                t_node[curr_node + 1].AoC < 160
+            then
                 if t_node[curr_node + 1].dir == -1 then
                     car_sign = 3
                 elseif t_node[curr_node + 1].dir == 1 then
@@ -1181,14 +1178,14 @@ function plot_position(in_act_dist)
             if depart_arrive ~= 1 then
                 local l_gate_in_sight, l_to_gate_heading, _ =
                     chk_line_of_sight(
-                    car_body_heading,
-                    45,
-                    45,
-                    car_x,
-                    car_z,
-                    t_gate[arrival_gate].x,
-                    t_gate[arrival_gate].z
-                )
+                        car_body_heading,
+                        45,
+                        45,
+                        car_x,
+                        car_z,
+                        t_gate[arrival_gate].x,
+                        t_gate[arrival_gate].z
+                    )
                 if l_gate_in_sight then
                     car_sign = 1
                 else
@@ -1288,12 +1285,8 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
                 l_revised = true
             end
 
-            if
-                t_node[curr_node + 1].dist_b4_turn + (min_rot_radius + car_rear_wheel_to_ref) >
-                    t_node[curr_node + 1].dist
-             then
-                t_node[curr_node + 1].dist_b4_turn =
-                    t_node[curr_node + 1].dist - (min_rot_radius + car_rear_wheel_to_ref)
+            if t_node[curr_node + 1].dist_b4_turn + (min_rot_radius + car_rear_wheel_to_ref) > t_node[curr_node + 1].dist then
+                t_node[curr_node + 1].dist_b4_turn = t_node[curr_node + 1].dist - (min_rot_radius + car_rear_wheel_to_ref)
                 if t_node[curr_node + 1].dist_b4_turn < min_rot_radius * 2 + car_rear_wheel_to_ref then
                     t_node[curr_node + 1].dist_b4_turn = min_rot_radius + car_rear_wheel_to_ref
                 end
@@ -1718,8 +1711,7 @@ function object_physics()
         l_car_in_sight, _, l_dist = chk_line_of_sight(fm_plane_head, 80, 80, fm_plane_x, fm_plane_z, car_x, car_z)
         local l_car_to_plane_head, l_car_to_plane_dist = 0, 0
         if not l_car_in_sight and l_dist <= 200 then
-            l_car_is_behind, l_car_to_plane_head, l_car_to_plane_dist =
-                chk_line_of_sight(car_body_heading, 45, 45, car_x, car_z, fm_plane_x, fm_plane_z)
+            l_car_is_behind, l_car_to_plane_head, l_car_to_plane_dist = chk_line_of_sight(car_body_heading, 45, 45, car_x, car_z, fm_plane_x, fm_plane_z)
         end
         move_car(l_dist, l_car_in_sight, l_car_is_behind)
         draw_object(car_x, car_y, car_z, car_body_heading)
@@ -2082,36 +2074,35 @@ end
 -- FlyWithLua reloads the Lua engine on airport/aircraft changes.
 -- ====================================================
 function register_dataref()
-
     -- Datarefs natifs X-Plane - FindDataRef, pas RegisterDataAccessor
     dr_tire_steer = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_steer_deg")
     dr_tire_rotate = XPLM.XPLMFindDataRef("sim/graphics/animation/ground_traffic/tire_rotation_angle_deg")
 
-	-- fm/anim/sign: custom dataref
-	-- LUA_RUN == 1 -> first boot -> it is registered
-	-- LUA_RUN > 1 -> reload after airport change -> it already exists -> FindDataRef
+    -- fm/anim/sign: custom dataref
+    -- LUA_RUN == 1 -> first boot -> it is registered
+    -- LUA_RUN > 1 -> reload after airport change -> it already exists -> FindDataRef
     dr_sign =
         XPLM.XPLMRegisterDataAccessor(
-        "fm/anim/sign",
-        2,
-        0,
-        NULL,
-        NULL,
-        function(inRefcon)
-            return car_sign
-        end,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-    )
+            "fm/anim/sign",
+            2,
+            0,
+            NULL,
+            NULL,
+            function(inRefcon)
+                return car_sign
+            end,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL
+        )
 end
 
 -- VER1.17: called every frame in draw_object() to push steering/tire_rotate/car_sign
@@ -2170,7 +2161,7 @@ function get_airport_elements()
         curr_ICAO_name = l_new_ICAO_name
 
         if taxiway_network ~= "" then
-            XPLMSpeakString("FM Service is not available at this airport")
+            XPLMSpeakString("Follow Me Service is not available at this airport")
             return
         end
 
@@ -2283,10 +2274,7 @@ function read_apt_file(in_ICAO)
                                 l_new_lines = string.sub(l_new_lines, l_start)
                                 for l_line2 in l_new_lines:gmatch("[^\r\n]+") do
                                     if string.find(l_line2, in_ICAO) then
-                                        if
-                                            string.match(l_line2, "^%d+ %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*([^%s]+)%s*.*") ==
-                                                in_ICAO
-                                         then
+                                        if string.match(l_line2, "^%d+ %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*([^%s]+)%s*.*") == in_ICAO then
                                             l_airport_found = true
                                             l_not_first_line = false
                                             initialise_airport()
@@ -2427,19 +2415,19 @@ function decipher_runway(in_str)
     t_runway[i + 1] = {}
     t_runway[i].ID, l_str1, l_str2, t_runway[i + 1].ID, l_str3, l_str4 =
         string.match(
-        in_str,
-        "100 %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*" ..
+            in_str,
+            "100 %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*" ..
             "([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*" ..
-                "[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*" ..
-                    "([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*" .. "(.*)"
-    )
+            "[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*" ..
+            "([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*" .. "(.*)"
+        )
     t_runway[i].Lat = tonumber(l_str1)
     t_runway[i].Lon = tonumber(l_str2)
-	-- VER1.7: -1 = not assigned (0 is a valid node_id)
+    -- VER1.7: -1 = not assigned (0 is a valid node_id)
     t_runway[i].Node = -1
     t_runway[i + 1].Lat = tonumber(l_str3)
     t_runway[i + 1].Lon = tonumber(l_str4)
-	-- VER1.7: -1 = not assigned (0 is a valid node_id)
+    -- VER1.7: -1 = not assigned (0 is a valid node_id)
     t_runway[i + 1].Node = -1
     -- VER1.24 : store cross-references so each threshold knows its opposite (same apt.dat line 100)
     t_runway[i].Pair = i + 1
@@ -2523,7 +2511,7 @@ function decipher_ramp_operation(in_str)
         return
     end
     l_str1, l_str2 = string.match(in_str, "1301 %s*(%a)%s*([^%s]+)%s*")
-	-- VER1.21: store terminal letter for disambiguation
+    -- VER1.21: store terminal letter for disambiguation
     t_gate[i].Terminal = l_str1 or ""
     if l_str1 == "E" and string.find(l_types, "1") then
         t_gate[i].Types = string.sub(l_types, 3)
@@ -2610,11 +2598,11 @@ function decipher_taxisegment(in_str)
     t_segment[i].Hotzone = ""
     t_segment[i].Heading, t_segment[i].Dist =
         heading_n_dist(
-        t_taxinode[t_segment[i].Node1 + 1].x,
-        t_taxinode[t_segment[i].Node1 + 1].z,
-        t_taxinode[t_segment[i].Node2 + 1].x,
-        t_taxinode[t_segment[i].Node2 + 1].z
-    )
+            t_taxinode[t_segment[i].Node1 + 1].x,
+            t_taxinode[t_segment[i].Node1 + 1].z,
+            t_taxinode[t_segment[i].Node2 + 1].x,
+            t_taxinode[t_segment[i].Node2 + 1].z
+        )
     if t_taxinode[t_segment[i].Node1 + 1].Segment == "" then
         t_taxinode[t_segment[i].Node1 + 1].Segment = tostring(i)
     else
@@ -2670,7 +2658,7 @@ function decipher_vehicle_edge(in_str)
         local l_n2 = tonumber(l_str2)
         if l_n1 ~= nil and l_n2 ~= nil then
             local l_idx = #t_filter_1206 + 1
-            t_filter_1206[l_idx] = {Node1 = l_n1, Node2 = l_n2}
+            t_filter_1206[l_idx] = { Node1 = l_n1, Node2 = l_n2 }
         end
     end
 end
@@ -2808,7 +2796,7 @@ function determine_runway_node()
     local l_rows = #t_runway
     l_idx = 1
     while l_idx <= l_rows do
-		-- VER1.7 : -1 = unassigned
+        -- VER1.7 : -1 = unassigned
         if t_runway[l_idx].Node == -1 then
             t_deleted_runway[#t_deleted_runway + 1] = t_runway[l_idx].ID
             table.remove(t_runway, l_idx)
@@ -2846,7 +2834,7 @@ function match_runway(in_runway_idx)
     local l_best_any = -1
     local l_rwy_x = t_runway[in_runway_idx].x
     local l_rwy_z = t_runway[in_runway_idx].z
-	-- l_rwy_id : e.g. "11", "29", "06", "24"
+    -- l_rwy_id : e.g. "11", "29", "06", "24"
     local l_rwy_id = t_runway[in_runway_idx].ID
 
     -- Build nodes on THIS runway's segments
@@ -2893,10 +2881,9 @@ function match_runway(in_runway_idx)
                 end
                 local l_has_twy = false
                 for l_seg = 1, #t_segment do
-                    if
-                        (t_segment[l_seg].Node1 == l_node_id or t_segment[l_seg].Node2 == l_node_id) and
-                            t_segment[l_seg].Type ~= "runway"
-                     then
+                    if (t_segment[l_seg].Node1 == l_node_id or t_segment[l_seg].Node2 == l_node_id) and
+                        t_segment[l_seg].Type ~= "runway"
+                    then
                         l_has_twy = true
                         break
                     end
@@ -2951,9 +2938,9 @@ function full_reset()
     kill_is_manual = false
     ground_time = 0
     flightstart = 0
-	-- new airport = fresh runway list
+    -- new airport = fresh runway list
     t_deleted_runway = {}
-	-- VER1.12 : force apt.dat reload on next get_airport_elements()
+    -- VER1.12 : force apt.dat reload on next get_airport_elements()
     curr_ICAO = ""
     initialise_airport()
     initialise_routes()
@@ -3004,7 +2991,7 @@ function initialise_routes()
     Err_Msg[2] = {}
     Err_Msg[3] = {}
     depart_arrive = 0
-	-- VER1.8
+    -- VER1.8
     is_backtaxi = false
     window_first_access = true
 end
@@ -3035,7 +3022,7 @@ function handle_plugin_window()
     -- Max realistic speed 250kts = 128m/s at 20fps = 6.4m/frame, never > 100m
     if prev_plane_x ~= 0 then
         local _, l_teleport_dist = heading_n_dist(prev_plane_x, prev_plane_z, fm_plane_x, fm_plane_z)
-		-- VER1.12 fix: 1000m avoids false reset during scene loading (plane can jump 300-900m)
+        -- VER1.12 fix: 1000m avoids false reset during scene loading (plane can jump 300-900m)
         if l_teleport_dist >= 1000 then
             full_reset()
         end
@@ -3043,8 +3030,10 @@ function handle_plugin_window()
     prev_plane_x = fm_plane_x
     prev_plane_z = fm_plane_z
 
+    --When the airplane leaves the ground, the follow-me car window closes
     if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
         if flightstart == 0 then
+            --After 3 minutes in flight (180), the Follow Me Car is destroyed if still active
             flightstart = fm_run_time + 180
             -- VER1.6 : close the main window automatically at takeoff
             if followme_wnd ~= nil then
@@ -3081,10 +3070,9 @@ function handle_plugin_window()
 
     -- VER1.5 : Auto-trigger via SimBrief (replaces FMS)
     if FM_car_active == false and get_from_SimBrief == true and fm_gear1_gnd == 1 and holder_wnd then
-        if
-            (prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 1) or
-                (prev_beacon_light ~= fm_beacon_light and fm_beacon_light == 1)
-         then
+        if (prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 1) or
+            (prev_beacon_light ~= fm_beacon_light and fm_beacon_light == 1)
+        then
             get_airport_elements()
             if taxiway_network == "" then
                 if depart_runway ~= "" then
@@ -3105,21 +3093,19 @@ function handle_plugin_window()
 
     -- VER1.6 fix : speed warning when aircraft exceeds 20 kts and speed_limiter is active
     -- 10.288 m/s = 20 kts ; warning repeats every 15 seconds max
-    if
-        speed_limiter and FM_car_active and fm_gear1_gnd == 1 and fm_gear2_gnd == 1 and fm_gnd_spd > 10.288 and
-            fm_run_time > speed_warn_time
-     then
+    if speed_limiter and FM_car_active and fm_gear1_gnd == 1 and fm_gear2_gnd == 1 and fm_gnd_spd > 10.288 and 
+        fm_run_time > speed_warn_time
+    then
         play_sound(snd_keep_speed)
-		-- repeat at most every 15 seconds
+        -- repeat at most every 15 seconds
         speed_warn_time = fm_run_time + 15
     end
 
-    if
-        FM_car_active == false and flightstart == 9999 and (fm_gear1_gnd == 1 and fm_gear2_gnd == 1) and
-            ground_time == 0 and
-            fm_taxi_light == 1 and
-            fm_gnd_spd < 15
-     then
+    if FM_car_active == false and flightstart == 9999 and (fm_gear1_gnd == 1 and fm_gear2_gnd == 1) and
+        ground_time == 0 and
+        fm_taxi_light == 1 and
+        fm_gnd_spd < 15
+    then
         get_airport_elements()
         if taxiway_network == "" then
             if random_gate == true or arrival_gate > 0 then
@@ -3219,11 +3205,10 @@ function handle_plugin_window()
     end
 
     if holder_wnd then
-        if
-            MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
-                MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
-                MOUSE_Y <= SCREEN_HIGHT - Win_Y
-         then
+        if MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
+            MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
+            MOUSE_Y <= SCREEN_HIGHT - Win_Y
+        then
             float_wnd_bring_to_front(holder_wnd)
         end
         if holder_drag == 3 and followme_wnd ~= nil then
@@ -3236,14 +3221,13 @@ function handle_plugin_window()
         -- Only bring FM window to front if mouse is over it but NOT over the holder icon
         local l_over_holder =
             (MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
-            MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
-            MOUSE_Y <= SCREEN_HIGHT - Win_Y)
+                MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
+                MOUSE_Y <= SCREEN_HIGHT - Win_Y)
         if not l_over_holder then
-            if
-                MOUSE_X >= SCREEN_WIDTH - 400 - Holder_len and MOUSE_X <= SCREEN_WIDTH - Holder_len and
-                    MOUSE_Y >= SCREEN_HIGHT - (Win_Y + 400) and
-                    MOUSE_Y <= SCREEN_HIGHT - Win_Y
-             then
+            if MOUSE_X >= SCREEN_WIDTH - 400 - Holder_len and MOUSE_X <= SCREEN_WIDTH - Holder_len and
+                MOUSE_Y >= SCREEN_HIGHT - (Win_Y + 400) and
+                MOUSE_Y <= SCREEN_HIGHT - Win_Y
+            then
                 float_wnd_bring_to_front(followme_wnd)
             end
         end
@@ -3342,12 +3326,12 @@ function build_window(wnd, x, y)
 
     local l_flags =
         bit.bor(
-        imgui.constant.WindowFlags.NoTitleBar,
-        imgui.constant.WindowFlags.NoResize,
-        imgui.constant.WindowFlags.NoMove,
-        imgui.constant.WindowFlags.HorizontalScrollbar,
-        imgui.constant.WindowFlags.NoSavedSettings
-    )
+            imgui.constant.WindowFlags.NoTitleBar,
+            imgui.constant.WindowFlags.NoResize,
+            imgui.constant.WindowFlags.NoMove,
+            imgui.constant.WindowFlags.HorizontalScrollbar,
+            imgui.constant.WindowFlags.NoSavedSettings
+        )
 
     if window_first_access == true then
         get_airport_elements()
@@ -3384,7 +3368,7 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
-	-- light gray
+    -- light gray
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
 
     if get_from_SimBrief then
@@ -3408,7 +3392,7 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(35)
     imgui.SetCursorPosX(10)
-	-- light gray
+    -- light gray
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
 
     if get_from_SimBrief then
@@ -3570,10 +3554,9 @@ function build_window(wnd, x, y)
             end
             t_suitable_gates = {}
             for i = 1, #t_gate do
-                if
-                    string.match(t_gate[i].Types, Aircraft_Type) == Aircraft_Type or
-                        (Aircraft_Type == "0" and string.match(t_gate[i].Types, "7"))
-                 then
+                if string.match(t_gate[i].Types, Aircraft_Type) == Aircraft_Type or
+                    (Aircraft_Type == "0" and string.match(t_gate[i].Types, "7"))
+                then
                     t_suitable_gates[#t_suitable_gates + 1] = i
                 end
             end
@@ -3632,7 +3615,7 @@ function build_window(wnd, x, y)
     if l_changed then
         speed_limiter = l_newval
         if speed_limiter == true then
-			-- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
+            -- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
             speed_max = 10.288
         else
             speed_max = car_default_speed
@@ -3668,47 +3651,47 @@ function build_window(wnd, x, y)
     -- VER2.0 : ARROW POINTER FOLLOW ME CAR
     -- Replaced simple line with a filled arrowhead triangle pointing toward the FM car
     -- relative to the aircraft heading. The tip points in the car direction.
-	if FM_car_active and car_x ~= 0 then
-	    -- Absolute bearing from aircraft to FM car
-	    local l_bearing_to_car, l_dist_to_car = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
+    if FM_car_active and car_x ~= 0 then
+        -- Absolute bearing from aircraft to FM car
+        local l_bearing_to_car, l_dist_to_car = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
 
-	    -- Relative angle: 0=front, 90=right, 180=rear, 270=left  (aircraft-relative, 0-360)
-	    local l_rel_angle = l_bearing_to_car - fm_plane_head
-	    while l_rel_angle < 0   do l_rel_angle = l_rel_angle + 360 end
-	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
+        -- Relative angle: 0=front, 90=right, 180=rear, 270=left  (aircraft-relative, 0-360)
+        local l_rel_angle = l_bearing_to_car - fm_plane_head
+        while l_rel_angle < 0 do l_rel_angle = l_rel_angle + 360 end
+        while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
 
-	    -- Draw a filled yellow arrow triangle pointing toward the car
-	    local cx, cy    = 370, 220
-		-- distance from center to tip
-	    local tip_len   = 18
-		-- half-width of arrow base
-	    local wing_len  = 10
-		-- distance from center to base (behind center)
-	    local tail_len  = 8
+        -- Draw a filled yellow arrow triangle pointing toward the car
+        local cx, cy    = 370, 220
+        -- distance from center to tip
+        local tip_len   = 18
+        -- half-width of arrow base
+        local wing_len  = 10
+        -- distance from center to base (behind center)
+        local tail_len  = 8
 
-	    -- Tip direction (0 deg = up = north = forward)
-	    local tip_rad   = math.rad(l_rel_angle - 90)
-	    -- Base direction (opposite of tip)
-	    local base_rad  = math.rad(l_rel_angle + 90)
-	    -- Wing perpendicular directions
-		-- perpendicular left
-	    local left_rad  = math.rad(l_rel_angle - 90 + 90)
-		-- perpendicular right
-	    local right_rad = math.rad(l_rel_angle - 90 - 90)
+        -- Tip direction (0 deg = up = north = forward)
+        local tip_rad   = math.rad(l_rel_angle - 90)
+        -- Base direction (opposite of tip)
+        local base_rad  = math.rad(l_rel_angle + 90)
+        -- Wing perpendicular directions
+        -- perpendicular left
+        local left_rad  = math.rad(l_rel_angle - 90 + 90)
+        -- perpendicular right
+        local right_rad = math.rad(l_rel_angle - 90 - 90)
 
-	    local tip_x  = cx + math.cos(tip_rad)   * tip_len
-	    local tip_y  = cy + math.sin(tip_rad)   * tip_len
-	    local base_x = cx + math.cos(base_rad)  * tail_len
-	    local base_y = cy + math.sin(base_rad)  * tail_len
+        local tip_x     = cx + math.cos(tip_rad) * tip_len
+        local tip_y     = cy + math.sin(tip_rad) * tip_len
+        local base_x    = cx + math.cos(base_rad) * tail_len
+        local base_y    = cy + math.sin(base_rad) * tail_len
 
-	    local lw_x = base_x + math.cos(left_rad)  * wing_len
-	    local lw_y = base_y + math.sin(left_rad)  * wing_len
-	    local rw_x = base_x + math.cos(right_rad) * wing_len
-	    local rw_y = base_y + math.sin(right_rad) * wing_len
+        local lw_x      = base_x + math.cos(left_rad) * wing_len
+        local lw_y      = base_y + math.sin(left_rad) * wing_len
+        local rw_x      = base_x + math.cos(right_rad) * wing_len
+        local rw_y      = base_y + math.sin(right_rad) * wing_len
 
-	    -- Filled yellow triangle (tip, left-wing, right-wing)
-	    imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, 0xFF00FFFF)
-	end
+        -- Filled yellow triangle (tip, left-wing, right-wing)
+        imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, 0xFF00FFFF)
+    end
 
     -- VER1.6 : Speed display zone - reserved read-only row below button
     imgui.SetCursorPosY(239)
@@ -3838,21 +3821,21 @@ function build_window(wnd, x, y)
         end
     end
 
-	-- Dark green (RGBA hex)
-	imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
-	-- Lighter green on hover
-	imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
-	-- Green when clicked
-	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
+    -- Dark green (RGBA hex)
+    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
+    -- Lighter green on hover
+    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
+    -- Green when clicked
+    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
 
-	imgui.SetCursorPosY(335)
-	imgui.SetCursorPosX(220)
-	if imgui.Button("Save Preferences", 130, 30) then
-	    l_err = save_config()
-	end
+    imgui.SetCursorPosY(335)
+    imgui.SetCursorPosX(220)
+    if imgui.Button("Save Preferences", 130, 30) then
+        l_err = save_config()
+    end
 
-	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
-	imgui.PopStyleColor(3)
+    -- VERY IMPORTANT: Pop styles to avoid affecting other buttons
+    imgui.PopStyleColor(3)
 
     imgui.SetCursorPosY(385)
     imgui.SetCursorPosX(20)
@@ -3967,7 +3950,7 @@ function build_window(wnd, x, y)
     if FM_car_active and car_x ~= 0 then
         local l_bear_rt, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
         local l_rel_rt = l_bear_rt - fm_plane_head
-        while l_rel_rt < 0   do l_rel_rt = l_rel_rt + 360 end
+        while l_rel_rt < 0 do l_rel_rt = l_rel_rt + 360 end
         while l_rel_rt >= 360 do l_rel_rt = l_rel_rt - 360 end
         local l_dir_msg
         if l_rel_rt > 300 or l_rel_rt < 60 then
@@ -4018,7 +4001,7 @@ function set_sound_vol()
     set_sound_gain(snd_safeflight_bye, vol / 10)
     set_sound_gain(snd_welcome, vol / 10)
     set_sound_gain(snd_welcome_bye, vol / 10)
-	-- VER1.6 fix : speed warning
+    -- VER1.6 fix : speed warning
     set_sound_gain(snd_keep_speed, vol / 10)
     set_sound_gain(snd_test, vol / 10)
 end
@@ -4110,7 +4093,7 @@ function update_msg(in_msg)
         if FM_car_active and car_x ~= 0 then
             local l_bear, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
             local l_rel = l_bear - fm_plane_head
-            while l_rel < 0   do l_rel = l_rel + 360 end
+            while l_rel < 0 do l_rel = l_rel + 360 end
             while l_rel >= 360 do l_rel = l_rel - 360 end
             if l_rel > 300 or l_rel < 60 then
                 in_msg = "Follow Me Car is ahead"
@@ -4243,11 +4226,11 @@ function determine_possible_routes()
     if depart_gate ~= 0 then
         l_found, l_startpt_node, l_startpt_x, l_startpt_z =
             determine_pos_on_segment(
-            t_gate[depart_gate].Heading,
-            t_gate[depart_gate].x,
-            t_gate[depart_gate].z,
-            t_gate[depart_gate].Ramptype
-        )
+                t_gate[depart_gate].Heading,
+                t_gate[depart_gate].x,
+                t_gate[depart_gate].z,
+                t_gate[depart_gate].Ramptype
+            )
     else
         local l_adj_fm_plane_x = 0
         local l_adj_fm_plane_z = 0
@@ -4274,18 +4257,18 @@ function determine_possible_routes()
                 break
             end
         end
-		-- VER1.17: is_backtaxi removed
-		-- the new universal logic in process_possible_routes() ALWAYS sends the car to the GPS threshold,
-		-- whether there is a backtaxi or not. is_backtaxi remains permanently false.
+        -- VER1.17: is_backtaxi removed
+        -- the new universal logic in process_possible_routes() ALWAYS sends the car to the GPS threshold,
+        -- whether there is a backtaxi or not. is_backtaxi remains permanently false.
         is_backtaxi = false
     else
         l_found, l_endpt_node, l_endpt_x, l_endpt_z =
             determine_pos_on_segment(
-            t_gate[arrival_gate].Heading,
-            t_gate[arrival_gate].x,
-            t_gate[arrival_gate].z,
-            "gate"
-        )
+                t_gate[arrival_gate].Heading,
+                t_gate[arrival_gate].x,
+                t_gate[arrival_gate].z,
+                "gate"
+            )
         if l_found == false then
             return "-13"
         end
@@ -4296,11 +4279,11 @@ function determine_possible_routes()
     for l_index = 1, #t_taxinode do
         _, t_taxinode[l_index].h_value =
             heading_n_dist(
-            t_taxinode[l_index].x,
-            t_taxinode[l_index].z,
-            t_taxinode[l_endpt_node + 1].x,
-            t_taxinode[l_endpt_node + 1].z
-        )
+                t_taxinode[l_index].x,
+                t_taxinode[l_index].z,
+                t_taxinode[l_endpt_node + 1].x,
+                t_taxinode[l_endpt_node + 1].z
+            )
     end
 
     if depart_gate ~= 0 then
@@ -4410,10 +4393,9 @@ function transverse(in_startnode, in_endnode, in_heading)
         for l_string in t_taxinode[l_curr_node + 1].Segment:gmatch("[^,]+") do
             l_segment_idx = tonumber(l_string)
             l_pass = false
-            if
-                t_segment[l_segment_idx].Type ~= "runway" or
-                    (t_segment[l_segment_idx].Type == "runway" and not impose_restriction_chk)
-             then
+            if t_segment[l_segment_idx].Type ~= "runway" or
+                (t_segment[l_segment_idx].Type == "runway" and not impose_restriction_chk)
+            then
                 if t_segment[l_segment_idx].Node1 == l_curr_node then
                     l_node = t_segment[l_segment_idx].Node2
                     l_pass = evaluate_node(l_node, t_segment[l_segment_idx].Size, t_open, t_close)
@@ -4528,7 +4510,7 @@ function transverse(in_startnode, in_endnode, in_heading)
         end
         logMsg(
             "FollowMe : RAW A* ROUTE" ..
-                " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_label .. " TO=" .. l_to_label
+            " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_label .. " TO=" .. l_to_label
         )
         logMsg("FollowMe : RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
         local l_raw_count = 0
@@ -4572,19 +4554,19 @@ function process_possible_routes()
         routenode_cnt = routenode_cnt + 1
     end
 
-	-- VER1.20: Scan l_last_taxiway and break hotzone removed.
-	-- All A* nodes are inserted as DRIVE NODE unconditionally.
-	-- VER1.17 handles runway entry independently (centerline projection + GPS threshold).
+    -- VER1.20: Scan l_last_taxiway and break hotzone removed.
+    -- All A* nodes are inserted as DRIVE NODE unconditionally.
+    -- VER1.17 handles runway entry independently (centerline projection + GPS threshold).
     for routenode_cnt = 1, #t_route_nodes do
         l_node = t_route_nodes[routenode_cnt]
         if l_index > 1 then
             l_new_head, l_new_dist =
                 heading_n_dist(
-                t_node[l_index - 1].x,
-                t_node[l_index - 1].z,
-                t_taxinode[l_node + 1].x,
-                t_taxinode[l_node + 1].z
-            )
+                    t_node[l_index - 1].x,
+                    t_node[l_index - 1].z,
+                    t_taxinode[l_node + 1].x,
+                    t_taxinode[l_node + 1].z
+                )
         end
         t_node[l_index] = {}
         t_node[l_index].hotzone = ""
@@ -4602,20 +4584,20 @@ function process_possible_routes()
         if t_node[l_index].dist < l_min_dist_btw_nodes then
             t_node[l_index + 1].x, t_node[l_index + 1].z =
                 coordinates_of_adjusted_ref(
-                t_node[l_index + 1].x,
-                t_node[l_index + 1].z,
-                0,
-                (l_min_dist_btw_nodes - t_node[l_index].dist),
-                t_node[l_index].heading
-            )
+                    t_node[l_index + 1].x,
+                    t_node[l_index + 1].z,
+                    0,
+                    (l_min_dist_btw_nodes - t_node[l_index].dist),
+                    t_node[l_index].heading
+                )
             t_node[l_index].dist = l_min_dist_btw_nodes
             t_node[l_index + 1].heading, t_node[l_index + 1].dist =
                 heading_n_dist(
-                t_node[l_index + 1].x,
-                t_node[l_index + 1].z,
-                t_node[l_index + 2].x,
-                t_node[l_index + 2].z
-            )
+                    t_node[l_index + 1].x,
+                    t_node[l_index + 1].z,
+                    t_node[l_index + 2].x,
+                    t_node[l_index + 2].z
+                )
         end
     end
 
@@ -4671,14 +4653,14 @@ function process_possible_routes()
                 l_far_z = t_runway[l_pair_idx].z
                 logMsg(
                     "FollowMe : RWY " ..
-                        depart_runway ..
-                            " centreline from pair idx=" ..
-                                l_pair_idx ..
-                                    " ID=" ..
-                                        (t_runway[l_pair_idx].ID or "?") ..
-                                            " lat=" ..
-                                                string.format("%.6f", t_runway[l_pair_idx].Lat or 0) ..
-                                                    " lon=" .. string.format("%.6f", t_runway[l_pair_idx].Lon or 0)
+                    depart_runway ..
+                    " centreline from pair idx=" ..
+                    l_pair_idx ..
+                    " ID=" ..
+                    (t_runway[l_pair_idx].ID or "?") ..
+                    " lat=" ..
+                    string.format("%.6f", t_runway[l_pair_idx].Lat or 0) ..
+                    " lon=" .. string.format("%.6f", t_runway[l_pair_idx].Lon or 0)
                 )
             end
         end
@@ -4768,20 +4750,20 @@ function process_possible_routes()
             l_node_list =
                 l_node_list ..
                 l_ni ..
-                    l_hz ..
-                        "(lat=" ..
-                            string.format("%.6f", l_gps_lat) ..
-                                " lon=" ..
-                                    string.format("%.6f", l_gps_lon) ..
-                                        " x=" ..
-                                            string.format("%.1f", t_node[l_ni].x or 0) ..
-                                                " z=" ..
-                                                    string.format("%.1f", t_node[l_ni].z or 0) ..
-                                                        " hdg=" ..
-                                                            string.format("%.0f", t_node[l_ni].heading or 0) ..
-                                                                " d=" ..
-                                                                    string.format("%.0f", t_node[l_ni].dist or 0) ..
-                                                                        "m) "
+                l_hz ..
+                "(lat=" ..
+                string.format("%.6f", l_gps_lat) ..
+                " lon=" ..
+                string.format("%.6f", l_gps_lon) ..
+                " x=" ..
+                string.format("%.1f", t_node[l_ni].x or 0) ..
+                " z=" ..
+                string.format("%.1f", t_node[l_ni].z or 0) ..
+                " hdg=" ..
+                string.format("%.0f", t_node[l_ni].heading or 0) ..
+                " d=" ..
+                string.format("%.0f", t_node[l_ni].dist or 0) ..
+                "m) "
         end
         logMsg(
             "FollowMe : DRIVE ROUTE" .. " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
@@ -4969,12 +4951,11 @@ function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
     l_tangent_x = in_x + math.sin(math.rad(l_tangent_heading)) * l_tangent_dist
     l_tangent_z = in_z + math.cos(math.rad(l_tangent_heading)) * l_tangent_dist * -1
 
-    if
-        ((l_tangent_x >= l_node1_x and l_tangent_x <= l_node2_x) or
-            (l_tangent_x >= l_node2_x and l_tangent_x <= l_node1_x)) or
-            ((l_tangent_z >= l_node1_z and l_tangent_z <= l_node2_z) or
-                (l_tangent_z >= l_node2_z and l_tangent_z <= l_node1_z))
-     then
+    if ((l_tangent_x >= l_node1_x and l_tangent_x <= l_node2_x) or
+        (l_tangent_x >= l_node2_x and l_tangent_x <= l_node1_x)) or
+        ((l_tangent_z >= l_node1_z and l_tangent_z <= l_node2_z) or
+        (l_tangent_z >= l_node2_z and l_tangent_z <= l_node1_z))
+    then
         return true, l_tangent_dist, l_tangent_x, l_tangent_z, l_goto_node
     else
         return false, 0, 0, 0, 0
@@ -5028,12 +5009,11 @@ function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
         l_intersect_x = (l_var1 + l_var2 + l_var3) / l_var4
     end
 
-    if
-        ((l_intersect_x >= l_node1_x and l_intersect_x <= l_node2_x) or
-            (l_intersect_x >= l_node2_x and l_intersect_x <= l_node1_x)) and
-            ((l_intersect_z >= l_node1_z and l_intersect_z <= l_node2_z) or
-                (l_intersect_z >= l_node2_z and l_intersect_z <= l_node1_z))
-     then
+    if ((l_intersect_x >= l_node1_x and l_intersect_x <= l_node2_x) or
+        (l_intersect_x >= l_node2_x and l_intersect_x <= l_node1_x)) and
+        ((l_intersect_z >= l_node1_z and l_intersect_z <= l_node2_z) or
+        (l_intersect_z >= l_node2_z and l_intersect_z <= l_node1_z)) 
+    then
     else
         return false, 0, 0, 0
     end
@@ -5140,11 +5120,11 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         t_segment[l_new_segment].Hotzone = t_segment[in_segment_index].Hotzone
         t_segment[l_new_segment].Heading, t_segment[l_new_segment].Dist =
             heading_n_dist(
-            t_taxinode[t_segment[in_segment_index].Node1 + 1].x,
-            t_taxinode[t_segment[in_segment_index].Node1 + 1].z,
-            in_x,
-            in_z
-        )
+                t_taxinode[t_segment[in_segment_index].Node1 + 1].x,
+                t_taxinode[t_segment[in_segment_index].Node1 + 1].z,
+                in_x,
+                in_z
+            )
         t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment =
             t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment .. "," .. tostring(l_new_segment)
         t_taxinode[l_idx].Segment = tostring(l_new_segment)
@@ -5162,11 +5142,11 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         t_segment[l_new_segment].Hotzone = t_segment[in_segment_index].Hotzone
         t_segment[l_new_segment].Heading, t_segment[l_new_segment].Dist =
             heading_n_dist(
-            in_x,
-            in_z,
-            t_taxinode[t_segment[in_segment_index].Node2 + 1].x,
-            t_taxinode[t_segment[in_segment_index].Node2 + 1].z
-        )
+                in_x,
+                in_z,
+                t_taxinode[t_segment[in_segment_index].Node2 + 1].x,
+                t_taxinode[t_segment[in_segment_index].Node2 + 1].z
+            )
         t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment =
             t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment .. "," .. tostring(l_new_segment)
         if t_taxinode[l_idx].Segment == "" then
@@ -5199,10 +5179,9 @@ function auto_assign_gate()
 
     t_suitable_gates = {}
     for l_index = 1, #t_gate do
-        if
-            string.match(t_gate[l_index].Types, Aircraft_Type) == Aircraft_Type or
-                (Aircraft_Type == "0" and string.match(t_gate[l_index].Types, "7"))
-         then
+        if string.match(t_gate[l_index].Types, Aircraft_Type) == Aircraft_Type or
+            (Aircraft_Type == "0" and string.match(t_gate[l_index].Types, "7"))
+        then
             t_suitable_gates[#t_suitable_gates + 1] = l_index
         end
     end
@@ -5488,7 +5467,7 @@ end
 -- Lua engine is torn down.
 -- ====================================================
 function exit_plugin()
-	-- VER1.12 : clean up all 3D objects and state
+    -- VER1.12 : clean up all 3D objects and state
     full_reset()
     -- unload_object/path/rampstart already called by full_reset if active
     unload_probe()
