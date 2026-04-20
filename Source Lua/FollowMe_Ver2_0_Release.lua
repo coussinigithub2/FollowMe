@@ -136,6 +136,7 @@
 --                           2-Right (60-120 deg)           : "Follow Me Car is on the right"
 --                           3-Rear  (120-240 deg)          : "Follow Me Car is behind"
 --                           4-Left  (240-300 deg)          : "Follow Me Car is on the left"
+--                           Normalize all sound (same speaker)
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -463,7 +464,9 @@ local snd_safeflight_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/s
 local snd_welcome = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_followme.wav")
 local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcomeagain_goodbye.wav")
 -- VER1.6 fix : speed warning sound (played when aircraft exceeds 20 kts and speed_limiter is active)
-local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/KeepYourSpeed20Kts.wav")
+local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/keep_your_speed_20kts.wav")
+-- VER2.0 : Add a sound test file. Much clearer.
+local snd_test = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/sound_test.wav")
 
 local path_is_shown = false
 local rampstart_chg = false
@@ -3866,7 +3869,7 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosY(380)
     imgui.SetCursorPosX(220)
     if imgui.Button("Test Volume", 90, 30) then
-        play_sound(snd_welcome)
+        play_sound(snd_test)
     end
 
     -- Vehicle selection
@@ -4017,6 +4020,7 @@ function set_sound_vol()
     set_sound_gain(snd_welcome_bye, vol / 10)
 	-- VER1.6 fix : speed warning
     set_sound_gain(snd_keep_speed, vol / 10)
+    set_sound_gain(snd_test, vol / 10)
 end
 
 -- ====================================================
