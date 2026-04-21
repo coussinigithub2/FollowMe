@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Taxiway Pathfinder — apt.dat Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #07090d;
+  --panel:    #0d1117;
+  --panel2:   #111820;
+  --border:   #1c2d3f;
+  --border2:  #243548;
+  --accent:   #00d4ff;
+  --accent2:  #ff6b35;
+  --green:    #3dff6e;
+  --yellow:   #ffc107;
+  --purple:   #b06fff;
+  --red:      #ff4444;
+  --path:     #ff00aa;
+  --dim:      #3a5570;
+  --text:     #b8d0e0;
+  --text-dim: #4a6880;
+  --mono:     'Share Tech Mono', monospace;
+  --sans:     'Exo 2', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; background: var(--bg);
+  color: var(--text); font-family: var(--sans);
+  overflow: hidden;
+}
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+#topbar {
+  display: flex; align-items: center; gap: 20px;
+  padding: 0 20px; height: 52px; flex-shrink: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+#topbar h1 {
+  font-size: 20px; font-weight: 800; letter-spacing: 5px;
+  color: var(--accent); text-transform: uppercase; white-space: nowrap;
+}
+#topbar .sub {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--dim); letter-spacing: 2px; white-space: nowrap;
+}
+#topbar .spacer { flex: 1; }
+#airport-badge {
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  color: var(--yellow); letter-spacing: 3px;
+  padding: 4px 12px; border: 1px solid var(--yellow);
+  border-radius: 3px; background: rgba(255,193,7,.08);
+  display: none;
+}
+
+#body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── LEFT SIDEBAR ────────────────────── */
+#sidebar {
+  width: 300px; flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.sb-section {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sb-head {
+  padding: 8px 14px;
+  background: #0a1520;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--accent); display: flex; align-items: center; gap: 8px;
+}
+.sb-head .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* DROP ZONE */
+#dropzone {
+  margin: 14px; border: 2px dashed var(--border2);
+  border-radius: 6px; padding: 20px 16px;
+  text-align: center; cursor: pointer;
+  transition: all .2s; position: relative;
+  background: rgba(0,212,255,.02);
+}
+#dropzone:hover, #dropzone.drag-over {
+  border-color: var(--accent); background: rgba(0,212,255,.07);
+}
+#dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+#dropzone .dz-icon { font-size: 28px; margin-bottom: 8px; }
+#dropzone .dz-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  margin-bottom: 4px;
+}
+#dropzone .dz-sub { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* AIRPORT SEARCH */
+#airport-search-wrap {
+  padding: 10px 14px 12px; display: flex; gap: 6px; align-items: center;
+}
+#airport-code-input {
+  flex: 1; background: #0a1520; border: 1px solid var(--border2);
+  color: var(--yellow); font-family: var(--mono); font-size: 14px;
+  font-weight: 700; letter-spacing: 4px; text-transform: uppercase;
+  padding: 6px 10px; border-radius: 3px; outline: none;
+  transition: border-color .2s;
+}
+#airport-code-input:focus { border-color: var(--yellow); }
+#airport-code-input::placeholder { color: var(--dim); font-size: 11px; letter-spacing: 2px; text-transform: none; font-weight: 400;}
+#btn-load-airport {
+  background: rgba(255,193,7,.12); border: 1px solid var(--yellow);
+  color: var(--yellow); font-family: var(--mono); font-size: 11px;
+  letter-spacing: 2px; padding: 6px 12px; cursor: pointer;
+  border-radius: 3px; transition: all .2s; white-space: nowrap;
+}
+#btn-load-airport:hover { background: rgba(255,193,7,.25); }
+#btn-load-airport:disabled { opacity: .3; cursor: not-allowed; }
+#airport-search-status {
+  padding: 0 14px 8px;
+  font-family: var(--mono); font-size: 10px; color: var(--dim);
+  min-height: 16px;
+}
+
+/* STATS */
+#stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px; background: var(--border);
+  border-top: 1px solid var(--border);
+}
+.stat-cell {
+  background: var(--panel); padding: 10px 10px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.stat-val {
+  font-family: var(--mono); font-size: 18px; font-weight: 700;
+  color: var(--accent);
+}
+.stat-lbl { font-family: var(--mono); font-size: 9px; color: var(--dim); letter-spacing: 1px; }
+
+/* LAYERS */
+#layers-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.layer-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.layer-label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+.layer-swatch { width: 18px; height: 3px; border-radius: 2px; }
+.toggle {
+  width: 34px; height: 18px; border-radius: 9px;
+  background: var(--border2); cursor: pointer;
+  position: relative; transition: background .2s; border: none;
+  flex-shrink: 0;
+}
+.toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--dim); transition: all .2s;
+}
+.toggle.on { background: rgba(61,255,110,.2); border: 1px solid var(--green); }
+.toggle.on::after { left: 17px; background: var(--green); }
+
+/* PATHFINDER */
+#pathfinder-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.pf-row { display: flex; gap: 8px; align-items: center; }
+.pf-label { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 1px; min-width: 36px; }
+.pf-select {
+  flex: 1; background: #0a1520; border: 1px solid var(--border2);
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 6px 8px; border-radius: 3px; outline: none;
+  transition: border-color .2s; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234a6880'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+  padding-right: 24px;
+}
+.pf-select:focus { border-color: var(--accent); }
+.pf-select option { background: #0d1117; }
+
+#btn-find {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(0,212,255,.15), rgba(255,0,170,.15));
+  border: 1px solid var(--accent);
+  color: var(--accent); font-family: var(--mono); font-size: 12px;
+  letter-spacing: 3px; padding: 9px; cursor: pointer;
+  border-radius: 3px; transition: all .2s; text-transform: uppercase;
+}
+#btn-find:hover { background: rgba(0,212,255,.25); box-shadow: 0 0 20px rgba(0,212,255,.2); }
+#btn-find:disabled { opacity: .3; cursor: not-allowed; }
+
+#btn-clear {
+  width: 100%;
+  background: transparent; border: 1px solid var(--border2);
+  color: var(--dim); font-family: var(--mono); font-size: 11px;
+  letter-spacing: 2px; padding: 7px; cursor: pointer;
+  border-radius: 3px; transition: all .2s;
+}
+#btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+#path-result {
+  background: #060c10; border: 1px solid var(--border);
+  border-radius: 3px; padding: 10px; min-height: 60px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.7;
+  display: none;
+}
+#path-result .pr-head { color: var(--path); font-size: 10px; letter-spacing: 2px; margin-bottom: 6px; }
+#path-result .pr-node { color: var(--text); }
+#path-result .pr-node .nid { color: var(--accent); }
+#path-result .pr-node .nm  { color: var(--dim); }
+#path-result .pr-dist { color: var(--yellow); margin-top: 6px; font-size: 10px; }
+#path-result .pr-err  { color: var(--red); }
+
+/* NODE TABLE */
+#node-table-wrap {
+  flex: 1; overflow-y: auto; min-height: 0;
+}
+#node-table-wrap table { width: 100%; border-collapse: collapse; }
+#node-table-wrap thead { position: sticky; top: 0; z-index: 2; }
+#node-table-wrap th {
+  background: #0a1520; color: var(--accent2);
+  font-family: var(--mono); font-size: 9px; letter-spacing: 2px;
+  padding: 6px 10px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+#node-table-wrap td {
+  padding: 4px 10px; border-bottom: 1px solid #0d1520;
+  font-family: var(--mono); font-size: 11px; cursor: pointer;
+}
+#node-table-wrap tr:hover td { background: #0d2030; }
+#node-table-wrap tr.selected td { background: rgba(0,212,255,.12); }
+.nid-cell { color: var(--accent); font-weight: 700; }
+.nm-cell  { color: var(--text-dim); }
+.rwy-cell { color: var(--yellow); }
+
+/* ── CANVAS AREA ─────────────────────── */
+#canvas-wrap {
+  flex: 1; position: relative; overflow: hidden;
+  background: #04070a;
+}
+#mapCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+/* CANVAS OVERLAY HINT */
+#hint {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px; pointer-events: none;
+  transition: opacity .4s;
+}
+#hint .hint-icon { font-size: 56px; opacity: .15; }
+#hint .hint-text {
+  font-family: var(--mono); font-size: 13px;
+  color: var(--dim); letter-spacing: 3px;
+  text-align: center; line-height: 2;
+}
+
+/* TOOLTIP */
+#tooltip {
+  position: fixed; pointer-events: none;
+  background: rgba(13,25,40,.97);
+  border: 1px solid var(--accent);
+  color: var(--text); padding: 8px 12px;
+  font-family: var(--mono); font-size: 11px;
+  border-radius: 3px; z-index: 200; display: none;
+  line-height: 1.8; max-width: 220px;
+  box-shadow: 0 0 20px rgba(0,212,255,.15);
+}
+
+/* PATH INFO OVERLAY (on canvas) */
+#path-overlay {
+  position: absolute; bottom: 14px; right: 14px;
+  background: rgba(7,9,13,.93); border: 1px solid var(--path);
+  border-radius: 4px; padding: 10px 14px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.8;
+  display: none; max-width: 260px;
+  box-shadow: 0 0 24px rgba(255,0,170,.2);
+}
+#path-overlay .po-head { color: var(--path); letter-spacing: 2px; font-size: 10px; margin-bottom: 4px; }
+#path-overlay .po-nodes { color: var(--text); }
+#path-overlay .po-dist { color: var(--yellow); margin-top: 4px; font-size: 10px; }
+
+/* PROGRESS BAR */
+#parse-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: transparent; z-index: 10;
+}
+#parse-bar-fill {
+  height: 100%; width: 0; background: var(--accent);
+  transition: width .3s; box-shadow: 0 0 8px var(--accent);
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <h1>Taxiway</h1>
+    <span class="sub">PATHFINDER</span>
+    <div class="spacer"></div>
+    <div id="airport-badge"></div>
+    <span class="sub" style="font-size:10px">apt.dat · X-Plane 12</span>
+  </div>
+
+  <div id="body">
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <!-- DROP ZONE -->
+      <div class="sb-section">
+        <div class="sb-head"><div class="dot"></div>SOURCE — FICHIER apt.dat GLOBAL</div>
+        <div id="dropzone">
+          <input type="file" id="fileInput" accept=".dat,.txt">
+          <div class="dz-icon">📡</div>
+          <div class="dz-title">Déposer apt.dat global ici</div>
+          <div class="dz-sub">ou cliquer pour sélectionner</div>
+        </div>
+        <!-- Airport code search -->
+        <div id="airport-search-wrap">
+          <input id="airport-code-input" type="text" maxlength="4" placeholder="Code ICAO (ex: CYUL)" autocomplete="off" spellcheck="false">
+          <button id="btn-load-airport" onclick="loadAirportByCode()" disabled>CHARGER</button>
+        </div>
+        <div id="airport-search-status">— Aucun fichier chargé</div>
+        <div id="stats-grid">
+          <div class="stat-cell"><span class="stat-val" id="st-nodes">—</span><span class="stat-lbl">NŒUDS</span></div>
+          <div class="stat-cell"><span class="stat-val" id="st-segs">—</span><span class="stat-lbl">SEGMENTS</span></div>
+          <div class="stat-cell"><span class="stat-val" id="st-rwys">—</span><span class="stat-lbl">PISTES</span></div>
+        </div>
+      </div>
+
+      <!-- LAYERS -->
+      <div class="sb-section">
+        <div class="sb-head"><div class="dot" style="background:var(--green)"></div>COUCHES</div>
+        <div id="layers-body">
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#ffc107;height:4px"></span>Pistes</span>
+            <button class="toggle on" id="tog-runway" onclick="toggleL('runway',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#3dff6e"></span>Taxiways E</span>
+            <button class="toggle on" id="tog-taxiway_E" onclick="toggleL('taxiway_E',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#00d4ff"></span>Taxiways C/D</span>
+            <button class="toggle on" id="tog-taxiway_CD" onclick="toggleL('taxiway_CD',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#3dff6e;height:6px;border-radius:50%;width:6px"></span>Nœuds</span>
+            <button class="toggle on" id="tog-nodes" onclick="toggleL('nodes',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#ff6b35;height:6px;border-radius:50%;width:6px"></span>Seuils</span>
+            <button class="toggle on" id="tog-thresh" onclick="toggleL('thresh',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#b06fff;height:6px;border-radius:50%;width:6px"></span>Terminaux</span>
+            <button class="toggle on" id="tog-gates" onclick="toggleL('gates',this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PATHFINDER -->
+      <div class="sb-section">
+        <div class="sb-head"><div class="dot" style="background:var(--path)"></div>PATHFINDER — DIJKSTRA</div>
+        <div id="pathfinder-body">
+          <div class="pf-row">
+            <span class="pf-label">FROM</span>
+            <select class="pf-select" id="pf-from">
+              <option value="">— Sélectionner départ —</option>
+            </select>
+          </div>
+          <div class="pf-row">
+            <span class="pf-label">TO</span>
+            <select class="pf-select" id="pf-to">
+              <option value="">— Sélectionner arrivée —</option>
+            </select>
+          </div>
+          <button id="btn-find" onclick="findPath()" disabled>▶ CALCULER CHEMIN</button>
+          <button id="btn-clear" onclick="clearPath()">✕ EFFACER</button>
+          <div id="path-result"></div>
+        </div>
+      </div>
+
+      <!-- NODE TABLE -->
+      <div class="sb-section" style="border-bottom:none">
+        <div class="sb-head"><div class="dot" style="background:var(--yellow)"></div>NŒUDS <span id="node-count" style="color:var(--dim);margin-left:6px">0</span></div>
+      </div>
+      <div id="node-table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>NOM</th><th>TYPE</th></tr></thead>
+          <tbody id="nodeTableBody"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- CANVAS -->
+    <div id="canvas-wrap">
+      <canvas id="mapCanvas"></canvas>
+      <div id="hint">
+        <div class="hint-icon">🛩️</div>
+        <div class="hint-text">DÉPOSER UN FICHIER apt.dat GLOBAL<br>PUIS ENTRER UN CODE ICAO (4 LETTRES)<br>ET CLIQUER CHARGER</div>
+      </div>
+      <div id="path-overlay">
+        <div class="po-head">◈ CHEMIN CALCULÉ</div>
+        <div class="po-nodes" id="po-nodes"></div>
+        <div class="po-dist" id="po-dist"></div>
+      </div>
+      <div id="parse-bar"><div id="parse-bar-fill"></div></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let FILTER_1206 = [];
+let NODES = {};       // id -> {lat, lon, name, isRwyNode, isThresh, isGate, twName}
+let SEGMENTS = [];    // [{n1,n2,type,name}]
+let RUNWAYS = [];     // [{id, lat, lon}]
+let THRESH = [];      // threshold nodes
+let GATES = [];       // start-up / ramp locations (row 1300/15)
+let GRAPH = {};
+let currentPath = [];
+
+let airportName = '';
+let airportICAO = '';
+
+// For multi-airport apt.dat: store raw text blocks per ICAO
+let RAW_AIRPORTS = {}; // icao -> raw text block
+
+const cam = { x:0, y:0, scale:1 };
+let latMin,latMax,lonMin,lonMax,latRange,lonRange;
+
+const layers = {
+  runway: true, taxiway_E: true, taxiway_CD: true,
+  nodes: true, thresh: true, gates: true
+};
+
+let isDragging = false, dragStart={x:0,y:0}, camAtDrag={x:0,y:0};
+let lastTouchDist = 0;
+
+// ════════════════════════════════════════════════════════════
+//  MULTI-AIRPORT FILE PARSING (scan ICAO index only)
+// ════════════════════════════════════════════════════════════
+function scanAptDat(text) {
+  // Build index: ICAO -> character offset
+  RAW_AIRPORTS = {};
+  const lines = text.split(/\r?\n/);
+  let currentICAO = null;
+  let startLine = 0;
+  let lineOffsets = []; // cumulative char offsets
+  let offset = 0;
+  for (let i = 0; i < lines.length; i++) {
+    lineOffsets[i] = offset;
+    offset += lines[i].length + 1;
+  }
+
+  // Two-pass: collect airport blocks
+  let blockLines = [];
+  let inAirport = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) { if (inAirport) blockLines.push(lines[i]); continue; }
+    const p = line.split(/\s+/);
+
+    if (p[0] === '1' || p[0] === '16' || p[0] === '17') {
+      // Save previous airport
+      if (inAirport && currentICAO) {
+        RAW_AIRPORTS[currentICAO] = blockLines.join('\n');
+      }
+      // Start new
+      inAirport = true;
+      blockLines = [lines[i]];
+      currentICAO = (p[4] || '').toUpperCase();
+    } else if (p[0] === '1302' && p[1] === 'icao_code' && inAirport) {
+      const code = (p[2] || '').toUpperCase();
+      if (code && code !== currentICAO) {
+        // rename key
+        if (currentICAO && RAW_AIRPORTS[currentICAO]) {
+          delete RAW_AIRPORTS[currentICAO];
+        }
+        currentICAO = code;
+      }
+      blockLines.push(lines[i]);
+    } else if (p[0] === '99') {
+      if (inAirport && currentICAO) {
+        blockLines.push(lines[i]);
+        RAW_AIRPORTS[currentICAO] = blockLines.join('\n');
+      }
+      inAirport = false; blockLines = []; currentICAO = null;
+    } else {
+      if (inAirport) blockLines.push(lines[i]);
+    }
+
+    if (i % 10000 === 0) {
+      document.getElementById('parse-bar-fill').style.width = ((i/lines.length)*80)+'%';
+    }
+  }
+  // Last airport
+  if (inAirport && currentICAO) {
+    RAW_AIRPORTS[currentICAO] = blockLines.join('\n');
+  }
+
+  document.getElementById('parse-bar-fill').style.width = '100%';
+  setTimeout(()=>{ document.getElementById('parse-bar-fill').style.width='0'; }, 600);
+
+  const count = Object.keys(RAW_AIRPORTS).length;
+  document.getElementById('airport-search-status').textContent =
+    `✓ ${count} aéroports indexés — Entrez un code ICAO`;
+  document.getElementById('btn-load-airport').disabled = false;
+
+  // Try auto-load if code already typed
+  const code = document.getElementById('airport-code-input').value.trim().toUpperCase();
+  if (code.length === 4 && RAW_AIRPORTS[code]) loadAirportByCode();
+}
+
+function loadAirportByCode() {
+  const code = document.getElementById('airport-code-input').value.trim().toUpperCase();
+  const statusEl = document.getElementById('airport-search-status');
+  if (!code) { statusEl.textContent = '⚠ Entrez un code ICAO de 4 lettres'; return; }
+  if (Object.keys(RAW_AIRPORTS).length === 0) { statusEl.textContent = '⚠ Aucun fichier apt.dat chargé'; return; }
+  const raw = RAW_AIRPORTS[code];
+  if (!raw) {
+    statusEl.textContent = `✕ Code "${code}" introuvable dans le fichier`;
+    return;
+  }
+  statusEl.textContent = `⟳ Chargement de ${code}...`;
+  setTimeout(() => {
+    parseAirportBlock(code, raw);
+    statusEl.textContent = `✓ ${code} chargé — ${Object.keys(NODES).length} nœuds`;
+  }, 10);
+}
+
+// ════════════════════════════════════════════════════════════
+//  AIRPORT BLOCK PARSING
+// ════════════════════════════════════════════════════════════
+function parseAirportBlock(icao, text) {
+  NODES = {}; SEGMENTS = []; RUNWAYS = []; THRESH = []; GATES = []; GRAPH = {}; currentPath = [];
+
+  const lines = text.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const p = line.split(/\s+/);
+
+    if (p[0] === '1' || p[0] === '16' || p[0] === '17') {
+      if (p.length >= 6) {
+        airportICAO = p[4] || icao;
+        airportName = p.slice(5).join(' ');
+      }
+    }
+    else if (p[0] === '1302' && p[1] === 'icao_code') {
+      airportICAO = p[2] || airportICAO;
+    }
+    else if (p[0] === '100') {
+      // Runway
+      if (p.length >= 20) {
+        RUNWAYS.push({id: p[8],  lat: parseFloat(p[9]),  lon: parseFloat(p[10])});
+        RUNWAYS.push({id: p[17], lat: parseFloat(p[18]), lon: parseFloat(p[19])});
+      }
+    }
+    else if (p[0] === '1201') {
+      const id = parseInt(p[4]);
+      NODES[id] = {
+        lat: parseFloat(p[1]), lon: parseFloat(p[2]),
+        name: p.slice(5).join(' ') || '',
+        isRwyNode: false, isThresh: false, isGate: false,
+        twName: '' // taxiway letter from edges
+      };
+    }
+    else if (p[0] === '1202') {
+      const n1 = parseInt(p[1]), n2 = parseInt(p[2]);
+      const bidir = p[3] || 'twoway';
+      const rawType = p[4] || 'taxiway_E';
+      // Determine segment type
+      let stype;
+      if (rawType === 'runway') stype = 'runway';
+      else {
+        const wingsz = rawType.replace('taxiway_','').toLowerCase();
+        if (wingsz === 'e') stype = 'taxiway_E';
+        else stype = 'taxiway_CD';
+      }
+      const twId = p.slice(5).join(' ') || '';
+      SEGMENTS.push({n1, n2, type: stype, name: twId, bidir});
+      // Assign taxiway name to nodes
+      if (twId) {
+        // Store on both nodes
+        [n1, n2].forEach(nid => {
+          if (NODES[nid] && !NODES[nid].twName) NODES[nid].twName = twId;
+        });
+      }
+    }
+    // Row 1206 not good stuff to keep
+    else if (p[0] === '1206') {
+      const n1 = parseInt(p[1]);
+      const n2 = parseInt(p[2]);
+      const mode = p[3] || '';
+      FILTER_1206.push({ n1, n2, mode });
+    }
+    // Row 1300 / 15: startup / gate locations
+    else if (p[0] === '1300' || p[0] === '15') {
+      const lat = parseFloat(p[1]);
+      const lon = parseFloat(p[2]);
+      // p[3] = heading (true) of airplane when positioned at this location
+      const heading = parseFloat(p[3]);
+      // 1300: p[4]=type, p[5]=aircraft_types, p[6+]=name
+      // 15 (legacy): p[4+]=name
+      const nameStart = (p[0] === '1300') ? 6 : 4;
+      const name = p.slice(nameStart).join(' ').trim();
+      let gname = name;
+      // 🔥 extraire uniquement le code final (lettres + chiffres)
+      const match = name.match(/[A-Z]?\d+$/i);
+      if (match) {
+        gname = match[0].toUpperCase();
+      }
+      GATES.push({lat, lon, heading: isNaN(heading) ? null : heading, name: gname});
+    }
+  }
+
+  // Remove node that not realy in relation with a taxiway
+  apply1206Filter();
+
+  // Mark runway nodes
+  const rwyNodeSet = new Set();
+  SEGMENTS.forEach(s => {
+    if (s.type === 'runway') { rwyNodeSet.add(s.n1); rwyNodeSet.add(s.n2); }
+  });
+  rwyNodeSet.forEach(id => { if (NODES[id]) NODES[id].isRwyNode = true; });
+
+  // ── PHASE 1: determine next available node ID ──
+  const existingIds = Object.keys(NODES).map(Number);
+  let nextVirtualId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 10000;
+
+  // ── PHASE 2: THRESHOLD NODES ──
+  THRESH = [];
+  const coordIndex = {};
+  Object.entries(NODES).forEach(([id, n]) => {
+    const key = n.lat.toFixed(8) + '_' + n.lon.toFixed(8);
+    coordIndex[key] = parseInt(id);
+  });
+
+  RUNWAYS.forEach(r => {
+    const key = r.lat.toFixed(8) + '_' + r.lon.toFixed(8);
+    let threshId, isVirtual;
+    if (coordIndex[key] !== undefined) {
+      threshId = coordIndex[key];
+      isVirtual = false;
+      NODES[threshId].isThresh = true;
+      NODES[threshId].rwy_id   = r.id;
+      if (!NODES[threshId].name) NODES[threshId].name = 'Seuil RWY ' + r.id;
+    } else {
+      // Generate new node ID (Phase 2 rule)
+      threshId = nextVirtualId++;
+      isVirtual = true;
+      NODES[threshId] = {
+        lat: r.lat, lon: r.lon,
+        name: 'Seuil RWY ' + r.id,
+        rwy_id: r.id, isThresh: true,
+        isVirtual: true, isRwyNode: false, isGate: false, twName: ''
+      };
+    }
+    THRESH.push({ id: threshId, lat: r.lat, lon: r.lon,
+                  rwy_id: r.id, isThresh: true, isVirtual });
+  });
+
+  // ── PHASE 2: GATE NODES ──
+  // Generate node IDs for gates too (they are not in taxi network directly)
+  GATES.forEach(g => {
+    const id = nextVirtualId++;
+    NODES[id] = {
+      lat: g.lat, lon: g.lon,
+      name: g.name,
+      isRwyNode: false, isThresh: false, isGate: true,
+      isVirtual: true, twName: ''
+    };
+    g.id = id;
+  });
+
+  // ── PHASE 3: Connect thresholds to nearest TAXIWAY node (not runway node) ──
+  // ✅ MODIFIÉ: on cherche le noeud TAXIWAY le plus proche (non-runway, non-thresh, non-gate)
+  //    au lieu du noeud runway le plus proche.
+  //    Ceci évite que node 136 (isRwyNode) soit inclus dans le chemin vers le seuil.
+  THRESH.forEach(t => {
+    const alreadyConnected = SEGMENTS.some(s =>
+      s.type === 'runway' && (s.n1 === t.id || s.n2 === t.id)
+    );
+    if (alreadyConnected) return;
+    let best = null, bestD = Infinity;
+
+    // 🔴 AVANT: rwyNodeSet.forEach(nid => { ... })  — cherchait parmi les noeuds RUNWAY
+    // 🟢 APRÈS: cherche parmi tous les noeuds TAXIWAY (non-runway, non-thresh, non-gate)
+    Object.keys(NODES).forEach(nidStr => {
+      const nid = parseInt(nidStr);
+      const nd = NODES[nid];
+      if (!nd) return;
+      if (nd.isRwyNode || nd.isThresh || nd.isGate) return; // ← exclure runway/seuil/gate
+      if (nid === t.id) return;
+      const d = haversine(nd.lat, nd.lon, t.lat, t.lon);
+      if (d < bestD) { bestD = d; best = nid; }
+    });
+    if (best !== null) {
+      SEGMENTS.push({n1: t.id, n2: best, type: 'backtaxi',
+                     name: 'BACKTAXI RWY ' + t.rwy_id});
+    }
+  });
+
+  // ── PHASE 3: Connect gates to most heading-aligned non-runway taxiway node ──
+  // Row 1300 stores the true heading the aircraft faces when parked.
+  // The pushback direction is heading + 180°, so we prefer taxi nodes
+  // that lie in that direction from the gate.
+  // Build degree map: count how many REAL segments (taxiway/runway/backtaxi) touch each node.
+  // Nodes with degree 0 are isolated stubs (e.g. FedEx_stop, East_stop with no edges) —
+  // they must NOT be gate_link candidates or the gate will be stranded in a dead end.
+  const _preGateDegree = {};
+  SEGMENTS.forEach(s => {
+    if (s.type === 'gate_link') return; // gate_links don't exist yet at this point, but just in case
+    _preGateDegree[s.n1] = (_preGateDegree[s.n1] || 0) + 1;
+    _preGateDegree[s.n2] = (_preGateDegree[s.n2] || 0) + 1;
+  });
+
+  const taxiNodeIds = Object.keys(NODES).map(Number).filter(id =>
+    NODES[id] && !NODES[id].isRwyNode && !NODES[id].isThresh && !NODES[id].isGate
+    && (_preGateDegree[id] || 0) >= 1  // ← exclude isolated/stub nodes (degree 0)
+  );
+  GATES.forEach(g => {
+    if (!g.id) return;
+    const hasHeading = g.heading !== null && !isNaN(g.heading);
+    // Pushback direction: plane nose faces `heading`, tug pushes opposite
+    const pushbackDir = hasHeading ? (g.heading + 180) % 360 : null;
+
+    // First pass: find the closest node distance to use as reference
+    let nearestD = Infinity;
+    taxiNodeIds.forEach(nid => {
+      const nd = NODES[nid]; if (!nd) return;
+      const d = haversine(nd.lat, nd.lon, g.lat, g.lon);
+      if (d < nearestD) nearestD = d;
+    });
+
+    // Second pass: score each candidate node
+    // Score = distance × (1 + 3 × sin²(Δangle/2)) — penalises off-axis nodes
+    // Nodes farther than 5× the nearest node are excluded to avoid wild jumps.
+    let best = null, bestScore = Infinity;
+    const maxDist = 600; // cap at 600 m (nearestD multiplier removed — caused nearby nodes to exclude farther but better-connected terminal nodes)
+    taxiNodeIds.forEach(nid => {
+      const nd = NODES[nid]; if (!nd) return;
+      const d = haversine(nd.lat, nd.lon, g.lat, g.lon);
+      if (d > maxDist) return;
+      let score = d;
+      if (hasHeading) {
+        const b = geoBearing(g.lat, g.lon, nd.lat, nd.lon);
+        const angDiff = headingDiff(b, pushbackDir); // 0–180°
+        // sin²(angDiff/2) = 0 when aligned, 1 when 180° off
+        score = d * (1 + 3 * Math.pow(Math.sin(angDiff * Math.PI / 360), 2));
+      }
+      if (score < bestScore) { bestScore = score; best = nid; }
+    });
+
+    // Fallback: if still nothing (e.g. all beyond maxDist), just use nearest
+    if (best === null) {
+      let bestD2 = Infinity;
+      taxiNodeIds.forEach(nid => {
+        const nd = NODES[nid]; if (!nd) return;
+        const d = haversine(nd.lat, nd.lon, g.lat, g.lon);
+        if (d < bestD2) { bestD2 = d; best = nid; }
+      });
+    }
+
+    if (best !== null) {
+      SEGMENTS.push({n1: g.id, n2: best, type: 'gate_link', name: g.name});
+    }
+  });
+
+  // Build graph (exclude service; include gate_link)
+  // Runway and backtaxi segments are heavily penalized so Dijkstra prefers taxiways.
+  // The penalty factor means "use taxiway even if it's RUNWAY_PENALTY× longer".
+  const RUNWAY_PENALTY = 20;
+  Object.keys(NODES).forEach(id => { GRAPH[id] = []; });
+  SEGMENTS.forEach(s => {
+    if (s.type === 'service') return; // no service routes
+    const d = haversine(NODES[s.n1]?.lat, NODES[s.n1]?.lon, NODES[s.n2]?.lat, NODES[s.n2]?.lon);
+    if (!isNaN(d)) {
+      GRAPH[s.n1] = GRAPH[s.n1] || [];
+      GRAPH[s.n2] = GRAPH[s.n2] || [];
+      const isRwyType = (s.type === 'runway' || s.type === 'backtaxi');
+      const cost = isRwyType ? d * RUNWAY_PENALTY : d;
+      GRAPH[s.n1].push({to: s.n2, dist: d, cost});
+      GRAPH[s.n2].push({to: s.n1, dist: d, cost});
+    }
+  });
+
+  // Bounds
+  const allN = Object.values(NODES);
+  latMin = Math.min(...allN.map(n=>n.lat));
+  latMax = Math.max(...allN.map(n=>n.lat));
+  lonMin = Math.min(...allN.map(n=>n.lon));
+  lonMax = Math.max(...allN.map(n=>n.lon));
+  latRange = latMax - latMin || 0.001;
+  lonRange = lonMax - lonMin || 0.001;
+
+  updateUI();
+}
+
+function apply1206Filter() {
+  if (!FILTER_1206.length) return;
+
+  // 🔥 1. Construire la liste des nodes utilisés dans 1202
+  const USED_NODES = new Set();
+
+  SEGMENTS.forEach(s => {
+    USED_NODES.add(s.n1);
+    USED_NODES.add(s.n2);
+  });
+
+  // 🔥 2. Déterminer les nodes réellement supprimables
+  const nodesToRemove = new Set();
+
+  FILTER_1206.forEach(f => {
+    const n1 = f.n1;
+    const n2 = f.n2;
+
+    // ✔ règle : ne supprimer QUE si pas utilisé dans 1202
+    if (!USED_NODES.has(n1)) nodesToRemove.add(n1);
+    if (!USED_NODES.has(n2)) nodesToRemove.add(n2);
+  });
+
+  // 🔥 3. supprimer nodes
+  nodesToRemove.forEach(id => {
+    delete NODES[id];
+  });
+
+  // 🔥 4. supprimer segments liés aux nodes supprimés
+  SEGMENTS = SEGMENTS.filter(s =>
+    !nodesToRemove.has(s.n1) &&
+    !nodesToRemove.has(s.n2)
+  );
+
+  // 🔥 5. nettoyer gates / thresholds
+  THRESH = THRESH.filter(t => !nodesToRemove.has(t.id));
+  GATES = GATES.filter(g => !nodesToRemove.has(g.id));
+
+  // 🔥 6. rebuild graph propre
+  GRAPH = {};
+
+  Object.keys(NODES).forEach(id => {
+    GRAPH[id] = [];
+  });
+
+  const RUNWAY_PENALTY2 = 20;
+  SEGMENTS.forEach(s => {
+    const a = NODES[s.n1];
+    const b = NODES[s.n2];
+
+    if (!a || !b) return;
+
+    const d = haversine(a.lat, a.lon, b.lat, b.lon);
+
+    if (!isNaN(d)) {
+      const isRwyType = (s.type === 'runway' || s.type === 'backtaxi');
+      const cost = isRwyType ? d * RUNWAY_PENALTY2 : d;
+      GRAPH[s.n1].push({ to: s.n2, dist: d, cost });
+      GRAPH[s.n2].push({ to: s.n1, dist: d, cost });
+    }
+  });
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  if (lat1==null||lat2==null) return Infinity;
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// True bearing (degrees, 0=N, CW) from point 1 to point 2
+function geoBearing(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const lat1R = lat1 * Math.PI / 180;
+  const lat2R = lat2 * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2R);
+  const x = Math.cos(lat1R) * Math.sin(lat2R) - Math.sin(lat1R) * Math.cos(lat2R) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Absolute angular difference between two headings (0–180°)
+function headingDiff(a, b) {
+  const d = Math.abs((a - b + 360) % 360);
+  return d > 180 ? 360 - d : d;
+}
+
+// ════════════════════════════════════════════════════════════
+//  DIJKSTRA
+// ════════════════════════════════════════════════════════════
+function dijkstra(startId, endId) {
+  // `wcost`     = accumulated weighted cost (used to guide path selection, penalises runway/backtaxi)
+  // `realDist`  = accumulated true physical distance (shown to the user in metres/feet)
+  const wcost    = {};
+  const realDist = {};
+  const prev     = {};
+  const visited  = new Set();
+  const pq       = [];
+
+  Object.keys(GRAPH).forEach(id => { wcost[id] = Infinity; realDist[id] = Infinity; });
+  wcost[startId]    = 0;
+  realDist[startId] = 0;
+  pq.push([0, startId]);
+
+  while (pq.length > 0) {
+    pq.sort((a,b) => a[0]-b[0]);
+    const [w, u] = pq.shift();
+    if (visited.has(u)) continue;
+    visited.add(u);
+    if (u == endId) break;
+
+    (GRAPH[u] || []).forEach(edge => {
+      const nw = w + (edge.cost ?? edge.dist);   // use weighted cost for routing
+      if (nw < (wcost[edge.to] ?? Infinity)) {
+        wcost[edge.to]    = nw;
+        realDist[edge.to] = realDist[u] + edge.dist; // accumulate true distance
+        prev[edge.to]     = u;
+        pq.push([nw, edge.to]);
+      }
+    });
+  }
+
+  if (wcost[endId] === Infinity) return null;
+
+  const path = [];
+  let cur = String(endId);
+  while (cur !== undefined) {
+    path.unshift(parseInt(cur));
+    cur = prev[cur];
+  }
+  return { path, dist: realDist[endId] }; // report true physical distance
+}
+
+function findPath() {
+  const fromId = parseInt(document.getElementById('pf-from').value);
+  const toId   = parseInt(document.getElementById('pf-to').value);
+  const res = document.getElementById('path-result');
+
+  if (!NODES[fromId] || !NODES[toId]) {
+    res.style.display = 'block';
+    res.innerHTML = '<span class="pr-err">✕ Nœud introuvable</span>';
+    return;
+  }
+  const result = dijkstra(fromId, toId);
+  if (!result) {
+    res.style.display = 'block';
+    res.innerHTML = '<span class="pr-err">✕ Aucun chemin trouvé</span>';
+    currentPath = [];
+    draw();
+    return;
+  }
+
+  currentPath = result.path;
+  const distM = result.dist.toFixed(0);
+  const distFt = (result.dist * 3.281).toFixed(0);
+
+  // Detect if the path uses any runway or backtaxi segment
+  let usesRwy = false;
+  for (let i = 0; i < result.path.length - 1; i++) {
+    const a = result.path[i], b = result.path[i+1];
+    const seg = SEGMENTS.find(s =>
+      (s.n1===a&&s.n2===b)||(s.n1===b&&s.n2===a)
+    );
+    if (seg && (seg.type === 'runway' || seg.type === 'backtaxi')) { usesRwy = true; break; }
+  }
+
+  res.style.display = 'block';
+  let html = '<div class="pr-head">◈ CHEMIN · ' + result.path.length + ' NŒUDS</div>';
+  if (usesRwy) {
+    html += `<div style="color:#ffc107;font-size:10px;margin-bottom:4px">⚠ BACKTAXI / PISTE utilisé (aucun taxiway alternatif)</div>`;
+  }
+  result.path.forEach(id => {
+    const n = NODES[id];
+    html += `<div class="pr-node"><span class="nid">${id}</span> <span class="nm">${n?.name||''}</span></div>`;
+  });
+  html += `<div class="pr-dist">↔ ${distM} m · ${distFt} ft</div>`;
+  res.innerHTML = html;
+
+  const poN = document.getElementById('po-nodes');
+  const poD = document.getElementById('po-dist');
+  poN.textContent = result.path.map(id => {
+    const n = NODES[id];
+    return `${id}${n?.name ? ' ('+n.name+')' : ''}`;
+  }).join(' → ');
+  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${result.path.length} nœuds`;
+  document.getElementById('path-overlay').style.display = 'block';
+
+  document.querySelectorAll('#nodeTableBody tr').forEach(tr => {
+    tr.classList.toggle('selected', result.path.includes(parseInt(tr.dataset.id)));
+  });
+
+  draw();
+  zoomToPath(result.path);
+}
+
+function clearPath() {
+  currentPath = [];
+  document.getElementById('path-result').style.display = 'none';
+  document.getElementById('path-overlay').style.display = 'none';
+  document.querySelectorAll('#nodeTableBody tr').forEach(tr => tr.classList.remove('selected'));
+  draw();
+}
+
+function zoomToPath(path) {
+  if (path.length < 2) return;
+  const lats = path.map(id => NODES[id]?.lat).filter(Boolean);
+  const lons = path.map(id => NODES[id]?.lon).filter(Boolean);
+  const pLatMin = Math.min(...lats) - latRange*.02;
+  const pLatMax = Math.max(...lats) + latRange*.02;
+  const pLonMin = Math.min(...lons) - lonRange*.02;
+  const pLonMax = Math.max(...lons) + lonRange*.02;
+  const pLatR = pLatMax - pLatMin, pLonR = pLonMax - pLonMin;
+  const canvas = document.getElementById('mapCanvas');
+  const W = canvas.width, H = canvas.height;
+  const scX = W * .85 / pLonR, scY = H * .85 / pLatR;
+  cam.scale = Math.min(scX, scY);
+  const midLat = (pLatMin+pLatMax)/2, midLon = (pLonMin+pLonMax)/2;
+  const sc = toScreen(midLat, midLon);
+  cam.x += W/2 - sc.x;
+  cam.y += H/2 - sc.y;
+  draw();
+}
+
+// ════════════════════════════════════════════════════════════
+//  UPDATE UI AFTER PARSE
+// ════════════════════════════════════════════════════════════
+function selectNode(id) {
+  const fromSel = document.getElementById('pf-from');
+  const toSel   = document.getElementById('pf-to');
+  if (!fromSel.value || document.activeElement === fromSel) {
+    fromSel.value = id;
+  } else {
+    toSel.value = id;
+  }
+  highlightNode(id);
+}
+
+function buildDropdowns() {
+  const fromSel = document.getElementById('pf-from');
+  const toSel   = document.getElementById('pf-to');
+
+  fromSel.innerHTML = '<option value="">— Sélectionner départ —</option>';
+  toSel.innerHTML   = '<option value="">— Sélectionner arrivée —</option>';
+
+  // Gates first
+  const gateGroup = document.createElement('optgroup');
+  gateGroup.label = '✈ TERMINAUX / PORTES';
+  GATES.forEach(g => {
+    const opt1 = new Option(`[${g.id}] ${g.name}`, g.id);
+    const opt2 = new Option(`[${g.id}] ${g.name}`, g.id);
+    gateGroup.appendChild(opt1);
+    fromSel.add(opt1);
+    toSel.add(opt2);
+  });
+
+  // Runway thresholds
+  const rwyGroup1 = document.createElement('optgroup');
+  rwyGroup1.label = '⚡ SEUILS DE PISTE';
+  const rwyGroup2 = document.createElement('optgroup');
+  rwyGroup2.label = '⚡ SEUILS DE PISTE';
+
+  THRESH.forEach(t => {
+    const label = `[${t.id}] RWY ${t.rwy_id}${t.isVirtual?' *':''}`;
+    fromSel.add(new Option(label, t.id));
+    toSel.add(new Option(label, t.id));
+  });
+}
+
+function updateUI() {
+  const nodeCount = Object.keys(NODES).filter(id => !NODES[parseInt(id)].isVirtual).length;
+  const threshVirtCount = THRESH.filter(t => t.isVirtual).length;
+  document.getElementById('st-nodes').textContent = nodeCount;
+  document.getElementById('st-segs').textContent  = SEGMENTS.filter(s=>s.type!=='backtaxi'&&s.type!=='gate_link').length;
+  document.getElementById('st-rwys').textContent  = RUNWAYS.length/2 | 0;
+
+  const badge = document.getElementById('airport-badge');
+  badge.textContent = airportICAO + (airportName ? ' · ' + airportName.substring(0,22) : '');
+  badge.style.display = 'block';
+  document.title = airportICAO + ' — Taxiway Pathfinder';
+
+  document.getElementById('node-count').textContent =
+    nodeCount + (threshVirtCount > 0 ? ' +' + threshVirtCount + ' seuils virt.' : '') +
+    (GATES.length > 0 ? ' +' + GATES.length + ' gates' : '');
+  document.getElementById('btn-find').disabled = false;
+  document.getElementById('hint').style.opacity = '0';
+  setTimeout(()=>{ document.getElementById('hint').style.display='none'; }, 400);
+
+  buildDropdowns();
+
+  // Build node table
+  const tbody = document.getElementById('nodeTableBody');
+  tbody.innerHTML = '';
+
+  // Gate nodes
+  if (GATES.length > 0) {
+    const sep0 = document.createElement('tr');
+    sep0.innerHTML = '<td colspan="3" style="background:#0a1520;color:#b06fff;font-size:9px;padding:4px 10px;letter-spacing:2px;font-family:Share Tech Mono,monospace">─── TERMINAUX / PORTES ───</td>';
+    tbody.appendChild(sep0);
+    GATES.forEach(g => {
+      const tr = document.createElement('tr');
+      tr.dataset.id = g.id;
+      tr.style.borderLeft = '3px solid #b06fff';
+      tr.innerHTML = `<td class="nid-cell" style="color:#b06fff">${g.id}</td>
+        <td class="nm-cell">${g.name}</td>
+        <td class="nm-cell" style="color:#b06fff">GATE</td>`;
+      tr.addEventListener('click', () => selectNode(g.id));
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Threshold nodes
+  if (THRESH.length > 0) {
+    const sep = document.createElement('tr');
+    sep.innerHTML = '<td colspan="3" style="background:#0a1520;color:#ff6b35;font-size:9px;padding:4px 10px;letter-spacing:2px;font-family:Share Tech Mono,monospace">─── SEUILS DE PISTE ───</td>';
+    tbody.appendChild(sep);
+    THRESH.forEach(t => {
+      const n = NODES[t.id];
+      const tr = document.createElement('tr');
+      tr.dataset.id = t.id;
+      tr.style.borderLeft = '3px solid #ff6b35';
+      const badge2 = t.isVirtual
+        ? '<span style="color:#3a5570;font-size:9px;font-family:Share Tech Mono"> *GEN</span>'
+        : '<span style="color:#3dff6e;font-size:9px;font-family:Share Tech Mono"> APT</span>';
+      tr.innerHTML = `<td class="nid-cell" style="color:#ff6b35">${t.id}${badge2}</td>
+        <td class="rwy-cell">${n.name}</td>
+        <td class="rwy-cell">SEUIL</td>`;
+      tr.addEventListener('click', () => selectNode(t.id));
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Divider
+  const sep2 = document.createElement('tr');
+  sep2.innerHTML = '<td colspan="3" style="background:#0a1520;color:#3a5570;font-size:9px;padding:4px 10px;letter-spacing:2px;font-family:Share Tech Mono,monospace">─── NŒUDS RÉSEAU ───</td>';
+  tbody.appendChild(sep2);
+
+  const sortedIds = Object.keys(NODES).map(Number)
+    .filter(id => !NODES[id].isThresh && !NODES[id].isGate)
+    .sort((a,b)=>a-b);
+  sortedIds.forEach(id => {
+    const n = NODES[id];
+    const isRwy = n.isRwyNode;
+    const twLabel = n.twName ? n.twName : (n.name || '');
+    const tr = document.createElement('tr');
+    tr.dataset.id = id;
+    tr.innerHTML = `<td class="nid-cell">${id}</td>
+      <td class="nm-cell">${twLabel}</td>
+      <td class="${isRwy?'rwy-cell':'nm-cell'}">${isRwy?'RWY':'TWY'}</td>`;
+    tr.addEventListener('click', () => selectNode(id));
+    tbody.appendChild(tr);
+  });
+
+  fitCanvas();
+}
+
+function highlightNode(id) {
+  const n = NODES[id];
+  if (!n) return;
+  const p = toScreen(n.lat, n.lon);
+  let r = 5, alpha = 1;
+  const flash = () => {
+    draw();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = alpha;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    r += 2; alpha -= 0.08;
+    if (alpha > 0) requestAnimationFrame(flash);
+    else draw();
+  };
+  flash();
+}
+
+// ════════════════════════════════════════════════════════════
+//  CANVAS
+// ════════════════════════════════════════════════════════════
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+
+function fitCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  const W = canvas.width, H = canvas.height;
+  const scX = W*.88/lonRange, scY = H*.88/latRange;
+  cam.scale = Math.min(scX, scY);
+  const midLat = (latMin+latMax)/2, midLon = (lonMin+lonMax)/2;
+  cam.x = W/2 - (midLon-lonMin)*cam.scale;
+  cam.y = H/2 - (latMax-midLat)*cam.scale;
+  draw();
+}
+
+function toScreen(lat, lon) {
+  return {
+    x: (lon-lonMin)*cam.scale + cam.x,
+    y: (latMax-lat)*cam.scale + cam.y
+  };
+}
+function fromScreen(sx, sy) {
+  return {
+    lat: latMax - (sy-cam.y)/cam.scale,
+    lon: (sx-cam.x)/cam.scale + lonMin
+  };
+}
+
+function segmentColor(type) {
+  if (type==='runway')    return {color:'#ffc107', lw: 5, alpha:0.9};
+  if (type==='backtaxi')  return {color:'#ff6b35', lw: 2, alpha:0.7, dash:[6,4]};
+  if (type==='gate_link') return {color:'#b06fff', lw: 1, alpha:0.5, dash:[4,5]};
+  if (type==='taxiway_E') return {color:'#3dff6e', lw: 2.5, alpha:0.85};
+  return {color:'#00d4ff', lw: 1.5, alpha:0.7}; // C/D
+}
+
+function draw() {
+  if (!canvas.width) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Faint grid
+  ctx.strokeStyle = '#0d1520'; ctx.lineWidth=1;
+  for(let i=0;i<24;i++){
+    const x=W/24*i; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  for(let i=0;i<18;i++){
+    const y=H/18*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  // Segments — NO service layer
+  SEGMENTS.forEach(s => {
+    const n1=NODES[s.n1], n2=NODES[s.n2];
+    if(!n1||!n2) return;
+
+    if (s.type==='service') return; // SUPPRIMÉ
+    if (s.type==='runway'   && !layers.runway)    return;
+    if (s.type==='taxiway_E' && !layers.taxiway_E) return;
+    if ((s.type==='taxiway_C'||s.type==='taxiway_D'||s.type==='taxiway_CD') && !layers.taxiway_CD) return;
+    if (s.type==='backtaxi' && !layers.thresh)    return;
+    if (s.type==='gate_link' && !layers.gates)    return;
+
+    const p1=toScreen(n1.lat,n1.lon), p2=toScreen(n2.lat,n2.lon);
+    const st=segmentColor(s.type);
+
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y);
+    ctx.strokeStyle=st.color;
+    ctx.lineWidth=st.lw;
+    ctx.globalAlpha=st.alpha;
+    if(st.dash) ctx.setLineDash(st.dash); else ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+
+    // Taxiway name labels — show on taxiway segments, at moderate zoom
+    if(s.name && (s.type==='taxiway_E'||s.type==='taxiway_C'||s.type==='taxiway_D'||s.type==='taxiway_CD'||s.type==='runway')) {
+      const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+      const fontSize = Math.max(10, Math.min(18, cam.scale / lonRange * 0.00055));
+      const threshold = lonRange * 600;
+      if(cam.scale > threshold) {
+        ctx.save();
+        ctx.font = `bold ${fontSize}px Share Tech Mono`;
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
+        ctx.fillStyle = st.color;
+        ctx.globalAlpha = Math.min(1, (cam.scale - threshold) / threshold * 2 + 0.5);
+        const tw = ctx.measureText(s.name).width;
+        ctx.fillStyle = 'rgba(4,7,10,0.65)';
+        ctx.fillRect(mx - tw/2 - 2, my - fontSize - 1, tw + 4, fontSize + 3);
+        ctx.fillStyle = st.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(s.name, mx, my - 2);
+        ctx.textAlign = 'left';
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+  });
+
+  // PATH
+  if (currentPath.length >= 2) {
+    ctx.save();
+    ctx.shadowColor='#ff00aa'; ctx.shadowBlur=16;
+    ctx.strokeStyle='#ff00aa'; ctx.lineWidth=5; ctx.globalAlpha=0.5;
+    ctx.beginPath();
+    for(let i=0;i<currentPath.length;i++){
+      const n=NODES[currentPath[i]]; if(!n) continue;
+      const p=toScreen(n.lat,n.lon);
+      i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.strokeStyle='#ff00aa'; ctx.lineWidth=3; ctx.globalAlpha=1;
+    ctx.beginPath();
+    for(let i=0;i<currentPath.length;i++){
+      const n=NODES[currentPath[i]]; if(!n) continue;
+      const p=toScreen(n.lat,n.lon);
+      i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+
+    currentPath.forEach((id,idx) => {
+      const n=NODES[id]; if(!n) return;
+      const p=toScreen(n.lat,n.lon);
+      const isEndpoint = idx===0||idx===currentPath.length-1;
+      const r = isEndpoint ? 10 : 7;
+      const col = idx===0?'#00ff88':(idx===currentPath.length-1?'#ff4444':'#ff00aa');
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.5);
+      g.addColorStop(0, col+'99'); g.addColorStop(1, col+'00');
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*2.5,0,Math.PI*2);
+      ctx.fillStyle=g; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r+2,0,Math.PI*2);
+      ctx.fillStyle='#07090d'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+      ctx.fillStyle=col; ctx.fill();
+      ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.font='bold 11px Share Tech Mono';
+      ctx.fillStyle='#ffffff';
+      ctx.shadowColor='#000'; ctx.shadowBlur=6;
+      ctx.fillText(idx, p.x+r+3, p.y+4);
+      ctx.shadowBlur=0;
+    });
+  }
+
+  // ── TAXIWAY NODES (non-threshold, non-gate)
+  if(layers.nodes){
+    const nr = Math.max(4, Math.min(10, cam.scale / lonRange * 0.00012));
+    const strokeW = Math.max(1.5, nr * 0.35);
+    Object.entries(NODES).forEach(([id,n])=>{
+      if(n.isThresh || n.isGate) return;
+      const p=toScreen(n.lat,n.lon);
+      const onPath=currentPath.includes(parseInt(id));
+      if(onPath) return;
+
+      const col = n.isRwyNode ? '#ffc107' : '#3dff6e';
+
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,nr*2.2);
+      g.addColorStop(0, n.isRwyNode?'rgba(255,193,7,.30)':'rgba(61,255,110,.25)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(p.x,p.y,nr*2.2,0,Math.PI*2);
+      ctx.fillStyle=g; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(p.x,p.y,nr+strokeW,0,Math.PI*2);
+      ctx.fillStyle='rgba(4,7,10,0.85)'; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(p.x,p.y,nr,0,Math.PI*2);
+      ctx.fillStyle=col; ctx.globalAlpha=0.95; ctx.fill();
+      ctx.strokeStyle='#ffffff'; ctx.lineWidth=strokeW*0.6;
+      ctx.globalAlpha=0.5; ctx.stroke();
+      ctx.globalAlpha=1;
+
+      // Node ID + taxiway letter label
+      if(cam.scale > lonRange*2500){
+        const fontSize = Math.max(9, Math.min(13, nr*1.4));
+        ctx.font=`bold ${fontSize}px Share Tech Mono`;
+        ctx.shadowColor='#000000'; ctx.shadowBlur=5;
+        ctx.fillStyle=col;
+        // Show node ID
+        ctx.fillText(id, p.x+nr+3, p.y+4);
+        // Show taxiway name below if available
+        if(n.twName){
+          ctx.font=`${Math.max(8,fontSize-1)}px Share Tech Mono`;
+          ctx.fillStyle='rgba(255,255,255,0.6)';
+          ctx.fillText(n.twName, p.x+nr+3, p.y+4+fontSize+1);
+        }
+        ctx.shadowBlur=0;
+      }
+    });
+  }
+
+  // ── GATE NODES
+  if(layers.gates){
+    GATES.forEach(g => {
+      const n = NODES[g.id];
+      if (!n) return;
+      const p=toScreen(n.lat,n.lon);
+      const r=Math.max(5,Math.min(10,cam.scale/lonRange*.00010));
+      const grd=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3);
+      grd.addColorStop(0,'rgba(176,111,255,.4)'); grd.addColorStop(1,'rgba(176,111,255,0)');
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*3,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r+2,0,Math.PI*2);
+      ctx.fillStyle='rgba(4,7,10,0.85)'; ctx.fill();
+      // Diamond shape
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Math.PI/4);
+      ctx.beginPath();
+      ctx.rect(-r*0.75,-r*0.75,r*1.5,r*1.5);
+      ctx.fillStyle='#b06fff'; ctx.fill();
+      ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.2; ctx.stroke();
+      ctx.restore();
+      // Heading arrow — shows the aircraft nose direction (1300 heading field)
+      if (g.heading !== null && !isNaN(g.heading)) {
+        // Canvas: x→east, y↓south  →  true heading 0=N maps to canvas angle -π/2
+        const arrowLen = r * 3.5;
+        const angleRad = (g.heading - 90) * Math.PI / 180;
+        const arrowEndX = p.x + Math.cos(angleRad) * arrowLen;
+        const arrowEndY = p.y + Math.sin(angleRad) * arrowLen;
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = '#e0bbff';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(arrowEndX, arrowEndY);
+        ctx.stroke();
+        // Arrow head
+        const headSize = r * 0.85;
+        const backAngle = Math.PI + angleRad;
+        ctx.beginPath();
+        ctx.moveTo(arrowEndX, arrowEndY);
+        ctx.lineTo(arrowEndX + Math.cos(backAngle - 0.45) * headSize, arrowEndY + Math.sin(backAngle - 0.45) * headSize);
+        ctx.lineTo(arrowEndX + Math.cos(backAngle + 0.45) * headSize, arrowEndY + Math.sin(backAngle + 0.45) * headSize);
+        ctx.closePath();
+        ctx.fillStyle = '#e0bbff';
+        ctx.fill();
+        ctx.restore();
+      }
+      // Label: always show node ID + gate name (zoom-aware)
+      const lblScale = cam.scale/lonRange;
+      if(lblScale > 600){
+        const fontSize = Math.max(9, Math.min(14, lblScale*0.006));
+        ctx.font=`bold ${fontSize}px Exo 2`;
+        ctx.shadowColor='#000'; ctx.shadowBlur=6;
+        ctx.fillStyle='#b06fff';
+        ctx.fillText(`${g.id} ${n.name}`, p.x+r+5, p.y+4);
+        ctx.shadowBlur=0;
+      }
+    });
+  }
+
+  // ── THRESHOLDS
+  if(layers.thresh){
+    THRESH.forEach(t=>{
+      const p=toScreen(t.lat,t.lon);
+      const r=Math.max(6,Math.min(11,cam.scale/lonRange*.000055));
+      const grd=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3);
+      grd.addColorStop(0,'rgba(255,107,53,.45)'); grd.addColorStop(1,'rgba(255,107,53,0)');
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*3,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r+2.5,0,Math.PI*2);
+      ctx.fillStyle='rgba(4,7,10,0.85)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+      ctx.fillStyle='#ff6b35'; ctx.fill();
+      ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.8; ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*.35,0,Math.PI*2);
+      ctx.fillStyle = t.isVirtual ? '#fff' : '#3dff6e';
+      ctx.fill();
+      // Label
+      const lblScale = cam.scale/lonRange;
+      if(lblScale > 800){
+        const fontSize = Math.max(11, Math.min(16, lblScale*0.0055));
+        ctx.font=`bold ${fontSize}px Exo 2`;
+        ctx.shadowColor='#000'; ctx.shadowBlur=6;
+        ctx.fillStyle='#ffc107';
+        ctx.fillText('RWY '+t.rwy_id+' ('+t.id+')', p.x+r+5, p.y+4);
+        ctx.shadowBlur=0;
+        if(!t.isVirtual){
+          ctx.font=`${Math.max(9,fontSize-3)}px Share Tech Mono`;
+          ctx.fillStyle='#3dff6e';
+          ctx.fillText('APT', p.x+r+5, p.y+4+fontSize);
+        }
+      }
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  LAYER TOGGLE
+// ════════════════════════════════════════════════════════════
+function toggleL(layer, btn) {
+  if(layer==='taxiway_CD'){
+    layers.taxiway_C=!layers.taxiway_C; layers.taxiway_D=!layers.taxiway_CD;
+    layers.taxiway_CD=!layers.taxiway_CD;
+    btn.classList.toggle('on',layers.taxiway_CD);
+  } else {
+    layers[layer]=!layers[layer];
+    btn.classList.toggle('on',layers[layer]);
+  }
+  draw();
+}
+
+// ════════════════════════════════════════════════════════════
+//  INTERACTION
+// ════════════════════════════════════════════════════════════
+canvas.addEventListener('mousedown', e=>{
+  isDragging=true; dragStart={x:e.clientX,y:e.clientY}; camAtDrag={x:cam.x,y:cam.y};
+  canvas.style.cursor='grabbing';
+});
+canvas.addEventListener('mouseup', ()=>{ isDragging=false; canvas.style.cursor='crosshair'; });
+canvas.addEventListener('mouseleave', ()=>{ isDragging=false; document.getElementById('tooltip').style.display='none'; });
+
+canvas.addEventListener('mousemove', e=>{
+  if(isDragging){
+    cam.x=camAtDrag.x+(e.clientX-dragStart.x);
+    cam.y=camAtDrag.y+(e.clientY-dragStart.y);
+    draw(); return;
+  }
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const world=fromScreen(mx,my);
+  let closest=null, closestD=Infinity;
+  Object.entries(NODES).forEach(([id,n])=>{
+    const dx=(n.lon-world.lon)*Math.cos(n.lat*Math.PI/180)*111320;
+    const dy=(n.lat-world.lat)*110540;
+    const d=Math.hypot(dx,dy);
+    if(d<closestD){closestD=d;closest={id:parseInt(id),...n};}
+  });
+  const pixThresh=60/cam.scale*lonRange*111320;
+  const tip=document.getElementById('tooltip');
+  if(closest&&closestD<pixThresh){
+    tip.style.display='block';
+    tip.style.left=(e.clientX+16)+'px'; tip.style.top=(e.clientY-10)+'px';
+    const onPath=currentPath.includes(closest.id);
+    const typeLabel = closest.isGate ? '♦ GATE' : (closest.isThresh ? '⚡ SEUIL' : '◉ NŒUD');
+    // Find gate heading from GATES array for tooltip display
+    const gateData = closest.isGate ? GATES.find(g => g.id === closest.id) : null;
+    tip.innerHTML=
+      `${typeLabel} <b style="color:${closest.isGate?'#b06fff':closest.isThresh?'#ff6b35':'#00d4ff'}">#${closest.id}</b>`+
+      (onPath?' <span style="color:#ff00aa">◈ SUR LE CHEMIN</span>':'')+
+      `<br>${closest.lat.toFixed(6)}, ${closest.lon.toFixed(6)}<br>`+
+      `<span style="color:#ffc107">${closest.name}</span>`+
+      (gateData && gateData.heading !== null && !isNaN(gateData.heading)
+        ? `<br><span style="color:#e0bbff">↗ HDG: ${gateData.heading.toFixed(1)}°T</span>` : '')+
+      (closest.twName&&!closest.isThresh&&!closest.isGate?`<br><span style="color:#00d4ff">TWY: ${closest.twName}</span>`:'')+
+      `<br><span style="color:#3a5570;font-size:10px">clic: sélectionner comme nœud</span>`;
+  } else {
+    tip.style.display='none';
+  }
+});
+
+canvas.addEventListener('click', e=>{
+  if(isDragging) return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const world=fromScreen(mx,my);
+  let closest=null, closestD=Infinity;
+  Object.entries(NODES).forEach(([id,n])=>{
+    const dx=(n.lon-world.lon)*Math.cos(n.lat*Math.PI/180)*111320;
+    const dy=(n.lat-world.lat)*110540;
+    const d=Math.hypot(dx,dy);
+    if(d<closestD){closestD=d;closest={id:parseInt(id),...n};}
+  });
+  const pixThresh=60/cam.scale*lonRange*111320;
+  if(closest&&closestD<pixThresh){
+    const fromSel=document.getElementById('pf-from');
+    const toSel=document.getElementById('pf-to');
+    if(!fromSel.value||document.activeElement===fromSel){
+      fromSel.value=closest.id;
+    } else {
+      toSel.value=closest.id;
+    }
+  }
+});
+
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const factor=e.deltaY<0?1.15:0.87;
+  const wx=(mx-cam.x)/cam.scale, wy=(my-cam.y)/cam.scale;
+  cam.scale*=factor;
+  cam.x=mx-wx*cam.scale; cam.y=my-wy*cam.scale;
+  draw();
+},{passive:false});
+
+canvas.addEventListener('touchstart', e=>{
+  if(e.touches.length===2) lastTouchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+  else if(e.touches.length===1){ isDragging=true; dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY}; camAtDrag={x:cam.x,y:cam.y}; }
+});
+canvas.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  if(e.touches.length===2){
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    const factor=d/lastTouchDist;
+    const cx=(e.touches[0].clientX+e.touches[1].clientX)/2-canvas.getBoundingClientRect().left;
+    const cy=(e.touches[0].clientY+e.touches[1].clientY)/2-canvas.getBoundingClientRect().top;
+    const wx=(cx-cam.x)/cam.scale,wy=(cy-cam.y)/cam.scale;
+    cam.scale*=factor; cam.x=cx-wx*cam.scale; cam.y=cy-wy*cam.scale;
+    lastTouchDist=d; draw();
+  } else if(e.touches.length===1&&isDragging){
+    cam.x=camAtDrag.x+(e.touches[0].clientX-dragStart.x);
+    cam.y=camAtDrag.y+(e.touches[0].clientY-dragStart.y);
+    draw();
+  }
+},{passive:false});
+canvas.addEventListener('touchend',()=>{ isDragging=false; });
+
+window.addEventListener('resize', ()=>{
+  if(Object.keys(NODES).length>0) fitCanvas();
+  else {
+    const wrap=document.getElementById('canvas-wrap');
+    canvas.width=wrap.clientWidth; canvas.height=wrap.clientHeight;
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  FILE DROP / INPUT
+// ════════════════════════════════════════════════════════════
+function loadFile(file) {
+  if(!file) return;
+  document.getElementById('airport-search-status').textContent = '⟳ Lecture du fichier en cours...';
+  const reader=new FileReader();
+  reader.onload=e=>{ scanAptDat(e.target.result); };
+  reader.readAsText(file);
+}
+
+document.getElementById('fileInput').addEventListener('change', e=>loadFile(e.target.files[0]));
+
+const dz=document.getElementById('dropzone');
+dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', ()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e=>{
+  e.preventDefault(); dz.classList.remove('drag-over');
+  loadFile(e.dataTransfer.files[0]);
+});
+
+// Airport code input: uppercase auto
+document.getElementById('airport-code-input').addEventListener('input', function(){
+  this.value = this.value.toUpperCase();
+});
+document.getElementById('airport-code-input').addEventListener('keydown', e=>{
+  if(e.key==='Enter') loadAirportByCode();
+});
+
+// Initial canvas size
+(()=>{
+  const wrap=document.getElementById('canvas-wrap');
+  canvas.width=wrap.clientWidth; canvas.height=wrap.clientHeight;
+})();
+</script>
+</body>
+</html>

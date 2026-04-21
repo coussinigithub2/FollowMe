@@ -966,7 +966,8 @@ function findPath() {
     return;
   }
 
-  currentPath = result.path;
+  //currentPath = result.path;
+  currentPath = cleanPathEnd(result.path);
   const distM = result.dist.toFixed(0);
   const distFt = (result.dist * 3.281).toFixed(0);
 
@@ -1015,6 +1016,44 @@ function clearPath() {
   document.getElementById('path-overlay').style.display = 'none';
   document.querySelectorAll('#nodeTableBody tr').forEach(tr => tr.classList.remove('selected'));
   draw();
+}
+
+function cleanPathEnd(path) {
+  if (path.length < 3) return path;
+
+  let changed = true;
+
+  while (changed && path.length >= 3) {
+    changed = false;
+
+    const n = path.length;
+    const A = path[n - 3];
+    const B = path[n - 2];
+    const C = path[n - 1]; // seuil
+
+    const nodeA = NODES[A];
+    const nodeB = NODES[B];
+    const nodeC = NODES[C];
+
+    if (!nodeA || !nodeB || !nodeC) break;
+
+    // distance vers le seuil
+    const dA = haversine(nodeA.lat, nodeA.lon, nodeC.lat, nodeC.lon);
+    const dB = haversine(nodeB.lat, nodeB.lon, nodeC.lat, nodeC.lon);
+
+    // angle de déviation
+    const bearingAC = geoBearing(nodeA.lat, nodeA.lon, nodeC.lat, nodeC.lon);
+    const bearingAB = geoBearing(nodeA.lat, nodeA.lon, nodeB.lat, nodeB.lon);
+    const angle = headingDiff(bearingAC, bearingAB);
+
+    // 🔥 condition d'élimination
+    if (dB > dA && angle > 45) {
+      path.splice(n - 2, 1); // supprime B
+      changed = true;
+    }
+  }
+
+  return path;
 }
 
 function zoomToPath(path) {

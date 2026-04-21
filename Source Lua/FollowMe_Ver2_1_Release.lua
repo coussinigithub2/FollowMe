@@ -2874,6 +2874,7 @@ function match_runway(in_runway_idx)
         break
     end
 
+    --[[ REMOVE RUNWAY TYPE
     for l_idx = 1, #t_taxinode do
         if t_taxinode[l_idx].Type == "runway" then
             local l_node_id = l_idx - 1
@@ -2902,7 +2903,38 @@ function match_runway(in_runway_idx)
             end
         end
     end
-
+    ]]
+	-- 🔴 BEGIN : MODIF NO TYPE "runway"
+	for l_idx = 1, #t_taxinode do
+	    if t_taxinode[l_idx].Type == "runway" then          -- ← équivalent de rwyNodeSet.forEach
+	        local l_node_id = l_idx - 1
+	        if l_has_own_segs and not l_rwy_nodes[l_node_id] then
+	            -- skip (noeud d'une autre piste)
+	        else
+	            _, l_curr_dist = heading_n_dist(
+	                t_taxinode[l_idx].x, t_taxinode[l_idx].z,
+	                l_rwy_x, l_rwy_z)
+	            if l_curr_dist < l_min_dist_any then
+	                l_min_dist_any = l_curr_dist
+	                l_best_any = l_node_id
+	            end
+	            local l_has_twy = false
+	            for l_seg = 1, #t_segment do
+	                if (t_segment[l_seg].Node1 == l_node_id or
+	                    t_segment[l_seg].Node2 == l_node_id) and
+	                    t_segment[l_seg].Type ~= "runway" then
+	                    l_has_twy = true
+	                    break
+	                end
+	            end
+	            if l_has_twy and l_curr_dist < l_min_dist_twy then
+	                l_min_dist_twy = l_curr_dist
+	                l_best_twy = l_node_id
+	            end
+	        end
+	    end
+	end
+	-- 🔴 END : MODIF NO TYPE "runway"
     local l_chosen = l_best_twy
     local l_chosen_dist = l_min_dist_twy
     if l_chosen == -1 then
