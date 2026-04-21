@@ -795,13 +795,11 @@ function chk_line_of_sight(
     l_left_arc = add_delta_clockwise(shooter_heading, shooter_left_angle, -1)
     l_right_arc = math.fmod(shooter_heading + shooter_right_angle, 360)
 
-    if
-        l_heading_to_target >= l_left_arc and
+    if l_heading_to_target >= l_left_arc and
             l_heading_to_target <= l_left_arc + shooter_left_angle + shooter_right_angle
      then
         l_within_sight = true
-    elseif
-        l_heading_to_target <= l_right_arc and
+    elseif l_heading_to_target <= l_right_arc and
             l_heading_to_target >= l_right_arc - (shooter_left_angle + shooter_right_angle)
      then
         l_within_sight = true
@@ -1156,8 +1154,7 @@ function plot_position(in_act_dist)
 
     if car_sign == 0 or curr_node >= #t_node - 2 then
         if curr_node ~= #t_node then
-            if
-                remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
+            if remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
                     t_node[curr_node + 1].AoC < 160
              then
                 if t_node[curr_node + 1].dir == -1 then
@@ -1288,8 +1285,7 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
                 l_revised = true
             end
 
-            if
-                t_node[curr_node + 1].dist_b4_turn + (min_rot_radius + car_rear_wheel_to_ref) >
+            if t_node[curr_node + 1].dist_b4_turn + (min_rot_radius + car_rear_wheel_to_ref) >
                     t_node[curr_node + 1].dist
              then
                 t_node[curr_node + 1].dist_b4_turn =
@@ -2170,7 +2166,7 @@ function get_airport_elements()
         curr_ICAO_name = l_new_ICAO_name
 
         if taxiway_network ~= "" then
-            XPLMSpeakString("FM Service is not available at this airport")
+            XPLMSpeakString("Follow Me Service is not available at this airport")
             return
         end
 
@@ -2283,8 +2279,7 @@ function read_apt_file(in_ICAO)
                                 l_new_lines = string.sub(l_new_lines, l_start)
                                 for l_line2 in l_new_lines:gmatch("[^\r\n]+") do
                                     if string.find(l_line2, in_ICAO) then
-                                        if
-                                            string.match(l_line2, "^%d+ %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*([^%s]+)%s*.*") ==
+                                        if string.match(l_line2, "^%d+ %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*([^%s]+)%s*.*") ==
                                                 in_ICAO
                                          then
                                             l_airport_found = true
@@ -2893,8 +2888,7 @@ function match_runway(in_runway_idx)
                 end
                 local l_has_twy = false
                 for l_seg = 1, #t_segment do
-                    if
-                        (t_segment[l_seg].Node1 == l_node_id or t_segment[l_seg].Node2 == l_node_id) and
+                    if (t_segment[l_seg].Node1 == l_node_id or t_segment[l_seg].Node2 == l_node_id) and
                             t_segment[l_seg].Type ~= "runway"
                      then
                         l_has_twy = true
@@ -3043,8 +3037,11 @@ function handle_plugin_window()
     prev_plane_x = fm_plane_x
     prev_plane_z = fm_plane_z
 
+    --When the airplane leaves the ground, the follow-me car window closes
     if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
         if flightstart == 0 then
+
+        	--After 3 minutes in flight (180), the Follow Me Car is destroyed if still active
             flightstart = fm_run_time + 180
             -- VER1.6 : close the main window automatically at takeoff
             if followme_wnd ~= nil then
@@ -3081,8 +3078,7 @@ function handle_plugin_window()
 
     -- VER1.5 : Auto-trigger via SimBrief (replaces FMS)
     if FM_car_active == false and get_from_SimBrief == true and fm_gear1_gnd == 1 and holder_wnd then
-        if
-            (prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 1) or
+        if (prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 1) or
                 (prev_beacon_light ~= fm_beacon_light and fm_beacon_light == 1)
          then
             get_airport_elements()
@@ -3105,8 +3101,7 @@ function handle_plugin_window()
 
     -- VER1.6 fix : speed warning when aircraft exceeds 20 kts and speed_limiter is active
     -- 10.288 m/s = 20 kts ; warning repeats every 15 seconds max
-    if
-        speed_limiter and FM_car_active and fm_gear1_gnd == 1 and fm_gear2_gnd == 1 and fm_gnd_spd > 10.288 and
+    if speed_limiter and FM_car_active and fm_gear1_gnd == 1 and fm_gear2_gnd == 1 and fm_gnd_spd > 10.288 and
             fm_run_time > speed_warn_time
      then
         play_sound(snd_keep_speed)
@@ -3114,8 +3109,7 @@ function handle_plugin_window()
         speed_warn_time = fm_run_time + 15
     end
 
-    if
-        FM_car_active == false and flightstart == 9999 and (fm_gear1_gnd == 1 and fm_gear2_gnd == 1) and
+    if FM_car_active == false and flightstart == 9999 and (fm_gear1_gnd == 1 and fm_gear2_gnd == 1) and
             ground_time == 0 and
             fm_taxi_light == 1 and
             fm_gnd_spd < 15
@@ -3219,8 +3213,7 @@ function handle_plugin_window()
     end
 
     if holder_wnd then
-        if
-            MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
+        if MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
                 MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
                 MOUSE_Y <= SCREEN_HIGHT - Win_Y
          then
@@ -3239,8 +3232,7 @@ function handle_plugin_window()
             MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
             MOUSE_Y <= SCREEN_HIGHT - Win_Y)
         if not l_over_holder then
-            if
-                MOUSE_X >= SCREEN_WIDTH - 400 - Holder_len and MOUSE_X <= SCREEN_WIDTH - Holder_len and
+            if MOUSE_X >= SCREEN_WIDTH - 400 - Holder_len and MOUSE_X <= SCREEN_WIDTH - Holder_len and
                     MOUSE_Y >= SCREEN_HIGHT - (Win_Y + 400) and
                     MOUSE_Y <= SCREEN_HIGHT - Win_Y
              then
@@ -3570,8 +3562,7 @@ function build_window(wnd, x, y)
             end
             t_suitable_gates = {}
             for i = 1, #t_gate do
-                if
-                    string.match(t_gate[i].Types, Aircraft_Type) == Aircraft_Type or
+                if string.match(t_gate[i].Types, Aircraft_Type) == Aircraft_Type or
                         (Aircraft_Type == "0" and string.match(t_gate[i].Types, "7"))
                  then
                     t_suitable_gates[#t_suitable_gates + 1] = i
@@ -4410,8 +4401,7 @@ function transverse(in_startnode, in_endnode, in_heading)
         for l_string in t_taxinode[l_curr_node + 1].Segment:gmatch("[^,]+") do
             l_segment_idx = tonumber(l_string)
             l_pass = false
-            if
-                t_segment[l_segment_idx].Type ~= "runway" or
+            if t_segment[l_segment_idx].Type ~= "runway" or
                     (t_segment[l_segment_idx].Type == "runway" and not impose_restriction_chk)
              then
                 if t_segment[l_segment_idx].Node1 == l_curr_node then
@@ -4969,8 +4959,7 @@ function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
     l_tangent_x = in_x + math.sin(math.rad(l_tangent_heading)) * l_tangent_dist
     l_tangent_z = in_z + math.cos(math.rad(l_tangent_heading)) * l_tangent_dist * -1
 
-    if
-        ((l_tangent_x >= l_node1_x and l_tangent_x <= l_node2_x) or
+    if ((l_tangent_x >= l_node1_x and l_tangent_x <= l_node2_x) or
             (l_tangent_x >= l_node2_x and l_tangent_x <= l_node1_x)) or
             ((l_tangent_z >= l_node1_z and l_tangent_z <= l_node2_z) or
                 (l_tangent_z >= l_node2_z and l_tangent_z <= l_node1_z))
@@ -5028,12 +5017,11 @@ function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
         l_intersect_x = (l_var1 + l_var2 + l_var3) / l_var4
     end
 
-    if
-        ((l_intersect_x >= l_node1_x and l_intersect_x <= l_node2_x) or
+    if ((l_intersect_x >= l_node1_x and l_intersect_x <= l_node2_x) or
             (l_intersect_x >= l_node2_x and l_intersect_x <= l_node1_x)) and
             ((l_intersect_z >= l_node1_z and l_intersect_z <= l_node2_z) or
                 (l_intersect_z >= l_node2_z and l_intersect_z <= l_node1_z))
-     then
+    then
     else
         return false, 0, 0, 0
     end
@@ -5199,8 +5187,7 @@ function auto_assign_gate()
 
     t_suitable_gates = {}
     for l_index = 1, #t_gate do
-        if
-            string.match(t_gate[l_index].Types, Aircraft_Type) == Aircraft_Type or
+        if string.match(t_gate[l_index].Types, Aircraft_Type) == Aircraft_Type or
                 (Aircraft_Type == "0" and string.match(t_gate[l_index].Types, "7"))
          then
             t_suitable_gates[#t_suitable_gates + 1] = l_index
