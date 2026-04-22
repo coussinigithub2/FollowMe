@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Analyseur de Trajectoire CYQB</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; line-height: 1.6; color: #333; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .box { padding: 15px; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; font-size: 1.1em; color: #34495e; }
+        .point { margin: 4px 0; padding: 2px 8px; border-radius: 4px; display: inline-block; width: 100%; }
+        .kept { background-color: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+        .rejected { background-color: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; text-decoration: line-through; }
+        .neutral { background-color: #e2e3e5; color: #383d41; border-left: 4px solid #6c757d; }
+        .destination { font-weight: bold; color: #0056b3; border: 1px dashed #0056b3; }
+        .summary { font-size: 0.9em; margin-bottom: 10px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<h1>Filtrage de Trajectoire - CYQB (Québec)</h1>
+
+<div class="container">
+    <div id="bon1" class="box"></div>
+    <div id="erreur1" class="box"></div>
+    <div id="bon2" class="box"></div>
+    <div id="erreur2" class="box"></div>
+</div>
+
+<script>
+// 1. DÉFINITION DES SEUILS (Coordonnées simplifiées pour l'exemple)
+const RUNWAYS = {
+    "06": [46.7820, -71.3830],
+    "24": [46.8020, -71.4150],
+    "11": [46.7900, -71.4050],
+    "29": [46.8050, -71.3850]
+};
+
+// Définition des axes (Pour aller à la 11, on vérifie l'axe 29-11)
+const AXES = {
+    "11": { start: RUNWAYS["29"], end: RUNWAYS["11"] },
+    "06": { start: RUNWAYS["24"], end: RUNWAYS["06"] }
+};
+
+// Calcul de distance simple (Pythagore suffit pour le filtrage local)
+function getDist(p1, p2) {
+    return Math.sqrt(Math.pow(p2[0] - p1[0], 2) + Math.pow(p2[1] - p1[1], 2));
+}
+
+// Vérifie si un point est sur le segment de la piste (avec tolérance)
+function isPointOnRunway(p, axis) {
+    const dTotal = getDist(axis.start, axis.end);
+    const d1 = getDist(axis.start, p);
+    const d2 = getDist(p, axis.end);
+    return (d1 + d2) <= dTotal + 0.0001; // Marge d'erreur minime
+}
+
+/**
+ * LOGIQUE DE FILTRAGE
+ */
+function filterTaxiPath(points, targetRunwayId) {
+    const axis = AXES[targetRunwayId];
+    const destination = axis.end;
+    
+    let result = [];
+    let lastMinDistance = Infinity;
+
+    // On parcourt les points à l'envers (de la fin vers le début) ou 
+    // on maintient une progression monotone vers la destination.
+    for (let i = 0; i < points.length; i++) {
+        let p = points[i];
+        let status = "neutral";
+        
+        if (isPointOnRunway(p.coords, axis)) {
+            let currentDist = getDist(p.coords, destination);
+            
+            // Pour être "BON", la distance à la destination doit être 
+            // inférieure à celle du point précédent sur la piste.
+            if (currentDist < lastMinDistance) {
+                status = "kept";
+                lastMinDistance = currentDist;
+            } else {
+                status = "rejected";
+            }
+        }
+        
+        // Marquer la destination finale
+        if (i === points.length - 1) status = "destination";
+
+        result.push({ ...p, status });
+    }
+    return result;
+}
+
+/**
+ * GÉNÉRATION DES CAS DE TEST
+ */
+const terminal = [46.7950, -71.3930];
+
+// CAS BON 1 : Vers 11, progression régulière (7-8-9)
+const data_bon1 = [
+    { id: 1, coords: terminal },
+    { id: 7, coords: [46.7980, -71.3950] }, // Entrée piste
+    { id: 8, coords: [46.7950, -71.3980] }, // Milieu
+    { id: 9, coords: [46.7920, -71.4020] }, // Proche seuil
+    { id: 10, coords: RUNWAYS["11"] }        // Seuil
+];
+
+// CAS ERREUR 1 : Vers 06, le point 13 s'éloigne (remonte vers 24)
+const data_erreur1 = [
+    { id: 1, coords: terminal },
+    { id: 12, coords: [46.7860, -71.3900] }, 
+    { id: 13, coords: [46.7880, -71.3930] }, // ERREUR : s'éloigne de la 06
+    { id: 14, coords: RUNWAYS["06"] }
+];
+
+// CAS ERREUR 2 : Vers 11, le point 9 dépasse le point 8 puis revient
+const data_erreur2 = [
+    { id: 1, coords: terminal },
+    { id: 7, coords: [46.7980, -71.3950] },
+    { id: 8, coords: [46.7920, -71.4020] }, // Trop loin
+    { id: 9, coords: [46.7950, -71.3980] }, // Rejoint après (incohérent)
+    { id: 10, coords: RUNWAYS["11"] }
+];
+
+// CAS BON 2 : Vers 06, direct
+const data_bon2 = [
+    { id: 1, coords: terminal },
+    { id: 12, coords: [46.7860, -71.3900] },
+    { id: 13, coords: RUNWAYS["06"] }
+];
+
+/**
+ * AFFICHAGE DES RÉSULTATS
+ */
+function render(divId, title, points, runwayId) {
+    const filtered = filterTaxiPath(points, runwayId);
+    let html = `<h2>${title} (Vers Piste ${runwayId})</h2>`;
+    
+    filtered.forEach(p => {
+        let label = p.status === "destination" ? "DESTINATION" : (p.status === "kept" ? "VALIDE" : (p.status === "rejected" ? "ÉLIMINÉ" : "Hors-piste"));
+        html += `<div class="point ${p.status}">
+                    <strong>Pt ${p.id}</strong>: ${label}
+                 </div>`;
+    });
+    
+    document.getElementById(divId).innerHTML = html;
+}
+
+render("bon1", "BON 1", data_bon1, "11");
+render("erreur1", "ERREUR 1", data_erreur1, "06");
+render("bon2", "BON 2", data_bon2, "06");
+render("erreur2", "ERREUR 2", data_erreur2, "11");
+
+</script>
+
+</body>
+</html>

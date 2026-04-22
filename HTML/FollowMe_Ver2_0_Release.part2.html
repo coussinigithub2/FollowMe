@@ -1,0 +1,223 @@
+
+
+/* CANVAS OVERLAY HINT */
+#hint {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px; pointer-events: none;
+  transition: opacity .4s;
+}
+#hint .hint-icon { font-size: 56px; opacity: .15; }
+#hint .hint-text {
+  font-family: var(--mono); font-size: 13px;
+  color: var(--dim); letter-spacing: 3px;
+  text-align: center; line-height: 2;
+}
+
+/* TOOLTIP */
+#tooltip {
+  position: fixed; pointer-events: none;
+  background: rgba(13,25,40,.97);
+  border: 1px solid var(--accent);
+  color: var(--text); padding: 8px 12px;
+  font-family: var(--mono); font-size: 11px;
+  border-radius: 3px; z-index: 200; display: none;
+  line-height: 1.8; max-width: 220px;
+  box-shadow: 0 0 20px rgba(0,212,255,.15);
+}
+
+/* PATH INFO OVERLAY (on canvas) */
+#path-overlay {
+  position: absolute; bottom: 14px; right: 14px;
+  background: rgba(7,9,13,.93); border: 1px solid var(--path);
+  border-radius: 4px; padding: 10px 14px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.8;
+  display: none; max-width: 260px;
+  box-shadow: 0 0 24px rgba(255,0,170,.2);
+}
+#path-overlay .po-head { color: var(--path); letter-spacing: 2px; font-size: 10px; margin-bottom: 4px; }
+#path-overlay .po-nodes { color: var(--text); }
+#path-overlay .po-dist { color: var(--yellow); margin-top: 4px; font-size: 10px; }
+
+/* PROGRESS BAR */
+#parse-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: transparent; z-index: 10;
+}
+#parse-bar-fill {
+  height: 100%; width: 0; background: var(--accent);
+  transition: width .3s; box-shadow: 0 0 8px var(--accent);
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <h1>Taxiway</h1>
+    <span class="sub">PATHFINDER</span>
+    <div class="spacer"></div>
+    <div id="airport-badge"></div>
+    <span class="sub" style="font-size:10px">apt.dat · X-Plane 12</span>
+  </div>
+
+  <div id="body">
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <!-- DROP ZONE -->
+      <div class="sb-section">
+        <div class="sb-head"><div class="dot"></div>SOURCE — FICHIER apt.dat GLOBAL</div>
+        <div id="dropzone">
+          <input type="file" id="fileInput" accept=".dat,.txt">
+          <div class="dz-icon">📡</div>
+          <div class="dz-title">Déposer apt.dat global ici</div>
+          <div class="dz-sub">ou cliquer pour sélectionner</div>
+        </div>
+        <!-- Airport code search -->
+        <div id="airport-search-wrap">
+          <input id="airport-code-input" type="text" maxlength="4" placeholder="Code ICAO (ex: CYUL)" autocomplete="off" spellcheck="false">
+          <button id="btn-load-airport" onclick="loadAirportByCode()" disabled>CHARGER</button>
+        </div>
+        <div id="airport-search-status">— Aucun fichier chargé</div>
+        <div id="stats-grid">
+          <div class="stat-cell"><span class="stat-val" id="st-nodes">—</span><span class="stat-lbl">NŒUDS</span></div>
+          <div class="stat-cell"><span class="stat-val" id="st-segs">—</span><span class="stat-lbl">SEGMENTS</span></div>
+          <div class="stat-cell"><span class="stat-val" id="st-rwys">—</span><span class="stat-lbl">PISTES</span></div>
+        </div>
+      </div>
+
+      <!-- LAYERS -->
+      <div class="sb-section">
+        <div class="sb-head"><div class="dot" style="background:var(--green)"></div>COUCHES</div>
+        <div id="layers-body">
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#ffc107;height:4px"></span>Pistes</span>
+            <button class="toggle on" id="tog-runway" onclick="toggleL('runway',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#3dff6e"></span>Taxiways E</span>
+            <button class="toggle on" id="tog-taxiway_E" onclick="toggleL('taxiway_E',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#00d4ff"></span>Taxiways C/D</span>
+            <button class="toggle on" id="tog-taxiway_CD" onclick="toggleL('taxiway_CD',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#3dff6e;height:6px;border-radius:50%;width:6px"></span>Nœuds</span>
+            <button class="toggle on" id="tog-nodes" onclick="toggleL('nodes',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#ff6b35;height:6px;border-radius:50%;width:6px"></span>Seuils</span>
+            <button class="toggle on" id="tog-thresh" onclick="toggleL('thresh',this)"></button>
+          </div>
+          <div class="layer-row">
+            <span class="layer-label"><span class="layer-swatch" style="background:#b06fff;height:6px;border-radius:50%;width:6px"></span>Terminaux</span>
+            <button class="toggle on" id="tog-gates" onclick="toggleL('gates',this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PATHFINDER -->
+      <div class="sb-section">
+        <div class="sb-head"><div class="dot" style="background:var(--path)"></div>PATHFINDER — DIJKSTRA</div>
+        <div id="pathfinder-body">
+          <div class="pf-row">
+            <span class="pf-label">FROM</span>
+            <select class="pf-select" id="pf-from">
+              <option value="">— Sélectionner départ —</option>
+            </select>
+          </div>
+          <div class="pf-row">
+            <span class="pf-label">TO</span>
+            <select class="pf-select" id="pf-to">
+              <option value="">— Sélectionner arrivée —</option>
+            </select>
+          </div>
+          <button id="btn-find" onclick="findPath()" disabled>▶ CALCULER CHEMIN</button>
+          <button id="btn-clear" onclick="clearPath()">✕ EFFACER</button>
+          <div id="path-result"></div>
+        </div>
+      </div>
+
+      <!-- NODE TABLE -->
+      <div class="sb-section" style="border-bottom:none">
+        <div class="sb-head"><div class="dot" style="background:var(--yellow)"></div>NŒUDS <span id="node-count" style="color:var(--dim);margin-left:6px">0</span></div>
+      </div>
+      <div id="node-table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>NOM</th><th>TYPE</th></tr></thead>
+          <tbody id="nodeTableBody"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- CANVAS -->
+    <div id="canvas-wrap">
+      <canvas id="mapCanvas"></canvas>
+      <div id="hint">
+        <div class="hint-icon">🛩️</div>
+        <div class="hint-text">DÉPOSER UN FICHIER apt.dat GLOBAL<br>PUIS ENTRER UN CODE ICAO (4 LETTRES)<br>ET CLIQUER CHARGER</div>
+      </div>
+      <div id="path-overlay">
+        <div class="po-head">◈ CHEMIN CALCULÉ</div>
+        <div class="po-nodes" id="po-nodes"></div>
+        <div class="po-dist" id="po-dist"></div>
+      </div>
+      <div id="parse-bar"><div id="parse-bar-fill"></div></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let FILTER_1206 = [];
+let NODES = {};       // id -> {lat, lon, name, isRwyNode, isThresh, isGate, twName}
+let SEGMENTS = [];    // [{n1,n2,type,name}]
+let RUNWAYS = [];     // [{id, lat, lon}]
+let THRESH = [];      // threshold nodes
+let GATES = [];       // start-up / ramp locations (row 1300/15)
+let GRAPH = {};
+let currentPath = [];
+
+let airportName = '';
+let airportICAO = '';
+
+// For multi-airport apt.dat: store raw text blocks per ICAO
+let RAW_AIRPORTS = {}; // icao -> raw text block
+
+const cam = { x:0, y:0, scale:1 };
+let latMin,latMax,lonMin,lonMax,latRange,lonRange;
+
+const layers = {
+  runway: true, taxiway_E: true, taxiway_CD: true,
+  nodes: true, thresh: true, gates: true
+};
+
+let isDragging = false, dragStart={x:0,y:0}, camAtDrag={x:0,y:0};
+let lastTouchDist = 0;
+
+// ════════════════════════════════════════════════════════════
+//  MULTI-AIRPORT FILE PARSING (scan ICAO index only)
+// ════════════════════════════════════════════════════════════
+function scanAptDat(text) {
+  // Build index: ICAO -> character offset
+  RAW_AIRPORTS = {};
+  const lines = text.split(/\r?\n/);
+  let currentICAO = null;
+  let startLine = 0;
+  let 

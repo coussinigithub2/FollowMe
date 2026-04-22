@@ -901,6 +901,45 @@ function headingDiff(a, b) {
   return d > 180 ? 360 - d : d;
 }
 
+function getDistance(id1, id2) {
+    const n1 = NODES[id1];
+    const n2 = NODES[id2];
+    if (!n1 || !n2) return Infinity;
+
+    const R = 6371000; // Rayon de la Terre en mètres
+    const dLat = (n2.lat - n1.lat) * Math.PI / 180;
+    const dLon = (n2.lon - n1.lon) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(n1.lat * Math.PI / 180) * Math.cos(n2.lat * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function cleanPathProgressive(pathIds) {
+    if (pathIds.length <= 2) return pathIds;
+
+    const destId = pathIds[pathIds.length - 1];
+    const cleanedPath = [pathIds[0]];
+
+    // Distance entre le premier point et la destination
+    let lastValidDistance = getDistance(pathIds[0], destId);
+
+    for (let i = 1; i < pathIds.length - 1; i++) {
+        const currentId = pathIds[i];
+        const distanceToDest = getDistance(currentId, destId);
+
+        // On ne garde que si on se rapproche de la cible par rapport au dernier point validé
+        if (distanceToDest < lastValidDistance) {
+            cleanedPath.push(currentId);
+            lastValidDistance = distanceToDest;
+        }
+    }
+
+    cleanedPath.push(destId);
+    return cleanedPath;
+}
+
 // ════════════════════════════════════════════════════════════
 //  DIJKSTRA
 // ════════════════════════════════════════════════════════════
@@ -957,7 +996,9 @@ function findPath() {
     res.innerHTML = '<span class="pr-err">✕ Nœud introuvable</span>';
     return;
   }
-  const result = dijkstra(fromId, toId);
+
+  const result = dijkstra(fromId, toId); // Utilise votre fonction existante
+
   if (!result) {
     res.style.display = 'block';
     res.innerHTML = '<span class="pr-err">✕ Aucun chemin trouvé</span>';
@@ -966,15 +1007,19 @@ function findPath() {
     return;
   }
 
-  //currentPath = result.path;
-  currentPath = cleanPathEnd(result.path);
+  // --- LA CORRECTION ICI ---
+  // On nettoie le chemin (result.path) pour supprimer les détours
+  currentPath = cleanPathProgressive(result.path);
+
+  // Note: On recalcule la distance si nécessaire, ou on garde celle de Dijkstra
   const distM = result.dist.toFixed(0);
   const distFt = (result.dist * 3.281).toFixed(0);
 
   // Detect if the path uses any runway or backtaxi segment
   let usesRwy = false;
-  for (let i = 0; i < result.path.length - 1; i++) {
-    const a = result.path[i], b = result.path[i+1];
+  // On boucle sur currentPath (le chemin filtré) au lieu de result.path
+  for (let i = 0; i < currentPath.length - 1; i++) {
+    const a = currentPath[i], b = currentPath[i+1];
     const seg = SEGMENTS.find(s =>
       (s.n1===a&&s.n2===b)||(s.n1===b&&s.n2===a)
     );
@@ -982,32 +1027,40 @@ function findPath() {
   }
 
   res.style.display = 'block';
-  let html = '<div class="pr-head">◈ CHEMIN · ' + result.path.length + ' NŒUDS</div>';
+  // On affiche le nombre de nœuds du chemin FILTRÉ
+  let html = '<div class="pr-head">◈ CHEMIN · ' + currentPath.length + ' NŒUDS</div>';
+
   if (usesRwy) {
     html += `<div style="color:#ffc107;font-size:10px;margin-bottom:4px">⚠ BACKTAXI / PISTE utilisé (aucun taxiway alternatif)</div>`;
   }
-  result.path.forEach(id => {
+
+  // Affichage de la liste des nœuds FILTRÉS
+  currentPath.forEach(id => {
     const n = NODES[id];
     html += `<div class="pr-node"><span class="nid">${id}</span> <span class="nm">${n?.name||''}</span></div>`;
   });
+
   html += `<div class="pr-dist">↔ ${distM} m · ${distFt} ft</div>`;
   res.innerHTML = html;
 
   const poN = document.getElementById('po-nodes');
   const poD = document.getElementById('po-dist');
-  poN.textContent = result.path.map(id => {
+
+  // Overlay avec le chemin FILTRÉ
+  poN.textContent = currentPath.map(id => {
     const n = NODES[id];
     return `${id}${n?.name ? ' ('+n.name+')' : ''}`;
   }).join(' → ');
-  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${result.path.length} nœuds`;
+
+  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${currentPath.length} nœuds`;
   document.getElementById('path-overlay').style.display = 'block';
 
   document.querySelectorAll('#nodeTableBody tr').forEach(tr => {
-    tr.classList.toggle('selected', result.path.includes(parseInt(tr.dataset.id)));
+    tr.classList.toggle('selected', currentPath.includes(parseInt(tr.dataset.id)));
   });
 
   draw();
-  zoomToPath(result.path);
+  zoomToPath(currentPath);
 }
 
 function clearPath() {
@@ -1016,44 +1069,6 @@ function clearPath() {
   document.getElementById('path-overlay').style.display = 'none';
   document.querySelectorAll('#nodeTableBody tr').forEach(tr => tr.classList.remove('selected'));
   draw();
-}
-
-function cleanPathEnd(path) {
-  if (path.length < 3) return path;
-
-  let changed = true;
-
-  while (changed && path.length >= 3) {
-    changed = false;
-
-    const n = path.length;
-    const A = path[n - 3];
-    const B = path[n - 2];
-    const C = path[n - 1]; // seuil
-
-    const nodeA = NODES[A];
-    const nodeB = NODES[B];
-    const nodeC = NODES[C];
-
-    if (!nodeA || !nodeB || !nodeC) break;
-
-    // distance vers le seuil
-    const dA = haversine(nodeA.lat, nodeA.lon, nodeC.lat, nodeC.lon);
-    const dB = haversine(nodeB.lat, nodeB.lon, nodeC.lat, nodeC.lon);
-
-    // angle de déviation
-    const bearingAC = geoBearing(nodeA.lat, nodeA.lon, nodeC.lat, nodeC.lon);
-    const bearingAB = geoBearing(nodeA.lat, nodeA.lon, nodeB.lat, nodeB.lon);
-    const angle = headingDiff(bearingAC, bearingAB);
-
-    // 🔥 condition d'élimination
-    if (dB > dA && angle > 45) {
-      path.splice(n - 2, 1); // supprime B
-      changed = true;
-    }
-  }
-
-  return path;
 }
 
 function zoomToPath(path) {

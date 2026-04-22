@@ -947,6 +947,82 @@ function dijkstra(startId, endId) {
   return { path, dist: realDist[endId] }; // report true physical distance
 }
 
+// ════════════════════════════════════════════════════════════
+//  FILTRAGE NŒUDS INTERMÉDIAIRES RUNWAY INUTILES
+// ════════════════════════════════════════════════════════════
+// Retire de l'AFFICHAGE les nœuds runway/backtaxi intermédiaires superflus.
+// Règles de sécurité :
+//   - Ne jamais retirer le 1er ou le dernier nœud du chemin
+//   - Ne jamais retirer un seuil (isThresh) ni un gate (isGate)
+//   - Ne retirer que si le nœud est entouré de segments runway/backtaxi des deux côtés
+//   - Ne retirer que si le nœud n'a aucune connexion taxiway réelle
+//     (= tous ses voisins dans GRAPH sont aussi des nœuds runway/backtaxi ou seuils)
+//   - Si le chemin emprunte la piste dans le sens "opposé" (backtaxi vers un seuil),
+//     conserver le nœud de départ de la piste (10/28_start) pour garder la lisibilité
+function filterRunwayIntermediates(path) {
+  if (path.length <= 2) return path;
+
+  // Retourne le type du segment entre deux nœuds du chemin
+  const segType = (a, b) => {
+    const seg = SEGMENTS.find(s =>
+      (s.n1 === a && s.n2 === b) || (s.n1 === b && s.n2 === a)
+    );
+    return seg ? seg.type : null;
+  };
+
+  // Un nœud est "purement piste" s'il est isRwyNode ET n'a aucune connexion taxiway réelle
+  // (on vérifie dans SEGMENTS, pas dans GRAPH qui est bidirectionnel)
+  const isPureRunwayNode = (nodeId) => {
+    const n = NODES[nodeId];
+    if (!n || !n.isRwyNode) return false;
+    if (n.isThresh || n.isGate) return false;
+    // Vérifier qu'aucun segment taxiway ne touche ce nœud
+    const hasTwy = SEGMENTS.some(s =>
+      (s.n1 === nodeId || s.n2 === nodeId) &&
+      s.type !== 'runway' && s.type !== 'backtaxi' && s.type !== 'gate_link'
+    );
+    return !hasTwy;
+  };
+
+  const result = [];
+  for (let i = 0; i < path.length; i++) {
+    const id = path[i];
+    const n = NODES[id];
+
+    // Toujours garder premier et dernier
+    if (i === 0 || i === path.length - 1) { result.push(id); continue; }
+
+    // Toujours garder les seuils et gates
+    if (!n || n.isThresh || n.isGate) { result.push(id); continue; }
+
+    // Le nœud doit être un nœud purement piste (isRwyNode sans connexion taxiway)
+    if (!isPureRunwayNode(id)) { result.push(id); continue; }
+
+    // Le segment précédent ET suivant dans le chemin doivent être runway/backtaxi
+    // OU le nœud précédent/suivant doit lui-même être un nœud piste/seuil
+    // Cela couvre le cas backtaxi (3 → 136 → 200) où 3→136 peut être backtaxi
+    const prevType = segType(path[i - 1], id);
+    const nextType = segType(id, path[i + 1]);
+    const prevOk = prevType === 'runway' || prevType === 'backtaxi';
+    const nextOk = nextType === 'runway' || nextType === 'backtaxi';
+
+    // Si au moins un côté est piste/backtaxi ET l'autre est aussi piste/backtaxi → supprimer
+    if (prevOk && nextOk) continue; // nœud retiré
+
+    // Cas particulier : nœud purement piste entre un taxiway et un backtaxi
+    // (ex: taxiway→136→backtaxi→seuil). Le nœud 136 est un "start" de piste
+    // inséré entre la fin du taxiway et le seuil — on le retire aussi.
+    const prevNode = NODES[path[i - 1]];
+    const nextNode = NODES[path[i + 1]];
+    const prevIsRwyOrThresh = prevNode && (prevNode.isRwyNode || prevNode.isThresh);
+    const nextIsRwyOrThresh = nextNode && (nextNode.isRwyNode || nextNode.isThresh);
+    if ((prevOk || prevIsRwyOrThresh) && (nextOk || nextIsRwyOrThresh)) continue; // nœud retiré
+
+    result.push(id);
+  }
+  return result;
+}
+
 function findPath() {
   const fromId = parseInt(document.getElementById('pf-from').value);
   const toId   = parseInt(document.getElementById('pf-to').value);
@@ -966,14 +1042,25 @@ function findPath() {
     return;
   }
 
-  currentPath = result.path;
+  // On garde le chemin brut Dijkstra pour la distance réelle,
+  // mais currentPath (dessin + affichage) utilise la version filtrée
+  const rawPath = result.path;
   const distM = result.dist.toFixed(0);
   const distFt = (result.dist * 3.281).toFixed(0);
 
+  // ── FILTRAGE des nœuds intermédiaires inutiles sur la piste ──
+  // Un nœud runway intermédiaire est superflu si :
+  //   1. Il est entre deux segments runway/backtaxi consécutifs
+  //   2. Ce n'est pas un seuil, ni un gate
+  //   3. Il n'a aucune connexion vers un taxiway (degré taxiway = 0)
+  // On le retire de l'AFFICHAGE uniquement — le graphe reste intact.
+  const filteredPath = filterRunwayIntermediates(rawPath);
+  currentPath = filteredPath; // ← dessin sur la carte ET affichage sidebar
+
   // Detect if the path uses any runway or backtaxi segment
   let usesRwy = false;
-  for (let i = 0; i < result.path.length - 1; i++) {
-    const a = result.path[i], b = result.path[i+1];
+  for (let i = 0; i < rawPath.length - 1; i++) {
+    const a = rawPath[i], b = rawPath[i+1];
     const seg = SEGMENTS.find(s =>
       (s.n1===a&&s.n2===b)||(s.n1===b&&s.n2===a)
     );
@@ -981,11 +1068,11 @@ function findPath() {
   }
 
   res.style.display = 'block';
-  let html = '<div class="pr-head">◈ CHEMIN · ' + result.path.length + ' NŒUDS</div>';
+  let html = '<div class="pr-head">◈ CHEMIN · ' + filteredPath.length + ' NŒUDS</div>';
   if (usesRwy) {
     html += `<div style="color:#ffc107;font-size:10px;margin-bottom:4px">⚠ BACKTAXI / PISTE utilisé (aucun taxiway alternatif)</div>`;
   }
-  result.path.forEach(id => {
+  filteredPath.forEach(id => {
     const n = NODES[id];
     html += `<div class="pr-node"><span class="nid">${id}</span> <span class="nm">${n?.name||''}</span></div>`;
   });
@@ -994,15 +1081,15 @@ function findPath() {
 
   const poN = document.getElementById('po-nodes');
   const poD = document.getElementById('po-dist');
-  poN.textContent = result.path.map(id => {
+  poN.textContent = filteredPath.map(id => {
     const n = NODES[id];
     return `${id}${n?.name ? ' ('+n.name+')' : ''}`;
   }).join(' → ');
-  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${result.path.length} nœuds`;
+  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${filteredPath.length} nœuds`;
   document.getElementById('path-overlay').style.display = 'block';
 
   document.querySelectorAll('#nodeTableBody tr').forEach(tr => {
-    tr.classList.toggle('selected', result.path.includes(parseInt(tr.dataset.id)));
+    tr.classList.toggle('selected', filteredPath.includes(parseInt(tr.dataset.id)));
   });
 
   draw();
