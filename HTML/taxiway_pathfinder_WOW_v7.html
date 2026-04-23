@@ -698,25 +698,16 @@ function parseAirportBlock(icao, text) {
     g.id = id;
   });
 
-  // ── PHASE 3: Connect thresholds to nearest TAXIWAY node (not runway node) ──
-  // ✅ MODIFIÉ: on cherche le noeud TAXIWAY le plus proche (non-runway, non-thresh, non-gate)
-  //    au lieu du noeud runway le plus proche.
-  //    Ceci évite que node 136 (isRwyNode) soit inclus dans le chemin vers le seuil.
+  // ── PHASE 3: Connect thresholds to nearest runway node ──
   THRESH.forEach(t => {
     const alreadyConnected = SEGMENTS.some(s =>
       s.type === 'runway' && (s.n1 === t.id || s.n2 === t.id)
     );
     if (alreadyConnected) return;
     let best = null, bestD = Infinity;
-
-    // 🔴 AVANT: rwyNodeSet.forEach(nid => { ... })  — cherchait parmi les noeuds RUNWAY
-    // 🟢 APRÈS: cherche parmi tous les noeuds TAXIWAY (non-runway, non-thresh, non-gate)
-    Object.keys(NODES).forEach(nidStr => {
-      const nid = parseInt(nidStr);
+    rwyNodeSet.forEach(nid => {
       const nd = NODES[nid];
-      if (!nd) return;
-      if (nd.isRwyNode || nd.isThresh || nd.isGate) return; // ← exclure runway/seuil/gate
-      if (nid === t.id) return;
+      if (!nd || nid === t.id) return;
       const d = haversine(nd.lat, nd.lon, t.lat, t.lon);
       if (d < bestD) { bestD = d; best = nid; }
     });
@@ -956,6 +947,143 @@ function dijkstra(startId, endId) {
   return { path, dist: realDist[endId] }; // report true physical distance
 }
 
+// ════════════════════════════════════════════════════════════
+//  FILTRAGE MONOTONE — ligne fictive entre seuils de piste
+// ════════════════════════════════════════════════════════════
+//
+// Principe : si la destination est un seuil de piste, on trace
+// une ligne fictive entre ce seuil (T) et le seuil opposé (O).
+// On projette chaque nœud du chemin sur cet axe (produit scalaire).
+// Si PLUS DE 2 nœuds du chemin se retrouvent "sur" cette ligne
+// (dans une bande de tolérance), on vérifie la progression
+// monotone : tout nœud qui régresse (distance au seuil cible
+// plus grande que le nœud précédent sur l'axe) est supprimé.
+//
+// Règle supplémentaire importante : le nœud de départ (gate/terminal)
+// et le nœud d'arrivée (seuil) sont TOUJOURS conservés.
+//
+function applyRunwayAxisFilter(path, destThreshId) {
+  if (!path || path.length < 3) return path;
+
+  const destNode = NODES[destThreshId];
+  if (!destNode || !destNode.isThresh) return path;
+
+  // Trouver le seuil opposé : même numéro de piste, cap opposé
+  const destRwy = destNode.rwy_id;          // ex: "10"
+  const oppositeRwy = getOppositeRwyId(destRwy); // ex: "28"
+
+  const oppThresh = THRESH.find(t => t.rwy_id === oppositeRwy);
+  if (!oppThresh) return path; // pas de seuil opposé trouvé → pas de filtrage
+
+  const T = { lat: destNode.lat, lon: destNode.lon };         // seuil cible
+  const O = { lat: oppThresh.lat, lon: oppThresh.lon };       // seuil opposé
+
+  // Vecteur axe T→O (direction de la piste)
+  const axLen = haversine(T.lat, T.lon, O.lat, O.lon);
+  if (axLen < 1) return path; // dégénéré
+
+  // Tolérance perpendiculaire : on considère "sur l'axe" si la
+  // distance perpendiculaire est < MAX_PERP_M mètres (valeur absolue, pas ratio)
+  // On cible uniquement les nœuds réellement SUR l'axe de piste (nœuds de piste
+  // ou nœuds très proches du centre-ligne), pas les taxiways parallèles.
+  // 15 m = largeur typique demi-piste, assez strict pour ne pas capturer les taxiways.
+  const MAX_PERP_M = 15;
+
+  // Pour chaque nœud du chemin, calculer :
+  //   proj  = projection signée sur l'axe T→O (en mètres depuis T)
+  //   perp  = distance perpendiculaire à l'axe
+  //   distToTarget = haversine vers le seuil cible (pour monotonie)
+  function projectOnAxis(nodeId) {
+    const n = NODES[nodeId];
+    if (!n) return null;
+    const dTN = haversine(T.lat, T.lon, n.lat, n.lon);
+    const dON = haversine(O.lat, O.lon, n.lat, n.lon);
+    const proj = (axLen * axLen + dTN * dTN - dON * dON) / (2 * axLen);
+    const perp = Math.sqrt(Math.max(0, dTN * dTN - proj * proj));
+    return { proj, perp, distToTarget: dTN };
+  }
+
+  // Identifier les nœuds "sur l'axe" (hors seuil de destination qui est toujours compté)
+  const onAxisIndices = [];
+  for (let i = 0; i < path.length - 1; i++) { // exclure le dernier (seuil destination)
+    const info = projectOnAxis(path[i]);
+    if (!info) continue;
+    if (info.perp <= MAX_PERP_M && info.proj >= -50 && info.proj <= axLen + 50) {
+      onAxisIndices.push(i);
+    }
+  }
+
+  // Règle : filtrage seulement si total sur l'axe > 2 (seuil + au moins 2 autres)
+  // seuil = 1 nœud garanti, donc il faut onAxisIndices.length >= 2
+  if (onAxisIndices.length < 2) return path;
+
+  // Appliquer le filtre de progression monotone sur ces nœuds
+  // On mesure la DISTANCE AU SEUIL CIBLE : elle doit décroître de façon monotone
+  // (on avance vers T, donc distToTarget diminue)
+  // On parcourt les nœuds sur l'axe dans l'ordre du chemin et on supprime
+  // tout nœud dont la distToTarget est PLUS GRANDE que celle du nœud précédent
+  // sur l'axe (régression = on s'éloigne du but).
+
+  // Appliquer le filtre de progression monotone sur les nœuds sur l'axe
+  // (le seuil de destination est exclu de onAxisIndices mais toujours conservé)
+  // On mesure la DISTANCE AU SEUIL CIBLE : elle doit décroître de façon monotone.
+  // Le premier nœud sur l'axe définit la référence initiale de distance.
+  // Tout nœud suivant dont la distToTarget est PLUS GRANDE que la référence courante
+  // est éliminé (régression = on s'éloigne du but).
+
+  const toRemove = new Set();
+  let prevDist = Infinity; // distance au seuil cible du dernier nœud sur l'axe conservé
+
+  for (let k = 0; k < onAxisIndices.length; k++) {
+    const idx = onAxisIndices[k];
+    const nodeId = path[idx];
+
+    // Le nœud de départ (index 0) est toujours conservé
+    if (idx === 0) {
+      const info = projectOnAxis(nodeId);
+      if (info) prevDist = info.distToTarget;
+      continue;
+    }
+
+    const info = projectOnAxis(nodeId);
+    if (!info) continue;
+
+    if (info.distToTarget > prevDist) {
+      // Régression → supprimer ce nœud
+      toRemove.add(idx);
+    } else {
+      // Progression (ou même distance) → conserver, mettre à jour la référence
+      prevDist = info.distToTarget;
+    }
+  }
+
+  if (toRemove.size === 0) return path; // rien à filtrer
+
+  // Reconstruire le chemin sans les nœuds éliminés
+  const filtered = path.filter((_, i) => !toRemove.has(i));
+  return filtered;
+}
+
+// Retourne l'identifiant du seuil opposé d'une piste
+// Ex: "10" → "28", "10L" → "28R", "06" → "24", etc.
+function getOppositeRwyId(rwyId) {
+  if (!rwyId) return null;
+  const m = rwyId.match(/^(\d+)([LRC]?)$/);
+  if (!m) return null;
+  let num = parseInt(m[1]);
+  const suffix = m[2];
+  // Cap opposé
+  let opp = num + 18;
+  if (opp > 36) opp -= 36;
+  // Suffix opposé
+  let oppSuffix = '';
+  if (suffix === 'L') oppSuffix = 'R';
+  else if (suffix === 'R') oppSuffix = 'L';
+  else if (suffix === 'C') oppSuffix = 'C';
+  const oppStr = (opp < 10 ? '0' : '') + opp + oppSuffix;
+  return oppStr;
+}
+
 function findPath() {
   const fromId = parseInt(document.getElementById('pf-from').value);
   const toId   = parseInt(document.getElementById('pf-to').value);
@@ -975,15 +1103,26 @@ function findPath() {
     return;
   }
 
-  currentPath = result.path;
-  //currentPath = cleanPathEnd([...result.path]); // clone
+  // ── Filtrage monotone sur l'axe de piste ──
+  // Si la destination est un seuil de piste, on applique le filtre
+  // de progression monotone pour éliminer les nœuds qui régressent
+  // sur la ligne fictive entre les deux seuils de la piste.
+  const destNode = NODES[toId];
+  let finalPath = result.path;
+  let removedNodes = [];
+  if (destNode && destNode.isThresh) {
+    finalPath = applyRunwayAxisFilter(result.path, toId);
+    removedNodes = result.path.filter(id => !finalPath.includes(id));
+  }
+
+  currentPath = finalPath;
   const distM = result.dist.toFixed(0);
   const distFt = (result.dist * 3.281).toFixed(0);
 
   // Detect if the path uses any runway or backtaxi segment
   let usesRwy = false;
-  for (let i = 0; i < result.path.length - 1; i++) {
-    const a = result.path[i], b = result.path[i+1];
+  for (let i = 0; i < finalPath.length - 1; i++) {
+    const a = finalPath[i], b = finalPath[i+1];
     const seg = SEGMENTS.find(s =>
       (s.n1===a&&s.n2===b)||(s.n1===b&&s.n2===a)
     );
@@ -991,11 +1130,14 @@ function findPath() {
   }
 
   res.style.display = 'block';
-  let html = '<div class="pr-head">◈ CHEMIN · ' + result.path.length + ' NŒUDS</div>';
+  let html = '<div class="pr-head">◈ CHEMIN · ' + finalPath.length + ' NŒUDS</div>';
   if (usesRwy) {
     html += `<div style="color:#ffc107;font-size:10px;margin-bottom:4px">⚠ BACKTAXI / PISTE utilisé (aucun taxiway alternatif)</div>`;
   }
-  result.path.forEach(id => {
+  if (removedNodes.length > 0) {
+    html += `<div style="color:#ff6b35;font-size:10px;margin-bottom:4px">⊘ ${removedNodes.length} nœud(s) filtré(s) [axe piste — régression]: ${removedNodes.join(', ')}</div>`;
+  }
+  finalPath.forEach(id => {
     const n = NODES[id];
     html += `<div class="pr-node"><span class="nid">${id}</span> <span class="nm">${n?.name||''}</span></div>`;
   });
@@ -1004,19 +1146,19 @@ function findPath() {
 
   const poN = document.getElementById('po-nodes');
   const poD = document.getElementById('po-dist');
-  poN.textContent = result.path.map(id => {
+  poN.textContent = finalPath.map(id => {
     const n = NODES[id];
     return `${id}${n?.name ? ' ('+n.name+')' : ''}`;
   }).join(' → ');
-  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${result.path.length} nœuds`;
+  poD.textContent = `↔ ${distM} m · ${distFt} ft · ${finalPath.length} nœuds`;
   document.getElementById('path-overlay').style.display = 'block';
 
   document.querySelectorAll('#nodeTableBody tr').forEach(tr => {
-    tr.classList.toggle('selected', result.path.includes(parseInt(tr.dataset.id)));
+    tr.classList.toggle('selected', finalPath.includes(parseInt(tr.dataset.id)));
   });
 
   draw();
-  zoomToPath(result.path);
+  zoomToPath(finalPath);
 }
 
 function clearPath() {
@@ -1025,44 +1167,6 @@ function clearPath() {
   document.getElementById('path-overlay').style.display = 'none';
   document.querySelectorAll('#nodeTableBody tr').forEach(tr => tr.classList.remove('selected'));
   draw();
-}
-
-function cleanPathEnd(path) {
-  if (path.length < 3) return path;
-
-  let changed = true;
-
-  while (changed && path.length >= 3) {
-    changed = false;
-
-    const n = path.length;
-    const A = path[n - 3];
-    const B = path[n - 2];
-    const C = path[n - 1]; // seuil
-
-    const nodeA = NODES[A];
-    const nodeB = NODES[B];
-    const nodeC = NODES[C];
-
-    if (!nodeA || !nodeB || !nodeC) break;
-
-    // distance vers le seuil
-    const dA = haversine(nodeA.lat, nodeA.lon, nodeC.lat, nodeC.lon);
-    const dB = haversine(nodeB.lat, nodeB.lon, nodeC.lat, nodeC.lon);
-
-    // angle de déviation
-    const bearingAC = geoBearing(nodeA.lat, nodeA.lon, nodeC.lat, nodeC.lon);
-    const bearingAB = geoBearing(nodeA.lat, nodeA.lon, nodeB.lat, nodeB.lon);
-    const angle = headingDiff(bearingAC, bearingAB);
-
-    // 🔥 condition d'élimination
-    if (dB > dA && angle > 45) {
-      path.splice(n - 2, 1); // supprime B
-      changed = true;
-    }
-  }
-
-  return path;
 }
 
 function zoomToPath(path) {
