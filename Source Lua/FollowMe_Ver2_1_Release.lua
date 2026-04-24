@@ -124,6 +124,19 @@
 --                           immediately begins driving toward its first node and the pilot sees
 --                           the correct sign from the very first frame of the run.
 --                           Add a log to check the car_sign process
+--    VER2.0 Coussini 2026:  Major version that combine several follow me car situation and bug.
+--                           Arrow pointer: replaced the yellow line with a filled
+--                           arrowhead triangle (tip points toward the FM car,
+--                           direction is aircraft-heading-relative, 0-360 normalised).
+--                           Direction message: "Follow Me Car is ready" replaced by
+--                           four context-aware messages based on the relative bearing
+--                           of the car to the aircraft nose
+--
+--                           1-Front (300-360 and 0-60 deg) : "Follow Me Car is ahead"
+--                           2-Right (60-120 deg)           : "Follow Me Car is on the right"
+--                           3-Rear  (120-240 deg)          : "Follow Me Car is behind"
+--                           4-Left  (240-300 deg)          : "Follow Me Car is on the left"
+--                           Normalize all sound (same speaker)
 --    VER2.1 Coussini 2026:  Monotone runway-axis filter.
 --                           When the departure route contains nodes that lie on the
 --                           fictitious axis between the two thresholds of the target
@@ -141,19 +154,6 @@
 --                           full t_node[] list is built and BEFORE the VER1.17
 --                           centreline-projection / GPS-threshold block, which is
 --                           unaffected.
---    VER2.0 Coussini 2026:  Major version that combine several follow me car situation and bug.
---                           Arrow pointer: replaced the yellow line with a filled
---                           arrowhead triangle (tip points toward the FM car,
---                           direction is aircraft-heading-relative, 0-360 normalised).
---                           Direction message: "Follow Me Car is ready" replaced by
---                           four context-aware messages based on the relative bearing
---                           of the car to the aircraft nose
---
---                           1-Front (300-360 and 0-60 deg) : "Follow Me Car is ahead"
---                           2-Right (60-120 deg)           : "Follow Me Car is on the right"
---                           3-Rear  (120-240 deg)          : "Follow Me Car is behind"
---                           4-Left  (240-300 deg)          : "Follow Me Car is on the left"
---                           Normalize all sound (same speaker)
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
