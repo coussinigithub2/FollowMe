@@ -170,6 +170,44 @@
 --                           (bypassing XPLMFindNavAid entirely) and clears the flag.
 --                           XPLMFindNavAid is only called when the aircraft genuinely moves
 --                           to a different airport, not on an in-place cancel.
+--    VER2.4 Coussini 2026:  FIX-A : add_new_taxinode_segment dead-end guard.
+--                           Old guard string.find(Segment,",") required a junction.
+--                           Dead-end endpoint (single segment, no comma) left the
+--                           virtual start node disconnected → degenerate A* route →
+--                           straight-line drive (reproduced at MDPC Gate 7 → RWY 27).
+--                           Fix: Segment ~= "" instead of comma check.
+--                           FIX-B : Comprehensive diagnostic logging added throughout
+--                           the route-build pipeline so any future regression or
+--                           U-turn detour is immediately visible in Log.txt:
+--                           - determine_possible_routes logs gate info, chosen
+--                             start node, and distance gate-to-startNode.
+--                           - add_new_taxinode_segment logs N1/N2 Segment strings,
+--                             dead-end flag, and whether FIX-A was triggered.
+--                           - transverse logs every node expansion (node id, f/g/h,
+--                             cost, heading) and the final chosen route with cost.
+--                           - process_possible_routes logs each DRIVE NODE with
+--                             x/z/hdg/dist-to-threshold and flags any regression
+--                             (U-turn / detour) with *** REGRESSION ***.
+--                           FIX-C : start_car() spawn-distance threshold raised and
+--                           gate-perpendicular detection added.
+--                           Root cause (confirmed by log at MDPC Gate 7 → RWY 27):
+--                           startNode=207 is 108.8m from the gate. The VER1.12
+--                           proximity fallback only triggers when dist > 150m, so
+--                           the car spawns 108.8m away on the taxiway and immediately
+--                           starts driving toward the runway, leaving the aircraft
+--                           stranded at the gate with no visible guide.
+--                           Fix 1: lower the spawn-fallback threshold from 150m to 80m
+--                           so any startNode more than 80m from the gate triggers the
+--                           "place behind aircraft" logic.
+--                           Fix 2: in departure mode with a known gate, if the car
+--                           spawns on the taxiway (dist_to_plane > 50m) and the gate
+--                           heading is roughly perpendicular to the first route leg
+--                           (angle > 45°), insert a synthetic waypoint at the gate
+--                           position as t_node[0-pre] so the car first drives to the
+--                           gate, then follows the normal route to the runway. This
+--                           ensures the car is always visible to the pilot from the
+--                           very first frame, regardless of how far the taxiway is
+--                           from the gate stand.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -718,12 +756,74 @@ function start_car()
     -- VER1.12 : if the route startpt is more than 150m away, place the car
     -- directly behind the aircraft so the pilot can always see it immediately.
     -- The car will then drive forward to join its route normally.
+    --
+    -- VER2.4 FIX-C : Two improvements to spawn behaviour:
+    --
+    -- FIX-C/1 : Lower threshold from 150m to 80m.
+    -- The old 150m threshold was too permissive. The virtual startNode for
+    -- gates perpendicular to their taxiway (e.g. MDPC Gate 7) is placed on
+    -- the taxiway ~109m away. That is under 150m, so VER1.12 never triggered
+    -- and the car spawned 109m ahead already heading toward the runway.
+    -- Lowering to 80m ensures the fallback fires for all realistic gate
+    -- stand → taxiway distances (typical is 80-150m for perpendicular gates).
+    --
+    -- FIX-C/2 : Gate-perpendicular pre-waypoint insertion.
+    -- Even at 80m some gates will still be just under the threshold after the
+    -- change, so we also detect the perpendicular-gate case explicitly:
+    -- If we are in departure mode with a known gate AND the car spawns more
+    -- than 50m from the aircraft, insert a pre-waypoint at the gate position
+    -- as the new t_node[1], pushing the existing route one index forward.
+    -- The car drives to the gate first (so the pilot sees it immediately),
+    -- then follows the normal taxiway route to the runway.
     local _, l_dist_to_plane = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
-    if l_dist_to_plane > 150 then
+    logMsg(string.format(
+        "FollowMe : start_car  spawnNode=t_node[1]  x=%.1f  z=%.1f  dist_to_plane=%.1fm  gate=%d",
+        car_x, car_z, l_dist_to_plane, depart_gate))
+
+    if l_dist_to_plane > 80 then
+        -- FIX-C/1: spawn behind aircraft, car will drive to route start normally
         local l_behind_heading = add_delta_clockwise(fm_plane_head, 180, 1)
         car_x, car_z = coordinates_of_adjusted_ref(fm_plane_x, fm_plane_z, 0, 15, l_behind_heading)
         car_y = probe_y(car_x, car_y, car_z)
         car_body_heading = fm_plane_head
+        logMsg(string.format(
+            "FollowMe : start_car  FIX-C/1 spawn-behind triggered (dist=%.1fm > 80m)  car placed 15m behind plane",
+            l_dist_to_plane))
+    elseif depart_arrive == 1 and depart_gate > 0 and l_dist_to_plane > 50 then
+        -- FIX-C/2: car is on taxiway but gate is far - insert gate as pre-waypoint
+        -- so the car drives to the gate stand first, visible to the pilot from frame 1.
+        local l_gate_x = t_gate[depart_gate].x
+        local l_gate_y = t_gate[depart_gate].y
+        local l_gate_z = t_gate[depart_gate].z
+        -- Compute heading from gate position toward the current t_node[1] (taxiway)
+        local l_hdg_gate_to_n1, l_dist_gate_to_n1 = heading_n_dist(l_gate_x, l_gate_z, t_node[1].x, t_node[1].z)
+        -- Check if gate heading is perpendicular to first route leg (> 45° difference)
+        local l_angle_diff = math.abs(l_hdg_gate_to_n1 - t_node[1].heading)
+        if l_angle_diff > 180 then l_angle_diff = 360 - l_angle_diff end
+        logMsg(string.format(
+            "FollowMe : start_car  gate_to_node1_hdg=%.1f°  node1_leg_hdg=%.1f°  angle_diff=%.1f°",
+            l_hdg_gate_to_n1, t_node[1].heading or 0, l_angle_diff))
+        if l_angle_diff > 45 then
+            -- Insert gate as new t_node[1], shift existing nodes up
+            -- New t_node[1] = gate position, heading toward old t_node[1]
+            -- Old t_node[1] becomes t_node[2], etc.
+            local l_pre = {}
+            l_pre.x       = l_gate_x
+            l_pre.y       = l_gate_y
+            l_pre.z       = l_gate_z
+            l_pre.hotzone = ""
+            l_pre.heading = l_hdg_gate_to_n1
+            l_pre.dist    = l_dist_gate_to_n1
+            table.insert(t_node, 1, l_pre)
+            -- Spawn car at gate position
+            car_x = l_gate_x
+            car_y = l_gate_y
+            car_z = l_gate_z
+            car_body_heading = l_hdg_gate_to_n1
+            logMsg(string.format(
+                "FollowMe : start_car  FIX-C/2 gate pre-waypoint inserted  gate_x=%.1f  gate_z=%.1f  hdg=%.1f°",
+                l_gate_x, l_gate_z, l_hdg_gate_to_n1))
+        end
     end
 
     local l_car_is_in_front = false
@@ -4279,6 +4379,13 @@ function determine_possible_routes()
     local l_rev_heading = add_delta_clockwise(fm_plane_head, 180, 1)
 
     if depart_gate ~= 0 then
+        -- VER2.4 FIX-B: log gate info before determine_pos_on_segment
+        logMsg(string.format(
+            "FollowMe : determine_possible_routes  GATE=%s  heading=%.1f  x=%.1f  z=%.1f  type=%s",
+            t_gate[depart_gate].ID or "?",
+            t_gate[depart_gate].Heading,
+            t_gate[depart_gate].x, t_gate[depart_gate].z,
+            t_gate[depart_gate].Ramptype or "?"))
         l_found, l_startpt_node, l_startpt_x, l_startpt_z =
             determine_pos_on_segment(
             t_gate[depart_gate].Heading,
@@ -4286,6 +4393,17 @@ function determine_possible_routes()
             t_gate[depart_gate].z,
             t_gate[depart_gate].Ramptype
         )
+        if l_found then
+            local _, l_dgs = heading_n_dist(
+                t_gate[depart_gate].x, t_gate[depart_gate].z,
+                t_taxinode[l_startpt_node + 1].x, t_taxinode[l_startpt_node + 1].z)
+            logMsg(string.format(
+                "FollowMe : determine_possible_routes  startNode=%d  dist_gate_to_start=%.1fm  startSeg='%s'",
+                l_startpt_node, l_dgs,
+                t_taxinode[l_startpt_node + 1].Segment or "(empty)"))
+        else
+            logMsg("FollowMe : determine_possible_routes  FAILED - no start node found from gate")
+        end
     else
         local l_adj_fm_plane_x = 0
         local l_adj_fm_plane_z = 0
@@ -4500,6 +4618,13 @@ function transverse(in_startnode, in_endnode, in_heading)
                     t_taxinode[l_node + 1].heading = l_curr_heading
                     t_open[l_idx].f_value = l_f_value
                     t_open[l_idx].cost = t_taxinode[l_node + 1].cost
+                    -- VER2.4 FIX-B: log every A* expansion so the chosen path is traceable
+                    logMsg(string.format(
+                        "FollowMe : A* expand  curr=%d → cand=%d  seg=%d  g=%.1f  h=%.1f  f=%.1f  cost=%d  AoC=%.0f  hdg=%.0f",
+                        l_curr_node, l_node, l_segment_idx,
+                        l_g_value, t_taxinode[l_node + 1].h_value, l_f_value,
+                        t_taxinode[l_node + 1].cost or 0,
+                        l_AoC or 0, l_curr_heading))
                 end
             end
         end
@@ -4540,6 +4665,13 @@ function transverse(in_startnode, in_endnode, in_heading)
         )
         if #t_open > 0 then
             l_curr_node = t_open[#t_open].Node
+            -- VER2.4 FIX-B: log the node selected as next to expand
+            logMsg(string.format(
+                "FollowMe : A* select   next=%d  f=%.1f  cost=%d  open=%d",
+                l_curr_node,
+                t_open[#t_open].f_value or 0,
+                t_open[#t_open].cost or 0,
+                #t_open))
         else
             l_curr_node = -1
         end
@@ -5023,6 +5155,35 @@ function process_possible_routes()
         )
         logMsg("FollowMe : DRIVE NODES : " .. l_node_list)
         logMsg("FollowMe : DRIVE NODES TOTAL=" .. #t_node)
+
+        -- VER2.4 FIX-B: per-node distance-to-last regression check.
+        -- Any node where dist-to-end INCREASES means the car goes away from its destination
+        -- (U-turn or detour). Log each such node with *** REGRESSION *** so the cause
+        -- of off-pavement driving is immediately visible without post-processing.
+        if #t_node >= 2 then
+            local l_fin_x = t_node[#t_node].x
+            local l_fin_z = t_node[#t_node].z
+            local l_prev_dte = math.huge
+            local l_n_regressions = 0
+            for l_ri = 1, #t_node do
+                local _, l_dte = heading_n_dist(t_node[l_ri].x, t_node[l_ri].z, l_fin_x, l_fin_z)
+                if l_dte > l_prev_dte then
+                    l_n_regressions = l_n_regressions + 1
+                    logMsg(string.format(
+                        "FollowMe : *** REGRESSION ***  driveNode=%d  x=%.1f  z=%.1f  dToEnd=%.1fm  prevDToEnd=%.1fm  delta=+%.1fm",
+                        l_ri, t_node[l_ri].x, t_node[l_ri].z,
+                        l_dte, l_prev_dte, l_dte - l_prev_dte))
+                end
+                l_prev_dte = l_dte
+            end
+            if l_n_regressions == 0 then
+                logMsg("FollowMe : DRIVE NODES regression check PASSED (no U-turns / detours)")
+            else
+                logMsg(string.format(
+                    "FollowMe : DRIVE NODES regression check FAILED  regressions=%d  → route has detour(s) causing off-pavement driving",
+                    l_n_regressions))
+            end
+        end
     end
 end
 
@@ -5361,7 +5522,20 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
     t_taxinode[l_idx].heading = nil
     l_new_node = l_idx - 1
 
-    if string.find(t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment, ",") then
+    -- VER2.4 FIX-A: was string.find(Segment,",") → missed dead-end nodes (no comma).
+    -- Now uses Segment ~= "" so any connected node (junction OR dead-end) is linked.
+    local l_n1_seg  = t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment
+    local l_n2_seg  = t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment
+    local l_n1_dead = (l_n1_seg ~= "" and not string.find(l_n1_seg, ","))
+    local l_n2_dead = (l_n2_seg ~= "" and not string.find(l_n2_seg, ","))
+    logMsg(string.format(
+        "FollowMe : add_new_taxinode_segment  seg=%d  N1=%d(seg='%s' deadend=%s)  N2=%d(seg='%s' deadend=%s)  newNode=%d",
+        in_segment_index,
+        t_segment[in_segment_index].Node1, l_n1_seg, tostring(l_n1_dead),
+        t_segment[in_segment_index].Node2, l_n2_seg, tostring(l_n2_dead),
+        l_new_node))
+
+    if l_n1_seg ~= "" then
         l_new_segment = #t_segment + 1
         t_segment[l_new_segment] = {}
         t_segment[l_new_segment].ID = "ADD_NEWSEGMENT"
@@ -5381,9 +5555,15 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment =
             t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment .. "," .. tostring(l_new_segment)
         t_taxinode[l_idx].Segment = tostring(l_new_segment)
+        logMsg(string.format("FollowMe :   N1 connected  N1(%d)→newNode(%d) newSeg=%d%s",
+            t_segment[l_new_segment].Node1, l_new_node, l_new_segment,
+            l_n1_dead and "  [DEAD-END FIX-A applied]" or ""))
+    else
+        logMsg(string.format("FollowMe :   N1(%d) SKIPPED Segment='' (pruned)",
+            t_segment[in_segment_index].Node1))
     end
 
-    if string.find(t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment, ",") then
+    if l_n2_seg ~= "" then
         l_new_segment = #t_segment + 1
         t_segment[l_new_segment] = {}
         t_segment[l_new_segment].ID = "ADD_NEWSEGMENT"
@@ -5407,6 +5587,12 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         else
             t_taxinode[l_idx].Segment = t_taxinode[l_idx].Segment .. "," .. tostring(l_new_segment)
         end
+        logMsg(string.format("FollowMe :   N2 connected  newNode(%d)→N2(%d) newSeg=%d%s",
+            l_new_node, t_segment[l_new_segment].Node2, l_new_segment,
+            l_n2_dead and "  [DEAD-END FIX-A applied]" or ""))
+    else
+        logMsg(string.format("FollowMe :   N2(%d) SKIPPED Segment='' (pruned)",
+            t_segment[in_segment_index].Node2))
     end
     return l_new_node, l_new_segment
 end
