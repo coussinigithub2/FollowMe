@@ -3203,19 +3203,14 @@ function handle_plugin_window()
     --When the airplane leaves the ground, the follow-me car window closes
     if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
         if flightstart == 0 then
-
-        	--After 3 minutes in flight (180), the Follow Me Car is destroyed if still active
-            flightstart = fm_run_time + 180
             -- VER1.6 : close the main window automatically at takeoff
             if followme_wnd ~= nil then
+	            arrival_gate = 0
+	            flightstart = 9999
+	            ground_time = 0
+	            prepare_kill_objects = true
                 hide_window()
             end
-        end
-        if fm_run_time > flightstart and flightstart ~= 9999 then
-            arrival_gate = 0
-            flightstart = 9999
-            ground_time = 0
-            prepare_kill_objects = true
         end
     end
 
@@ -4258,6 +4253,7 @@ function update_msg(in_msg)
 	        play_sound(snd_welcome_bye)
 	    end
     elseif in_msg == "5" then
+    	in_msg = "We have arrived at destination"
         play_sound(snd_arrived)
     elseif in_msg == "4" then
         in_msg = "No route found. Remove taxiway limitation, trying again."
@@ -5725,8 +5721,8 @@ function build_holder(wnd, x, y)
         imgui.DrawList_AddLine(l_cx + l_r, l_cy - l_r, l_cx - l_r, l_cy + l_r, 0xFF0000FF, 2)
     end
 
-    -- VER1.6 : drag mechanic removed - holder position is fixed at Win_Y = 400
-    -- DEBUG : log every mouse event on the holder (not every frame)
+	-- Guards the FM badge click: toggles the main panel only when on the ground,
+	-- and ignores spurious release events that follow a window close.
     if imgui.IsMouseReleased(0) then
         if ignore_next_release > 0 then
             ignore_next_release = ignore_next_release - 1

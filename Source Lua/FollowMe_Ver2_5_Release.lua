@@ -1,52 +1,3 @@
-
--- ================= V7 MONOTONE RUNWAY FILTER =================
--- Apply monotone filtering along runway axis when destination is threshold
-
-function apply_runway_axis_filter(path, nodes, dest_id)
-    local dest = nodes[dest_id]
-    if not dest or not dest.isThresh then
-        return path
-    end
-
-    -- find another threshold of same runway
-    local other = nil
-    for id, n in pairs(nodes) do
-        if n.isThresh and n.rwy_id == dest.rwy_id and id ~= dest_id then
-            other = n
-            break
-        end
-    end
-    if not other then return path end
-
-    -- direction vector (other -> dest)
-    local dx = dest.lon - other.lon
-    local dy = dest.lat - other.lat
-
-    local function dot(ax, ay, bx, by)
-        return ax * bx + ay * by
-    end
-
-    local filtered = {}
-    local last_proj = -math.huge
-
-    for _, id in ipairs(path) do
-        local n = nodes[id]
-        if n then
-            local vx = n.lon - other.lon
-            local vy = n.lat - other.lat
-            local proj = dot(vx, vy, dx, dy)
-
-            if proj >= last_proj then
-                table.insert(filtered, id)
-                last_proj = proj
-            end
-        end
-    end
-
-    return filtered
-end
--- =============================================================
-
 --    ---------------------------------------------------------------------------------
 --          LICENSE
 --    ---------------------------------------------------------------------------------
@@ -186,6 +137,111 @@ end
 --                           3-Rear  (120-240 deg)          : "Follow Me Car is behind"
 --                           4-Left  (240-300 deg)          : "Follow Me Car is on the left"
 --                           Normalize all sound (same speaker)
+--    VER2.1 Coussini 2026:  Monotone runway-axis filter.
+--                           When the departure route contains nodes that lie on the
+--                           fictitious axis between the two thresholds of the target
+--                           runway (perpendicular distance < 15 m), and that set
+--                           contains MORE THAN 2 nodes (including the destination
+--                           threshold itself), a monotone-progression check is applied:
+--                           any node whose distance to the target threshold is GREATER
+--                           than the previous on-axis node (i.e. the car would regress
+--                           away from the threshold) is removed from t_node[].
+--                           If the on-axis set has 2 or fewer nodes (destination
+--                           threshold + at most one other node) the filter is skipped
+--                           entirely, preserving the existing behaviour for normal
+--                           approach paths (e.g. CYUL RWY 24R node 241).
+--                           The filter runs inside process_possible_routes() after the
+--                           full t_node[] list is built and BEFORE the VER1.17
+--                           centreline-projection / GPS-threshold block, which is
+--                           unaffected.
+--    VER2.3 Coussini 2026:  Fix wrong-airport detection after manual Cancel at a runway
+--                           threshold located near an adjacent airport (e.g. CYHU RWY 24R
+--                           threshold sits physically close to heliport CTG2).
+--                           Root cause: on manual cancel, VER1.12 cleared curr_ICAO = ""
+--                           to force an apt.dat reload on the next frame. get_airport_elements()
+--                           then called XPLMFindNavAid from the aircraft's current GPS position
+--                           (the runway threshold) and received CTG2 instead of CYHU because
+--                           CTG2 is the closest nav-aid at that map location, triggering the
+--                           "Follow Me Service is not available at this airport" audio/message.
+--                           Fix: a new boolean flag force_apt_reload is introduced.
+--                           On manual cancel, force_apt_reload = true is set instead of
+--                           curr_ICAO = "". In get_airport_elements(), when force_apt_reload
+--                           is true the function re-reads apt.dat for the KNOWN curr_ICAO
+--                           (bypassing XPLMFindNavAid entirely) and clears the flag.
+--                           XPLMFindNavAid is only called when the aircraft genuinely moves
+--                           to a different airport, not on an in-place cancel.
+--    VER2.5 Coussini 2026: Route simplification post-processing (2 passes).
+--                           Runs after t_node[] est entièrement construit
+--                           (après projection centreline + GPS threshold),
+--                           avant le log DRIVE NODES.
+--                           PASS 1 — Régression : supprime tout nœud B où
+--                             dist(B→fin) > dist(A→fin) + 5m, c.-à-d. un
+--                             nœud qui éloigne la voiture de sa destination.
+--                             Corrige le comportement aller-retour observé
+--                             à CYHU RWY 24R (nœud 11, cap 190°).
+--                           PASS 2 — Colinéaire : supprime tout nœud B entre
+--                             A et C où le changement de cap est < 20°
+--                             (quasi ligne droite inutile).
+--                           Les deux derniers nœuds (centreline + threshold)
+--                           sont toujours protégés.  Chaque retrait est
+--                           journalisé avec la balise [SIMP].  Les headings
+--                           et distances sont recalculés après simplification.
+--                           Log verbeux [NAV][ARC][TURN][BRK] conservé.
+--    VER2.4 Coussini 2026:  FIX-A : add_new_taxinode_segment dead-end guard.
+--                           Old guard string.find(Segment,",") required a junction.
+--                           Dead-end endpoint (single segment, no comma) left the
+--                           virtual start node disconnected → degenerate A* route →
+--                           straight-line drive (reproduced at MDPC Gate 7 → RWY 27).
+--                           Fix: Segment ~= "" instead of comma check.
+--                           FIX-B : Comprehensive diagnostic logging added throughout
+--                           the route-build pipeline so any future regression or
+--                           U-turn detour is immediately visible in Log.txt:
+--                           - determine_possible_routes logs gate info, chosen
+--                             start node, and distance gate-to-startNode.
+--                           - add_new_taxinode_segment logs N1/N2 Segment strings,
+--                             dead-end flag, and whether FIX-A was triggered.
+--                           - transverse logs every node expansion (node id, f/g/h,
+--                             cost, heading) and the final chosen route with cost.
+--                           - process_possible_routes logs each DRIVE NODE with
+--                             x/z/hdg/dist-to-threshold and flags any regression
+--                             (U-turn / detour) with *** REGRESSION ***.
+--                           FIX-C : start_car() spawn-distance threshold raised and
+--                           gate-perpendicular detection added.
+--                           Root cause (confirmed by log at MDPC Gate 7 → RWY 27):
+--                           startNode=207 is 108.8m from the gate. The VER1.12
+--                           proximity fallback only triggers when dist > 150m, so
+--                           the car spawns 108.8m away on the taxiway and immediately
+--                           starts driving toward the runway, leaving the aircraft
+--                           stranded at the gate with no visible guide.
+--                           Fix 1: lower the spawn-fallback threshold from 150m to 80m
+--                           so any startNode more than 80m from the gate triggers the
+--                           "place behind aircraft" logic.
+--                           Fix 2: in departure mode with a known gate, if the car
+--                           spawns on the taxiway (dist_to_plane > 50m) and the gate
+--                           heading is roughly perpendicular to the first route leg
+--                           (angle > 45°), insert a synthetic waypoint at the gate
+--                           position as t_node[0-pre] so the car first drives to the
+--                           gate, then follows the normal route to the runway. This
+--                           ensures the car is always visible to the pilot from the
+--                           very first frame, regardless of how far the taxiway is
+--                           from the gate stand.
+--    VER2.5 Coussini 2026: Log verbeux de navigation [NAV][ARC][TURN][BRK].
+--                           Ajoute des entrées logMsg aux 5 points critiques
+--                           de la course afin de diagnostiquer tout comportement
+--                           anormal sans avoir besoin de vidéo ou GIF :
+--                           [NAV]  : chaque transition de nœud (curr_node++)
+--                                    avec position, cap, distance restante.
+--                           [TURN] : géométrie de virage calculée par
+--                                    determine_dir_of_turn() pour chaque nœud
+--                                    (dir, AoC, radius, dist_b4_turn, speed).
+--                           [ARC]  : activation, calcul de head1_exit,
+--                                    passage en S-curve (phase 2), et fin
+--                                    d'arc avec position exacte.
+--                           [BRK]  : freinage anticipé au seuil de piste
+--                                    (distance, vitesse, décélération).
+--                           Ces 5 balises permettent de reconstituer
+--                           entièrement la trajectoire du FM car depuis
+--                           le log seul, sans simulation visuelle.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -412,6 +468,9 @@ local depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
 local is_backtaxi = false
 
 local curr_ICAO, curr_ICAO_Name = "", ""
+-- VER2.3 : set true on manual cancel to reload apt.dat for the KNOWN curr_ICAO
+--          without calling XPLMFindNavAid (avoids wrong-airport snap at thresholds)
+local force_apt_reload = false
 local t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
 
 -- VER1.3 : Runways without defined routes
@@ -646,7 +705,7 @@ end
 -- Function: apply_simbrief_runway
 -- Description:
 -- Maps the SimBrief runway to the FollowMe route system. Reads the
--- departure or arrival runway from the last successful SimBrief fetch
+-- departure runway from the last successful SimBrief fetch
 -- and checks whether that runway exists in t_runway (the list of runways
 -- that have a valid taxiway route at the current airport). If found,
 -- sets depart_runway so the pilot does not have to pick it manually.
@@ -669,10 +728,7 @@ function apply_simbrief_runway()
 
     if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
         -- Departure: use SimBrief takeoff runway
-        l_rwy = tostring(tonumber(sb_runway_takeoff))
-    elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
-        -- Arrival: use SimBrief landing runway
-        l_rwy = tostring(tonumber(sb_runway_landing))
+        l_rwy = sb_runway_takeoff
     end
 
     if l_rwy == "" then
@@ -734,12 +790,74 @@ function start_car()
     -- VER1.12 : if the route startpt is more than 150m away, place the car
     -- directly behind the aircraft so the pilot can always see it immediately.
     -- The car will then drive forward to join its route normally.
+    --
+    -- VER2.4 FIX-C : Two improvements to spawn behaviour:
+    --
+    -- FIX-C/1 : Lower threshold from 150m to 80m.
+    -- The old 150m threshold was too permissive. The virtual startNode for
+    -- gates perpendicular to their taxiway (e.g. MDPC Gate 7) is placed on
+    -- the taxiway ~109m away. That is under 150m, so VER1.12 never triggered
+    -- and the car spawned 109m ahead already heading toward the runway.
+    -- Lowering to 80m ensures the fallback fires for all realistic gate
+    -- stand → taxiway distances (typical is 80-150m for perpendicular gates).
+    --
+    -- FIX-C/2 : Gate-perpendicular pre-waypoint insertion.
+    -- Even at 80m some gates will still be just under the threshold after the
+    -- change, so we also detect the perpendicular-gate case explicitly:
+    -- If we are in departure mode with a known gate AND the car spawns more
+    -- than 50m from the aircraft, insert a pre-waypoint at the gate position
+    -- as the new t_node[1], pushing the existing route one index forward.
+    -- The car drives to the gate first (so the pilot sees it immediately),
+    -- then follows the normal taxiway route to the runway.
     local _, l_dist_to_plane = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
-    if l_dist_to_plane > 150 then
+    logMsg(string.format(
+        "FollowMe : start_car  spawnNode=t_node[1]  x=%.1f  z=%.1f  dist_to_plane=%.1fm  gate=%d",
+        car_x, car_z, l_dist_to_plane, depart_gate))
+
+    if l_dist_to_plane > 80 then
+        -- FIX-C/1: spawn behind aircraft, car will drive to route start normally
         local l_behind_heading = add_delta_clockwise(fm_plane_head, 180, 1)
         car_x, car_z = coordinates_of_adjusted_ref(fm_plane_x, fm_plane_z, 0, 15, l_behind_heading)
         car_y = probe_y(car_x, car_y, car_z)
         car_body_heading = fm_plane_head
+        logMsg(string.format(
+            "FollowMe : start_car  FIX-C/1 spawn-behind triggered (dist=%.1fm > 80m)  car placed 15m behind plane",
+            l_dist_to_plane))
+    elseif depart_arrive == 1 and depart_gate > 0 and l_dist_to_plane > 50 then
+        -- FIX-C/2: car is on taxiway but gate is far - insert gate as pre-waypoint
+        -- so the car drives to the gate stand first, visible to the pilot from frame 1.
+        local l_gate_x = t_gate[depart_gate].x
+        local l_gate_y = t_gate[depart_gate].y
+        local l_gate_z = t_gate[depart_gate].z
+        -- Compute heading from gate position toward the current t_node[1] (taxiway)
+        local l_hdg_gate_to_n1, l_dist_gate_to_n1 = heading_n_dist(l_gate_x, l_gate_z, t_node[1].x, t_node[1].z)
+        -- Check if gate heading is perpendicular to first route leg (> 45° difference)
+        local l_angle_diff = math.abs(l_hdg_gate_to_n1 - t_node[1].heading)
+        if l_angle_diff > 180 then l_angle_diff = 360 - l_angle_diff end
+        logMsg(string.format(
+            "FollowMe : start_car  gate_to_node1_hdg=%.1f°  node1_leg_hdg=%.1f°  angle_diff=%.1f°",
+            l_hdg_gate_to_n1, t_node[1].heading or 0, l_angle_diff))
+        if l_angle_diff > 45 then
+            -- Insert gate as new t_node[1], shift existing nodes up
+            -- New t_node[1] = gate position, heading toward old t_node[1]
+            -- Old t_node[1] becomes t_node[2], etc.
+            local l_pre = {}
+            l_pre.x       = l_gate_x
+            l_pre.y       = l_gate_y
+            l_pre.z       = l_gate_z
+            l_pre.hotzone = ""
+            l_pre.heading = l_hdg_gate_to_n1
+            l_pre.dist    = l_dist_gate_to_n1
+            table.insert(t_node, 1, l_pre)
+            -- Spawn car at gate position
+            car_x = l_gate_x
+            car_y = l_gate_y
+            car_z = l_gate_z
+            car_body_heading = l_hdg_gate_to_n1
+            logMsg(string.format(
+                "FollowMe : start_car  FIX-C/2 gate pre-waypoint inserted  gate_x=%.1f  gate_z=%.1f  hdg=%.1f°",
+                l_gate_x, l_gate_z, l_hdg_gate_to_n1))
+        end
     end
 
     local l_car_is_in_front = false
@@ -983,6 +1101,12 @@ function manage_car_motion()
                 car_accel = deccel_avg
                 car_speed = car_speed + (car_accel * elapsed_time)
                 l_dist = (car_speed * elapsed_time) + (0.5 * math.abs(car_accel) * math.pow(elapsed_time, 2))
+                -- VER2.5 VERBOSE : freinage anticipé au seuil
+                logMsg(string.format(
+                    "FollowMe[BRK] THRESHOLD BRAKE  node=%d/%d  rem=%.1fm  stop_dist=%.1fm  spd=%.1fkts  accel=%.2f",
+                    curr_node + 1, #t_node,
+                    remaining_dist_leg, l_dist_stop,
+                    car_speed * 1.94384, car_accel))
             end
         end
     end
@@ -1075,7 +1199,23 @@ function plot_position(in_act_dist)
                     t_node[curr_node + 1].radius,
                     t_node[curr_node + 1].dir
                 )
+                -- VER2.5 VERBOSE : début d'arc de virage
+                logMsg(string.format(
+                    "FollowMe[ARC] START  node=%d  dir=%d  AoC=%.1f  radius=%.1fm  dist_b4=%.1fm  head1_exit=%s  CoR=(%.1f,%.1f)",
+                    curr_node + 1,
+                    t_node[curr_node + 1].dir,
+                    t_node[curr_node + 1].AoC or -1,
+                    t_node[curr_node + 1].radius or -1,
+                    t_node[curr_node + 1].dist_b4_turn or -1,
+                    tostring(t_node[curr_node + 1].head1_exit),
+                    t_node[curr_node + 1].rot_x, t_node[curr_node + 1].rot_z))
             else
+                -- VER2.5 VERBOSE : pas d'arc, ligne droite vers nœud suivant
+                logMsg(string.format(
+                    "FollowMe[ARC] SKIP->STRAIGHT  node=%d  dir=%s  last=%s",
+                    curr_node + 1,
+                    tostring(t_node[curr_node + 1].dir),
+                    tostring(curr_node + 1 == #t_node)))
                 l_goto_nextnode = true
             end
         end
@@ -1094,6 +1234,10 @@ function plot_position(in_act_dist)
             l_heading_from_center = minus_delta_clockwise(l_head2, l_AoR, t_node[curr_node + 1].dir)
             t_node[curr_node + 1].head1_exit = add_delta_clockwise(l_heading_from_center, 90, t_node[curr_node + 1].dir)
             t_node[curr_node + 1].heading = t_node[curr_node + 1].head1_exit
+            -- VER2.5 VERBOSE : head1_exit calculé
+            logMsg(string.format(
+                "FollowMe[ARC] head1_exit=%.1f  dist_CoR_to_next=%.1fm  AoR_tangent=%.1f  node=%d",
+                t_node[curr_node + 1].head1_exit, l_dist, l_AoR, curr_node + 1))
         end
 
         l_remaining_rot =
@@ -1107,8 +1251,19 @@ function plot_position(in_act_dist)
             l_AoR = l_remaining_rot
             l_act_dist = l_remaining_act_dist
             if t_node[curr_node + 1].heading ~= t_node[curr_node + 1].head1_exit then
+                -- VER2.5 VERBOSE : passage en arc S-curve (phase 2)
+                logMsg(string.format(
+                    "FollowMe[ARC] PHASE2 S-CURVE  node=%d  car_hdg=%.1f  head1_exit=%.1f  rem_rot=%.1f",
+                    curr_node + 1, car_body_heading,
+                    t_node[curr_node + 1].head1_exit, l_remaining_rot))
                 turning_is_active = 2
             else
+                -- VER2.5 VERBOSE : arc terminé normalement
+                logMsg(string.format(
+                    "FollowMe[ARC] END  node=%d  car_hdg=%.1f  head1_exit=%.1f  car=(%.1f,%.1f)",
+                    curr_node + 1, car_body_heading,
+                    t_node[curr_node + 1].head1_exit,
+                    car_x, car_z))
                 l_goto_nextnode = true
             end
         end
@@ -1193,8 +1348,24 @@ function plot_position(in_act_dist)
             l_head1, remaining_dist_leg = heading_n_dist(car_x, car_z, t_node[curr_node + 1].x, t_node[curr_node + 1].z)
             t_node[curr_node].heading = l_head1
             remaining_dist_leg = remaining_dist_leg - l_act_dist
+            -- VER2.5 VERBOSE : transition vers le nœud suivant
+            logMsg(string.format(
+                "FollowMe[NAV] NODE->%d/%d  car=(%.1f,%.1f)  hdg=%.1f  next=(%.1f,%.1f)  leg=%.1fm  spd=%.1fkts",
+                curr_node, #t_node,
+                car_x, car_z,
+                l_head1,
+                t_node[curr_node + 1].x, t_node[curr_node + 1].z,
+                remaining_dist_leg,
+                car_speed * 1.94384))
         elseif curr_node == #t_node then
             remaining_dist_leg = 0
+            -- VER2.5 VERBOSE : arrivée au nœud final (GPS threshold)
+            logMsg(string.format(
+                "FollowMe[NAV] NODE->%d/%d THRESHOLD REACHED  car=(%.1f,%.1f)  hdg=%.1f  spd=%.1fkts",
+                curr_node, #t_node,
+                car_x, car_z,
+                car_body_heading,
+                car_speed * 1.94384))
         end
     end
 
@@ -1299,7 +1470,17 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
     local l_AoR = 0
     local l_speed_skid = math.sqrt(cof * gravity * min_rot_radius)
 
+    -- La fonction compute_angle_diff doit renvoyer l'angle.
+    -- Si elle utilise math.acos en interne, c'est là que le nil peut apparaître.
     l_AoR, t_node[curr_node + 1].dir = compute_angle_diff(in_head1, in_head2)
+
+    -- ==========================================
+    -- PROTECTION CONTRE LE CRASH
+    -- ==========================================
+    if l_AoR == nil then
+        l_AoR = 0
+    end
+    -- ==========================================
 
     if t_node[curr_node + 1].dir ~= 0 then
         l_AoC = 180 - l_AoR
@@ -1308,11 +1489,17 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
             t_node[curr_node + 1].radius = min_rot_radius
             t_node[curr_node + 1].speed = math.sqrt(cof * gravity * t_node[curr_node + 1].radius)
             t_node[curr_node + 1].dist_b4_turn = t_node[curr_node + 1].radius
-            l_AoR = determine_exit_angle(90 - l_AoC)
+
+            -- Sécurité additionnelle si determine_exit_angle peut aussi échouer
+            local exit_val = determine_exit_angle(90 - l_AoC)
+            l_AoR = exit_val or 0
+
             t_node[curr_node + 1].head1_exit = add_delta_clockwise(in_head1, l_AoR, t_node[curr_node + 1].dir)
         else
             local l_speed_reduction_strength = 0
-            local l_turn_speed = l_speed_skid + (l_AoC - 90) / ((180 - 90) / (speed_max - l_speed_skid))
+            -- Calcul de la vitesse de virage
+            local denominator = ((180 - 90) / (speed_max - l_speed_skid))
+            local l_turn_speed = l_speed_skid + (l_AoC - 90) / denominator
 
             if l_AoC < 140 then
                 l_speed_reduction_strength = math.exp((l_AoC - 90) / (10 + 6 * (l_AoC % 90) / 10))
@@ -1322,10 +1509,13 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
 
             t_node[curr_node + 1].speed = l_turn_speed / l_speed_reduction_strength
             t_node[curr_node + 1].radius = (t_node[curr_node + 1].speed ^ 2) / (cof * gravity)
+
+            -- Calcul de la distance avant virage (protection radiane)
             t_node[curr_node + 1].dist_b4_turn = t_node[curr_node + 1].radius * math.tan(math.rad(l_AoR / 2))
 
             local l_revised = false
 
+            -- Vérification de l'espace disponible
             if t_node[curr_node + 1].dist_b4_turn + 15 > in_dist then
                 t_node[curr_node + 1].dist_b4_turn = in_dist - 15
                 if t_node[curr_node + 1].dist_b4_turn < min_rot_radius + car_rear_wheel_to_ref then
@@ -1334,11 +1524,8 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
                 l_revised = true
             end
 
-            if t_node[curr_node + 1].dist_b4_turn + (min_rot_radius + car_rear_wheel_to_ref) >
-                    t_node[curr_node + 1].dist
-             then
-                t_node[curr_node + 1].dist_b4_turn =
-                    t_node[curr_node + 1].dist - (min_rot_radius + car_rear_wheel_to_ref)
+            if t_node[curr_node + 1].dist_b4_turn + (min_rot_radius + car_rear_wheel_to_ref) > t_node[curr_node + 1].dist then
+                t_node[curr_node + 1].dist_b4_turn = t_node[curr_node + 1].dist - (min_rot_radius + car_rear_wheel_to_ref)
                 if t_node[curr_node + 1].dist_b4_turn < min_rot_radius * 2 + car_rear_wheel_to_ref then
                     t_node[curr_node + 1].dist_b4_turn = min_rot_radius + car_rear_wheel_to_ref
                 end
@@ -1357,13 +1544,27 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
             end
         end
 
-        t_node[curr_node + 1].angle_rear_to_ref =
-            math.deg(math.atan(car_rear_wheel_to_ref / t_node[curr_node + 1].radius))
-        t_node[curr_node + 1].ref_rot_radius =
-            math.sqrt((car_rear_wheel_to_ref ^ 2) + (t_node[curr_node + 1].radius ^ 2))
-        t_node[curr_node + 1].steering =
-            math.deg(math.atan(car_front_to_back_wheel / (t_node[curr_node + 1].radius - width_btw_midtire / 2)))
+        -- Calculs finaux de direction et braquage
+        t_node[curr_node + 1].angle_rear_to_ref = math.deg(math.atan(car_rear_wheel_to_ref / t_node[curr_node + 1].radius))
+        t_node[curr_node + 1].ref_rot_radius = math.sqrt((car_rear_wheel_to_ref ^ 2) + (t_node[curr_node + 1].radius ^ 2))
+        t_node[curr_node + 1].steering = math.deg(math.atan(car_front_to_back_wheel / (t_node[curr_node + 1].radius - width_btw_midtire / 2)))
         t_node[curr_node + 1].AoC = l_AoC
+        -- VER2.5 VERBOSE : résumé de la géométrie de virage calculée
+        logMsg(string.format(
+            "FollowMe[TURN] node=%d  hdg1=%.1f->hdg2=%.1f  dir=%d  AoC=%.1f  radius=%.1fm  dist_b4=%.1fm  speed=%.1fkts  dist_avail=%.1fm",
+            curr_node + 1,
+            in_head1, in_head2,
+            t_node[curr_node + 1].dir,
+            l_AoC,
+            t_node[curr_node + 1].radius,
+            t_node[curr_node + 1].dist_b4_turn,
+            t_node[curr_node + 1].speed * 1.94384,
+            in_dist))
+    else
+        -- VER2.5 VERBOSE : pas de virage (ligne droite)
+        logMsg(string.format(
+            "FollowMe[TURN] node=%d  hdg1=%.1f->hdg2=%.1f  dir=0 STRAIGHT",
+            curr_node + 1, in_head1, in_head2))
     end
 end
 
@@ -2203,6 +2404,25 @@ end
 -- lights) so the network is always fresh for the current position.
 -- ====================================================
 function get_airport_elements()
+    -- VER2.3 : if a manual cancel set force_apt_reload, reload apt.dat for the
+    --          already-known curr_ICAO without calling XPLMFindNavAid.
+    --          This prevents XPLMFindNavAid from snapping to a neighbouring
+    --          airport (e.g. heliport CTG2) when the aircraft is parked at a
+    --          runway threshold that is physically close to that other airport.
+    if force_apt_reload then
+        force_apt_reload = false
+        world_alt = 0
+        taxiway_network = read_apt_file(curr_ICAO)
+        if taxiway_network ~= "" then
+            XPLMSpeakString("Follow Me Service is not available at this airport")
+            return
+        end
+        if sb_fetch_status == "OK" then
+            sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
+        end
+        -- skip the XPLMFindNavAid block entirely
+    else
+
     local l_airport_index = XPLMFindNavAid(nil, nil, LATITUDE, LONGITUDE, nil, xplm_Nav_Airport)
     local l_new_ICAO, l_new_ICAO_name = "", ""
 
@@ -2224,6 +2444,8 @@ function get_airport_elements()
             sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
         end
     end
+
+    end -- VER2.3 : end of else (normal XPLMFindNavAid path)
 
     if #t_deleted_runway > 0 then
         update_msg("-18")
@@ -2296,7 +2518,6 @@ function read_apt_file(in_ICAO)
                 else
                     l_filename2 = syspath .. l_str1 .. "Earth nav data/apt.dat"
                 end
-
                 l_file2 = io.open(l_filename2, "r")
                 if l_file2 then
                     while true do
@@ -2998,6 +3219,9 @@ function full_reset()
     t_deleted_runway = {}
 	-- VER1.12 : force apt.dat reload on next get_airport_elements()
     curr_ICAO = ""
+    -- VER2.3 : clear force_apt_reload flag (full reset implies genuine airport change,
+    --          XPLMFindNavAid should run normally)
+    force_apt_reload = false
     initialise_airport()
     initialise_routes()
     logMsg("FollowMe : full_reset() completed")
@@ -3082,19 +3306,14 @@ function handle_plugin_window()
     --When the airplane leaves the ground, the follow-me car window closes
     if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
         if flightstart == 0 then
-
-        	--After 3 minutes in flight (180), the Follow Me Car is destroyed if still active
-            flightstart = fm_run_time + 180
             -- VER1.6 : close the main window automatically at takeoff
             if followme_wnd ~= nil then
+	            arrival_gate = 0
+	            flightstart = 9999
+	            ground_time = 0
+	            prepare_kill_objects = true
                 hide_window()
             end
-        end
-        if fm_run_time > flightstart and flightstart ~= 9999 then
-            arrival_gate = 0
-            flightstart = 9999
-            ground_time = 0
-            prepare_kill_objects = true
         end
     end
 
@@ -3212,8 +3431,10 @@ function handle_plugin_window()
             kill_is_manual = false
             -- VER1.9 : say goodbye when user manually cancels
             update_msg("7")
-            -- VER1.12 : force airport reload so window_first_access re-reads apt.dat
-            curr_ICAO = ""
+            -- VER2.3 : force apt.dat reload for the KNOWN curr_ICAO instead of
+            --          clearing curr_ICAO, which caused XPLMFindNavAid to snap
+            --          to a neighbouring airport (e.g. CTG2 at CYHU RWY 24R threshold)
+            force_apt_reload = true
             -- Preserve all routing state so the user can immediately re-request
             -- without having to re-select runway, mode, or gate
             local l_saved_runway = depart_runway
@@ -3779,6 +4000,37 @@ function build_window(wnd, x, y)
         imgui.PopStyleColor()
     end
 
+------------------------------
+    -- VER2.0 : Real-time directional message - updated every frame when FM car is active.
+    -- Overrides Err_Msg[1] with the current direction of the car relative to the aircraft.
+    -- The four zones match the arrow pointer zones exactly:
+    --   Front (300-360 / 0-60 deg) : "Follow Me Car is ahead"
+    --   Right (60-120 deg)         : "Follow Me Car is on the right"
+    --   Rear  (120-240 deg)        : "Follow Me Car is behind"
+    --   Left  (240-300 deg)        : "Follow Me Car is on the left"
+    if FM_car_active and car_x ~= 0 then
+        local l_bear_rt, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
+        local l_rel_rt = l_bear_rt - fm_plane_head
+        while l_rel_rt < 0   do l_rel_rt = l_rel_rt + 360 end
+        while l_rel_rt >= 360 do l_rel_rt = l_rel_rt - 360 end
+        local l_dir_msg
+        if l_rel_rt > 300 or l_rel_rt < 60 then
+            l_dir_msg = "Follow Me Car is ahead"
+        elseif l_rel_rt >= 60 and l_rel_rt < 120 then
+            l_dir_msg = "Follow Me Car is on the right"
+        elseif l_rel_rt >= 120 and l_rel_rt < 240 then
+            l_dir_msg = "Follow Me Car is behind"
+        else
+            l_dir_msg = "Follow Me Car is on the left"
+        end
+	    imgui.SetCursorPosX(48)
+	    imgui.SetCursorPosY(251)
+	    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
+	    imgui.TextUnformatted(l_dir_msg)
+	    imgui.PopStyleColor()
+    end
+------------------------------
+
     imgui.SetCursorPosY(265)
     imgui.Separator()
 
@@ -3989,32 +4241,6 @@ function build_window(wnd, x, y)
         update_msg(l_err)
     end
 
-    -- VER2.0 : Real-time directional message - updated every frame when FM car is active.
-    -- Overrides Err_Msg[1] with the current direction of the car relative to the aircraft.
-    -- The four zones match the arrow pointer zones exactly:
-    --   Front (300-360 / 0-60 deg) : "Follow Me Car is ahead"
-    --   Right (60-120 deg)         : "Follow Me Car is on the right"
-    --   Rear  (120-240 deg)        : "Follow Me Car is behind"
-    --   Left  (240-300 deg)        : "Follow Me Car is on the left"
-    if FM_car_active and car_x ~= 0 then
-        local l_bear_rt, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
-        local l_rel_rt = l_bear_rt - fm_plane_head
-        while l_rel_rt < 0   do l_rel_rt = l_rel_rt + 360 end
-        while l_rel_rt >= 360 do l_rel_rt = l_rel_rt - 360 end
-        local l_dir_msg
-        if l_rel_rt > 300 or l_rel_rt < 60 then
-            l_dir_msg = "Follow Me Car is ahead"
-        elseif l_rel_rt >= 60 and l_rel_rt < 120 then
-            l_dir_msg = "Follow Me Car is on the right"
-        elseif l_rel_rt >= 120 and l_rel_rt < 240 then
-            l_dir_msg = "Follow Me Car is behind"
-        else
-            l_dir_msg = "Follow Me Car is on the left"
-        end
-        Err_Msg[1].text  = l_dir_msg
-        Err_Msg[1].color = "GREEN"
-    end
-
     local l_y2 = 16
     for i = 1, 3 do
         imgui.SetCursorPosY(488 + l_y2 * i)
@@ -4117,7 +4343,7 @@ function update_msg(in_msg)
     end
 
     if in_msg == "6" then
-        in_msg = "Follow Me Car ready. Car is behind you."
+    	in_msg = nil
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
@@ -4130,35 +4356,12 @@ function update_msg(in_msg)
 	        play_sound(snd_welcome_bye)
 	    end
     elseif in_msg == "5" then
+    	in_msg = "We have arrived at destination"
         play_sound(snd_arrived)
     elseif in_msg == "4" then
         in_msg = "No route found. Remove taxiway limitation, trying again."
     elseif in_msg == "3" then
-        -- VER2.0 : Replace static "Follow Me Car is ready" with a direction-aware message.
-        -- Compute the absolute bearing from the aircraft to the FM car (0-360),
-        -- then map it to one of four compass zones relative to the aircraft heading:
-        --   Front : bearing within 60 deg on each side of the aircraft nose (300-360 and 0-60)
-        --   Right : bearing 60 to 120 deg (right side)
-        --   Rear  : bearing 120 to 240 deg (behind)
-        --   Left  : bearing 240 to 300 deg (left side)
-        if FM_car_active and car_x ~= 0 then
-            local l_bear, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
-            local l_rel = l_bear - fm_plane_head
-            while l_rel < 0   do l_rel = l_rel + 360 end
-            while l_rel >= 360 do l_rel = l_rel - 360 end
-            if l_rel > 300 or l_rel < 60 then
-                in_msg = "Follow Me Car is ahead"
-            elseif l_rel >= 60 and l_rel < 120 then
-                in_msg = "Follow Me Car is on the right"
-            elseif l_rel >= 120 and l_rel < 240 then
-                in_msg = "Follow Me Car is behind"
-            else
-                -- 240 <= l_rel <= 300
-                in_msg = "Follow Me Car is on the left"
-            end
-        else
-            in_msg = "Follow Me Car is ready"
-        end
+    	in_msg = nil
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
@@ -4275,6 +4478,13 @@ function determine_possible_routes()
     local l_rev_heading = add_delta_clockwise(fm_plane_head, 180, 1)
 
     if depart_gate ~= 0 then
+        -- VER2.4 FIX-B: log gate info before determine_pos_on_segment
+        logMsg(string.format(
+            "FollowMe : determine_possible_routes  GATE=%s  heading=%.1f  x=%.1f  z=%.1f  type=%s",
+            t_gate[depart_gate].ID or "?",
+            t_gate[depart_gate].Heading,
+            t_gate[depart_gate].x, t_gate[depart_gate].z,
+            t_gate[depart_gate].Ramptype or "?"))
         l_found, l_startpt_node, l_startpt_x, l_startpt_z =
             determine_pos_on_segment(
             t_gate[depart_gate].Heading,
@@ -4282,6 +4492,17 @@ function determine_possible_routes()
             t_gate[depart_gate].z,
             t_gate[depart_gate].Ramptype
         )
+        if l_found then
+            local _, l_dgs = heading_n_dist(
+                t_gate[depart_gate].x, t_gate[depart_gate].z,
+                t_taxinode[l_startpt_node + 1].x, t_taxinode[l_startpt_node + 1].z)
+            logMsg(string.format(
+                "FollowMe : determine_possible_routes  startNode=%d  dist_gate_to_start=%.1fm  startSeg='%s'",
+                l_startpt_node, l_dgs,
+                t_taxinode[l_startpt_node + 1].Segment or "(empty)"))
+        else
+            logMsg("FollowMe : determine_possible_routes  FAILED - no start node found from gate")
+        end
     else
         local l_adj_fm_plane_x = 0
         local l_adj_fm_plane_z = 0
@@ -4496,6 +4717,13 @@ function transverse(in_startnode, in_endnode, in_heading)
                     t_taxinode[l_node + 1].heading = l_curr_heading
                     t_open[l_idx].f_value = l_f_value
                     t_open[l_idx].cost = t_taxinode[l_node + 1].cost
+                    -- VER2.4 FIX-B: log every A* expansion so the chosen path is traceable
+                    logMsg(string.format(
+                        "FollowMe : A* expand  curr=%d → cand=%d  seg=%d  g=%.1f  h=%.1f  f=%.1f  cost=%d  AoC=%.0f  hdg=%.0f",
+                        l_curr_node, l_node, l_segment_idx,
+                        l_g_value, t_taxinode[l_node + 1].h_value, l_f_value,
+                        t_taxinode[l_node + 1].cost or 0,
+                        l_AoC or 0, l_curr_heading))
                 end
             end
         end
@@ -4536,6 +4764,13 @@ function transverse(in_startnode, in_endnode, in_heading)
         )
         if #t_open > 0 then
             l_curr_node = t_open[#t_open].Node
+            -- VER2.4 FIX-B: log the node selected as next to expand
+            logMsg(string.format(
+                "FollowMe : A* select   next=%d  f=%.1f  cost=%d  open=%d",
+                l_curr_node,
+                t_open[#t_open].f_value or 0,
+                t_open[#t_open].cost or 0,
+                #t_open))
         else
             l_curr_node = -1
         end
@@ -4570,6 +4805,198 @@ function transverse(in_startnode, in_endnode, in_heading)
         end
         logMsg("FollowMe : RAW A* NODES TOTAL=" .. l_raw_count)
     end
+end
+
+-- ====================================================
+-- Function: apply_runway_axis_filter
+-- Description:
+-- VER2.1 : Monotone runway-axis filter applied to t_node[] for departure
+-- routes (depart_arrive == 1) before the VER1.17 centreline/GPS block.
+--
+-- Principle (mirrors the HTML v7 applyRunwayAxisFilter logic):
+--   1. Build the fictitious axis T→O from the target threshold (T) to its
+--      paired opposite threshold (O), using the Pair index set by
+--      decipher_runway() (VER1.24).  All coordinates are X-Plane local
+--      metres (x, z).
+--   2. For every node in t_node[] EXCEPT the last one (the destination
+--      threshold node, which is always on the axis by definition and is
+--      never removed), project the node onto the axis using the law of
+--      cosines:
+--        proj = (axLen² + dTN² - dON²) / (2 * axLen)
+--        perp = sqrt(max(0, dTN² - proj²))
+--      A node is "on the axis" if perp ≤ MAX_PERP_M (15 m) and its
+--      projection falls between the two thresholds (with 50 m slack).
+--   3. Count how many nodes (excluding the destination threshold) are on
+--      the axis.  The threshold itself always counts as 1.
+--      → If total (threshold + on-axis others) ≤ 2  →  NO filter.
+--        (e.g. CYUL 24R: only node 241 + threshold = 2 → untouched)
+--      → If total > 2  →  apply monotone check.
+--   4. Monotone check: walk the on-axis nodes in route order.  The
+--      distance to the target threshold must strictly decrease.  Any node
+--      whose distance to T is GREATER than the previous on-axis node's
+--      distance (regression) is flagged for removal.
+--      The first node of the whole route (index 1) is always kept.
+--   5. Rebuild t_node[] skipping the flagged indices.  Per-leg headings
+--      and distances of the surviving nodes are NOT recomputed here; they
+--      will be refreshed by the existing heading_n_dist() calls later in
+--      process_possible_routes(), or are correct as-is for straight legs.
+--   6. Every removed node ID (its 1-based position in the pre-filter
+--      t_node[]) is logged so the developer can verify the filter.
+-- ====================================================
+function apply_runway_axis_filter()
+
+    -- Only applies to departures with a built route
+    if depart_arrive ~= 1 or #t_node < 2 then
+        return
+    end
+
+    -- ── 1. Find target threshold local coords (T) ──────────────────────
+    local l_T_x, l_T_z = 0, 0
+    local l_rwy_idx = 0
+    for l_i = 1, #t_runway do
+        if t_runway[l_i].ID == depart_runway then
+            l_rwy_idx = l_i
+            l_T_x = t_runway[l_i].x
+            l_T_z = t_runway[l_i].z
+            break
+        end
+    end
+    if l_rwy_idx == 0 then return end
+
+    -- ── 2. Find opposite threshold local coords (O) via Pair ───────────
+    local l_O_x, l_O_z = 0, 0
+    local l_pair_idx = t_runway[l_rwy_idx].Pair
+    if l_pair_idx ~= nil and t_runway[l_pair_idx] ~= nil then
+        l_O_x = t_runway[l_pair_idx].x
+        l_O_z = t_runway[l_pair_idx].z
+    else
+        -- Fallback: use any other runway threshold (should not happen post-VER1.24)
+        for l_i = 1, #t_runway do
+            if l_i ~= l_rwy_idx then
+                l_O_x = t_runway[l_i].x
+                l_O_z = t_runway[l_i].z
+                break
+            end
+        end
+        logMsg("FollowMe : apply_runway_axis_filter - Pair fallback used for RWY " .. depart_runway)
+    end
+
+    -- ── 3. Axis length T→O ─────────────────────────────────────────────
+    local l_ax = l_T_x - l_O_x
+    local l_az = l_T_z - l_O_z
+    local l_axLen = math.sqrt(l_ax * l_ax + l_az * l_az)
+    if l_axLen < 1 then return end  -- degenerate axis, skip
+
+    -- ── 4. Perpendicular tolerance (fixed 15 m, same as HTML v7) ───────
+    local MAX_PERP_M = 15
+
+    -- ── 5. Project each node (except last = destination threshold) ─────
+    -- Returns proj (signed metres from O along O→T axis) and perp
+    -- We use O as origin so that: proj=0 at O, proj=axLen at T
+    local function project_node(n_x, n_z)
+        local l_dTN_sq = (n_x - l_T_x)^2 + (n_z - l_T_z)^2
+        local l_dON_sq = (n_x - l_O_x)^2 + (n_z - l_O_z)^2
+        local l_dTN    = math.sqrt(l_dTN_sq)
+        local l_dON    = math.sqrt(l_dON_sq)
+        -- Law of cosines: proj from T toward O
+        local l_proj = (l_axLen * l_axLen + l_dTN_sq - l_dON_sq) / (2 * l_axLen)
+        local l_perp = math.sqrt(math.max(0, l_dTN_sq - l_proj * l_proj))
+        return l_proj, l_perp, l_dTN   -- dTN = distance to target threshold
+    end
+
+    -- ── 6. Collect on-axis node indices ────────────────────────────────
+    -- IMPORTANT: at this point in process_possible_routes(), the VER1.17
+    -- block has NOT yet run, so the GPS threshold node has NOT yet been
+    -- appended to t_node[].  The last t_node[] entry is the last A* node
+    -- (e.g. node 136 at KSYR), which may itself be on the runway axis and
+    -- must be checked like any other node.
+    -- We therefore scan ALL t_node[] entries (no exclusion of the last).
+    -- The destination threshold, always "on the axis" by definition, will
+    -- be added by VER1.17 after this filter.  It contributes its mandatory
+    -- "1" to the conceptual total count only.  Concretely the rule is:
+    --   → filter only when #l_on_axis >= 2
+    --     (= at least 2 A* nodes on axis; with the future threshold that
+    --      makes total > 2, triggering the monotone check)
+    -- "on axis" : perp ≤ MAX_PERP_M  AND  projection within [-50, axLen+50]
+    local l_on_axis = {}
+    for l_i = 1, #t_node do   -- scan ALL nodes, including the last
+        local l_nd = t_node[l_i]
+        if l_nd and l_nd.x and l_nd.z then
+            local l_proj, l_perp, l_dTN = project_node(l_nd.x, l_nd.z)
+            if l_perp <= MAX_PERP_M and l_proj >= -50 and l_proj <= l_axLen + 50 then
+                l_on_axis[#l_on_axis + 1] = { idx = l_i, dTN = l_dTN }
+            end
+        end
+    end
+
+    -- ── 7. Rule: filter only if total on-axis > 2 ──────────────────────
+    -- The future GPS threshold (added by VER1.17) always counts as 1.
+    -- So total = #l_on_axis (A* nodes on axis) + 1 (threshold).
+    -- Filter only when total > 2, i.e. #l_on_axis >= 2.
+    if #l_on_axis < 2 then
+        logMsg(
+            "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+            " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → no filter (total ≤ 2)"
+        )
+        return
+    end
+
+    logMsg(
+        "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+        " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → applying monotone filter"
+    )
+
+    -- ── 8. Monotone filter ─────────────────────────────────────────────
+    -- Walk on-axis nodes in route order; dTN must strictly decrease.
+    local l_to_remove = {}   -- set of t_node[] indices to remove
+    local l_prev_dTN = math.huge
+
+    for l_k = 1, #l_on_axis do
+        local l_entry = l_on_axis[l_k]
+        local l_idx   = l_entry.idx
+        local l_dTN   = l_entry.dTN
+
+        -- First node of the whole route is always kept
+        if l_idx == 1 then
+            l_prev_dTN = l_dTN
+        elseif l_dTN > l_prev_dTN then
+            -- Regression → mark for removal
+            l_to_remove[l_idx] = true
+            logMsg(
+                "FollowMe : apply_runway_axis_filter  remove t_node[" .. l_idx .. "]" ..
+                " dTN=" .. string.format("%.1f", l_dTN) ..
+                "m  prev_dTN=" .. string.format("%.1f", l_prev_dTN) .. "m (regression)"
+            )
+        else
+            -- Progression → keep, update reference
+            l_prev_dTN = l_dTN
+        end
+    end
+
+    -- ── 9. Rebuild t_node[] without the flagged nodes ──────────────────
+    local l_removed_count = 0
+    for l_k, _ in pairs(l_to_remove) do
+        l_removed_count = l_removed_count + 1
+    end
+
+    if l_removed_count == 0 then
+        logMsg("FollowMe : apply_runway_axis_filter RWY " .. depart_runway .. " - all nodes monotone, nothing removed")
+        return
+    end
+
+    local l_new_node = {}
+    for l_i = 1, #t_node do
+        if not l_to_remove[l_i] then
+            l_new_node[#l_new_node + 1] = t_node[l_i]
+        end
+    end
+    t_node = l_new_node
+
+    logMsg(
+        "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+        " - removed " .. l_removed_count .. " node(s)," ..
+        " t_node now has " .. #t_node .. " entries"
+    )
 end
 
 -- ====================================================
@@ -4667,6 +5094,12 @@ function process_possible_routes()
         end
         t_segment[#t_segment] = nil
     end
+
+    -- VER2.1 : Monotone runway-axis filter.
+    -- Applied here, after all temporary nodes/segments are cleaned up and
+    -- before the VER1.17 centreline-projection block which must see a clean
+    -- t_node[]. See apply_runway_axis_filter() for full documentation.
+    apply_runway_axis_filter()
 
     -- VER1.17 : Universal runway threshold - for ALL departures (back-taxi or not),
     -- replace the runway portion of the A* route with a direct GPS path to the
@@ -4780,6 +5213,98 @@ function process_possible_routes()
         end
     end
 
+    -- =====================================================================
+    -- VER2.5 : Route simplification — two-pass post-processing of t_node[]
+    -- =====================================================================
+    -- Runs AFTER all nodes (including centreline projection + GPS threshold)
+    -- are built, and BEFORE the DRIVE NODES log so the log reflects the
+    -- final simplified route.
+    --
+    -- PASS 1 — Regression elimination
+    --   Any node B between A and C where dist(B→end) > dist(A→end) means
+    --   the car moves AWAY from the destination.  Such nodes cause the
+    --   back-and-forth behaviour seen at CYHU RWY 24R (nœud 11, hdg 190°).
+    --   Rule: remove B if dist(B→end) > dist(A→end) + tolerance (5 m).
+    --   The last two nodes (centreline + threshold) are protected.
+    --   Iterate until no more regressions exist (handles chains).
+    --
+    -- PASS 2 — Collinear node elimination
+    --   Three consecutive nodes A→B→C where the heading change at B is
+    --   less than 20° (AoC > 160°) and B adds no useful geometry.
+    --   Rule: remove B if angle_diff(hdg_AB, hdg_BC) < 20°.
+    --   The last two nodes are protected.
+    --   Iterate until stable.
+    -- =====================================================================
+    if #t_node >= 3 then
+
+        -- PASS 1 : régression (nœud s'éloignant de la destination)
+        local l_fin_x = t_node[#t_node].x
+        local l_fin_z = t_node[#t_node].z
+        local l_pass1_removed = 0
+        local l_changed = true
+        while l_changed do
+            l_changed = false
+            -- Protect last 2 nodes (centreline + threshold)
+            for l_i = 2, #t_node - 2 do
+                local _, l_dte_prev = heading_n_dist(t_node[l_i - 1].x, t_node[l_i - 1].z, l_fin_x, l_fin_z)
+                local _, l_dte_curr = heading_n_dist(t_node[l_i].x,     t_node[l_i].z,     l_fin_x, l_fin_z)
+                if l_dte_curr > l_dte_prev + 5 then
+                    logMsg(string.format(
+                        "FollowMe[SIMP] PASS1 remove node=%d  dToEnd=%.1fm > prev=%.1fm (+%.1fm)  hdg=%.1f",
+                        l_i, l_dte_curr, l_dte_prev, l_dte_curr - l_dte_prev,
+                        t_node[l_i].heading or 0))
+                    table.remove(t_node, l_i)
+                    l_pass1_removed = l_pass1_removed + 1
+                    l_changed = true
+                    break  -- restart scan after removal
+                end
+            end
+        end
+
+        -- PASS 2 : nœuds colinéaires (changement de cap < 20°)
+        local l_pass2_removed = 0
+        l_changed = true
+        while l_changed do
+            l_changed = false
+            -- Protect last 2 nodes
+            for l_i = 2, #t_node - 2 do
+                local l_hdg_ab, _ = heading_n_dist(
+                    t_node[l_i - 1].x, t_node[l_i - 1].z,
+                    t_node[l_i].x,     t_node[l_i].z)
+                local l_hdg_bc, _ = heading_n_dist(
+                    t_node[l_i].x,     t_node[l_i].z,
+                    t_node[l_i + 1].x, t_node[l_i + 1].z)
+                local l_aoc_diff, _ = compute_angle_diff(l_hdg_ab, l_hdg_bc)
+                -- compute_angle_diff returns AoR (angle of rotation), AoC = 180 - AoR
+                -- A straight line has AoR~0, AoC~180.  We remove if AoR < 20 (quasi-straight).
+                if l_aoc_diff ~= nil and l_aoc_diff < 20 then
+                    logMsg(string.format(
+                        "FollowMe[SIMP] PASS2 remove node=%d  hdg_AB=%.1f  hdg_BC=%.1f  AoR=%.1f (<20 collinear)",
+                        l_i, l_hdg_ab, l_hdg_bc, l_aoc_diff))
+                    table.remove(t_node, l_i)
+                    l_pass2_removed = l_pass2_removed + 1
+                    l_changed = true
+                    break
+                end
+            end
+        end
+
+        -- Recalculate heading and dist for all nodes after simplification
+        if l_pass1_removed + l_pass2_removed > 0 then
+            for l_i = 1, #t_node - 1 do
+                t_node[l_i].heading, t_node[l_i].dist =
+                    heading_n_dist(t_node[l_i].x, t_node[l_i].z,
+                                   t_node[l_i + 1].x, t_node[l_i + 1].z)
+            end
+            logMsg(string.format(
+                "FollowMe[SIMP] DONE  removed=%d (pass1=%d regression  pass2=%d collinear)  nodes_remaining=%d",
+                l_pass1_removed + l_pass2_removed,
+                l_pass1_removed, l_pass2_removed, #t_node))
+        else
+            logMsg("FollowMe[SIMP] DONE  no nodes removed  route is already optimal")
+        end
+    end
+
     -- VER1.22 : log the final drive waypoints actually followed by the car
     if #t_node > 0 then
         local l_from_lbl, l_to_lbl = "", ""
@@ -4821,6 +5346,35 @@ function process_possible_routes()
         )
         logMsg("FollowMe : DRIVE NODES : " .. l_node_list)
         logMsg("FollowMe : DRIVE NODES TOTAL=" .. #t_node)
+
+        -- VER2.4 FIX-B: per-node distance-to-last regression check.
+        -- Any node where dist-to-end INCREASES means the car goes away from its destination
+        -- (U-turn or detour). Log each such node with *** REGRESSION *** so the cause
+        -- of off-pavement driving is immediately visible without post-processing.
+        if #t_node >= 2 then
+            local l_fin_x = t_node[#t_node].x
+            local l_fin_z = t_node[#t_node].z
+            local l_prev_dte = math.huge
+            local l_n_regressions = 0
+            for l_ri = 1, #t_node do
+                local _, l_dte = heading_n_dist(t_node[l_ri].x, t_node[l_ri].z, l_fin_x, l_fin_z)
+                if l_dte > l_prev_dte then
+                    l_n_regressions = l_n_regressions + 1
+                    logMsg(string.format(
+                        "FollowMe : *** REGRESSION ***  driveNode=%d  x=%.1f  z=%.1f  dToEnd=%.1fm  prevDToEnd=%.1fm  delta=+%.1fm",
+                        l_ri, t_node[l_ri].x, t_node[l_ri].z,
+                        l_dte, l_prev_dte, l_dte - l_prev_dte))
+                end
+                l_prev_dte = l_dte
+            end
+            if l_n_regressions == 0 then
+                logMsg("FollowMe : DRIVE NODES regression check PASSED (no U-turns / detours)")
+            else
+                logMsg(string.format(
+                    "FollowMe : DRIVE NODES regression check FAILED  regressions=%d  → route has detour(s) causing off-pavement driving",
+                    l_n_regressions))
+            end
+        end
     end
 end
 
@@ -5159,7 +5713,20 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
     t_taxinode[l_idx].heading = nil
     l_new_node = l_idx - 1
 
-    if string.find(t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment, ",") then
+    -- VER2.4 FIX-A: was string.find(Segment,",") → missed dead-end nodes (no comma).
+    -- Now uses Segment ~= "" so any connected node (junction OR dead-end) is linked.
+    local l_n1_seg  = t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment
+    local l_n2_seg  = t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment
+    local l_n1_dead = (l_n1_seg ~= "" and not string.find(l_n1_seg, ","))
+    local l_n2_dead = (l_n2_seg ~= "" and not string.find(l_n2_seg, ","))
+    logMsg(string.format(
+        "FollowMe : add_new_taxinode_segment  seg=%d  N1=%d(seg='%s' deadend=%s)  N2=%d(seg='%s' deadend=%s)  newNode=%d",
+        in_segment_index,
+        t_segment[in_segment_index].Node1, l_n1_seg, tostring(l_n1_dead),
+        t_segment[in_segment_index].Node2, l_n2_seg, tostring(l_n2_dead),
+        l_new_node))
+
+    if l_n1_seg ~= "" then
         l_new_segment = #t_segment + 1
         t_segment[l_new_segment] = {}
         t_segment[l_new_segment].ID = "ADD_NEWSEGMENT"
@@ -5179,9 +5746,15 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment =
             t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment .. "," .. tostring(l_new_segment)
         t_taxinode[l_idx].Segment = tostring(l_new_segment)
+        logMsg(string.format("FollowMe :   N1 connected  N1(%d)→newNode(%d) newSeg=%d%s",
+            t_segment[l_new_segment].Node1, l_new_node, l_new_segment,
+            l_n1_dead and "  [DEAD-END FIX-A applied]" or ""))
+    else
+        logMsg(string.format("FollowMe :   N1(%d) SKIPPED Segment='' (pruned)",
+            t_segment[in_segment_index].Node1))
     end
 
-    if string.find(t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment, ",") then
+    if l_n2_seg ~= "" then
         l_new_segment = #t_segment + 1
         t_segment[l_new_segment] = {}
         t_segment[l_new_segment].ID = "ADD_NEWSEGMENT"
@@ -5205,6 +5778,12 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         else
             t_taxinode[l_idx].Segment = t_taxinode[l_idx].Segment .. "," .. tostring(l_new_segment)
         end
+        logMsg(string.format("FollowMe :   N2 connected  newNode(%d)→N2(%d) newSeg=%d%s",
+            l_new_node, t_segment[l_new_segment].Node2, l_new_segment,
+            l_n2_dead and "  [DEAD-END FIX-A applied]" or ""))
+    else
+        logMsg(string.format("FollowMe :   N2(%d) SKIPPED Segment='' (pruned)",
+            t_segment[in_segment_index].Node2))
     end
     return l_new_node, l_new_segment
 end
@@ -5337,8 +5916,8 @@ function build_holder(wnd, x, y)
         imgui.DrawList_AddLine(l_cx + l_r, l_cy - l_r, l_cx - l_r, l_cy + l_r, 0xFF0000FF, 2)
     end
 
-    -- VER1.6 : drag mechanic removed - holder position is fixed at Win_Y = 400
-    -- DEBUG : log every mouse event on the holder (not every frame)
+	-- Guards the FM badge click: toggles the main panel only when on the ground,
+	-- and ignores spurious release events that follow a window close.
     if imgui.IsMouseReleased(0) then
         if ignore_next_release > 0 then
             ignore_next_release = ignore_next_release - 1
