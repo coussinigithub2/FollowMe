@@ -1,0 +1,9 @@
+En analysant l'image, je considère que le noeud 3 serais le dernier noeud. On devrais arrêter le Follow Me Car là. Cela est le cas que l'on ne roule pas back-taxi sur la piste.
+
+Si on roule en back-taxi (on le sait, on suit des noeud qui sont sur l'axe de la piste), alors on arrête au seuil de la piste.
+
+Comprenez vous la nuance
+
+Règle: En back-taxi on se rend au seuil. Dans les autre cas, on se rend au dernier noeud qui est près du seuil, juste avant d'entrer sur l'axe de la piste.
+
+Cela est peut-être trop complexe a générer. Cela semble t-il réaliste
