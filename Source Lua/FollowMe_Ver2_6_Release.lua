@@ -4296,7 +4296,7 @@ function update_msg(in_msg)
     end
 
     if in_msg == "-18" then
-        in_msg = "Routes not defined for runway "
+        in_msg = "No routes have been defined for this airport"
         for i = 1, #t_deleted_runway do
             if i == #t_deleted_runway then
                 in_msg = in_msg .. t_deleted_runway[i]
