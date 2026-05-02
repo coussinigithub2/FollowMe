@@ -170,6 +170,29 @@
 --                           (bypassing XPLMFindNavAid entirely) and clears the flag.
 --                           XPLMFindNavAid is only called when the aircraft genuinely moves
 --                           to a different airport, not on an in-place cancel.
+--    VER2.6 Coussini 2026:  Stop at 100 m from TARGET (runway threshold for departure).
+--                           Previously the car drove all the way to curr_node == #t_node
+--                           (the exact GPS threshold node). Now it stops as soon as the
+--                           car-to-threshold distance drops to 100 m or less.
+--                           Implementation:
+--                           (a) New boolean flag fm_arrived (default false).
+--                               Set to true in manage_car_motion() the first frame the
+--                               car-to-threshold distance <= 100 m (departure only).
+--                               Reset to false in start_car() and initialise_routes().
+--                           (b) manage_car_motion(): when fm_arrived becomes true the
+--                               car speed is forced to 0 and car_accel to 0.
+--                               The normal last-node braking (curr_node+1==#t_node) is
+--                               still active for the final metres so the car decelerates
+--                               smoothly, then the distance check stops it at 100 m.
+--                           (c) plot_position() guard (line ~1107): extended with
+--                               "or fm_arrived" so the car body freezes immediately.
+--                           (d) plot_position() signboard block (~1302-1316): the
+--                               arrived condition now triggers on fm_arrived in addition
+--                               to curr_node >= #t_node (stop sign + arrived sound).
+--                           (e) object_physics() (~1872): car stops being moved/drawn
+--                               as moving once fm_arrived is true.
+--                           (f) handle_plugin_window() (~3246): taxi-light-off auto-kill
+--                               also fires when fm_arrived is true.
 --    VER2.4 Coussini 2026:  FIX-A : add_new_taxinode_segment dead-end guard.
 --                           Old guard string.find(Segment,",") required a junction.
 --                           Dead-end endpoint (single segment, no comma) left the
@@ -432,6 +455,9 @@ local depart_arrive = 0
 local depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
 -- VER1.8 : true when runway has no direct taxiway exit (back-taxi)
 local is_backtaxi = false
+-- VER2.6 : true once the car is within 100 m of the target (threshold / gate)
+local fm_arrived = false
+local ARRIVE_DIST = 100  -- metres
 
 local curr_ICAO, curr_ICAO_Name = "", ""
 -- VER2.3 : set true on manual cancel to reload apt.dat for the KNOWN curr_ICAO
@@ -742,6 +768,7 @@ function start_car()
     remaining_dist_leg = 0
     turning_is_active = 0
     curr_node = 1
+    fm_arrived = false  -- VER2.6 : reset distance-stop flag
 
     -- Clear any previous messages to avoid collision (e.g. "Arrived" + "Follow Me")
     Err_Msg[1] = {}
@@ -1074,6 +1101,30 @@ function manage_car_motion()
     end
 
     plot_position(l_dist)
+
+    -- VER2.6 : stop the car when it is within 100 m of the target (departure only).
+    -- This check runs AFTER plot_position() so the car position is already updated
+    -- for this frame. We only arm it for departures (#t_node > 0, depart_arrive == 1).
+    if not fm_arrived and depart_arrive == 1 and #t_node > 0 then
+        local _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+        if l_dist_to_target <= ARRIVE_DIST then
+            fm_arrived = true
+            car_speed  = 0
+            car_accel  = 0
+            -- Trigger STOP sign and "We have arrived at destination" sound immediately,
+            -- right here where fm_arrived becomes true (guaranteed single execution).
+            -- Cannot rely on plot_position() because its guard now returns early when fm_arrived.
+            if not is_backtaxi then
+                car_sign = 1
+                if not string.find(Err_Msg[1].text or "", "We have arrived") then
+                    update_msg("5")  -- sets text + plays snd_arrived
+                end
+            end
+            logMsg(string.format(
+                "FollowMe VER2.6 : fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
+                l_dist_to_target, curr_node, #t_node, car_sign))
+        end
+    end
 end
 
 -- ====================================================
@@ -1104,7 +1155,7 @@ function plot_position(in_act_dist)
     local l_AoR = 0
     local l_act_dist = 0
 
-    if curr_node == #t_node then
+    if curr_node == #t_node or fm_arrived then  -- VER2.6 : also freeze when stopped by distance
         return
     end
 
@@ -1299,8 +1350,8 @@ function plot_position(in_act_dist)
     car_y = probe_y(car_x, car_y, car_z)
     tire_rotate = math.fmod(tire_rotate + (in_act_dist * 360 / (tire_diameter * math.pi)), 360)
 
-    if car_sign == 0 or curr_node >= #t_node - 2 then
-        if curr_node ~= #t_node then
+    if car_sign == 0 or curr_node >= #t_node - 2 or fm_arrived then  -- VER2.6 : also keep sign visible when stopped by distance
+        if curr_node ~= #t_node and not fm_arrived then
             if remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
                     t_node[curr_node + 1].AoC < 160
              then
@@ -1321,7 +1372,8 @@ function plot_position(in_act_dist)
                     end
                 end
             end
-        else
+        elseif not fm_arrived then
+            -- curr_node == #t_node (original path: car physically reached last node)
             if depart_arrive ~= 1 then
                 local l_gate_in_sight, l_to_gate_heading, _ =
                     chk_line_of_sight(
@@ -1355,6 +1407,8 @@ function plot_position(in_act_dist)
                 end
             end
         end
+        -- VER2.6 : when fm_arrived==true, car_sign was already set to 1 in manage_car_motion().
+        -- Nothing to do here; the sign stays at 1 every frame automatically.
     end
 end
 
@@ -1869,7 +1923,7 @@ function object_physics()
         end
     end
 
-    if obj_instance[0] ~= nil and #t_node > 0 and curr_node ~= #t_node then
+    if obj_instance[0] ~= nil and #t_node > 0 and curr_node ~= #t_node and not fm_arrived then  -- VER2.6 : freeze when stopped by distance
         local l_dist = 0
         local l_car_in_sight, l_car_is_behind = false, false
         l_car_in_sight, _, l_dist = chk_line_of_sight(fm_plane_head, 80, 80, fm_plane_x, fm_plane_z, car_x, car_z)
@@ -3177,6 +3231,7 @@ function initialise_routes()
     depart_arrive = 0
 	-- VER1.8
     is_backtaxi = false
+    fm_arrived = false  -- VER2.6
     window_first_access = true
 end
 
@@ -3243,7 +3298,7 @@ function handle_plugin_window()
     local l_err = ""
 
     if FM_car_active == true and #t_node > 0 and prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 0 then
-        if (depart_arrive == 1 and curr_node >= #t_node) or (depart_arrive == 2 and curr_node == #t_node) then
+        if (depart_arrive == 1 and (curr_node >= #t_node or fm_arrived)) or (depart_arrive == 2 and curr_node == #t_node) then  -- VER2.6 : fm_arrived
             prepare_kill_objects = true
         end
     end
@@ -3910,6 +3965,26 @@ function build_window(wnd, x, y)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
+
+    -- VER2.5 : Distance to destination (runway threshold for departure, gate for arrival)
+    if #t_node > 0 then
+        local _, l_dist_dest = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+        imgui.SameLine()
+        imgui.SetCursorPosX(280)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+        imgui.TextUnformatted("Target")
+        imgui.PopStyleColor()
+        imgui.SameLine()
+        imgui.SetCursorPosX(329)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
+        if l_dist_dest >= 1000 then
+            imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
+        else
+            imgui.TextUnformatted(string.format("%d m", math.floor(l_dist_dest + 0.5)))
+        end
+        imgui.PopStyleColor()
+    end
+
 
 ------------------------------
     -- VER2.0 : Real-time directional message - updated every frame when FM car is active.

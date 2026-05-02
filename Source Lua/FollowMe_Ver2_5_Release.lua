@@ -12,7 +12,7 @@
 --                           instead of stopping at the first hotzone node on the runway
 --    VER1.9 Coussini 2026 : Back-taxi GPS node - adds a virtual node at the exact runway threshold
 --                           coordinates so the car drives in a straight line to the threshold
---                           and stops there with "Arrived at destination"
+--                           and stops there with "We have arrived at destination"
 --    VER1.10 Coussini 2026: Fix back-taxi false detection - a runway with a taxiway exit within
 --                           200m of the threshold is NOT a back-taxi (e.g. CYHU RWY 06L via K)
 --                           Only truly isolated thresholds (e.g. MDPC RWY 27) trigger back-taxi
@@ -170,23 +170,6 @@
 --                           (bypassing XPLMFindNavAid entirely) and clears the flag.
 --                           XPLMFindNavAid is only called when the aircraft genuinely moves
 --                           to a different airport, not on an in-place cancel.
---    VER2.5 Coussini 2026: Route simplification post-processing (2 passes).
---                           Runs after t_node[] est entièrement construit
---                           (après projection centreline + GPS threshold),
---                           avant le log DRIVE NODES.
---                           PASS 1 — Régression : supprime tout nœud B où
---                             dist(B→fin) > dist(A→fin) + 5m, c.-à-d. un
---                             nœud qui éloigne la voiture de sa destination.
---                             Corrige le comportement aller-retour observé
---                             à CYHU RWY 24R (nœud 11, cap 190°).
---                           PASS 2 — Colinéaire : supprime tout nœud B entre
---                             A et C où le changement de cap est < 20°
---                             (quasi ligne droite inutile).
---                           Les deux derniers nœuds (centreline + threshold)
---                           sont toujours protégés.  Chaque retrait est
---                           journalisé avec la balise [SIMP].  Les headings
---                           et distances sont recalculés après simplification.
---                           Log verbeux [NAV][ARC][TURN][BRK] conservé.
 --    VER2.4 Coussini 2026:  FIX-A : add_new_taxinode_segment dead-end guard.
 --                           Old guard string.find(Segment,",") required a junction.
 --                           Dead-end endpoint (single segment, no comma) left the
@@ -225,23 +208,6 @@
 --                           ensures the car is always visible to the pilot from the
 --                           very first frame, regardless of how far the taxiway is
 --                           from the gate stand.
---    VER2.5 Coussini 2026: Log verbeux de navigation [NAV][ARC][TURN][BRK].
---                           Ajoute des entrées logMsg aux 5 points critiques
---                           de la course afin de diagnostiquer tout comportement
---                           anormal sans avoir besoin de vidéo ou GIF :
---                           [NAV]  : chaque transition de nœud (curr_node++)
---                                    avec position, cap, distance restante.
---                           [TURN] : géométrie de virage calculée par
---                                    determine_dir_of_turn() pour chaque nœud
---                                    (dir, AoC, radius, dist_b4_turn, speed).
---                           [ARC]  : activation, calcul de head1_exit,
---                                    passage en S-curve (phase 2), et fin
---                                    d'arc avec position exacte.
---                           [BRK]  : freinage anticipé au seuil de piste
---                                    (distance, vitesse, décélération).
---                           Ces 5 balises permettent de reconstituer
---                           entièrement la trajectoire du FM car depuis
---                           le log seul, sans simulation visuelle.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -991,6 +957,7 @@ end
 -- Delegates motion integration to manage_car_motion().
 -- ====================================================
 function move_car(in_dist, in_car_in_sight, in_car_is_behind)
+
     -- VER1.6 fix : when speed_limiter is active, cap the plane speed reference so
     -- the car never accelerates beyond speed_max to follow the aircraft
     local l_ref_spd = fm_gnd_spd
@@ -1054,6 +1021,7 @@ end
 -- to advance the car along the route geometry by the computed distance.
 -- ====================================================
 function manage_car_motion()
+
     local l_dist = 0
     local l_dist_stop = 0
     local l_dist_turn = 0
@@ -1101,12 +1069,6 @@ function manage_car_motion()
                 car_accel = deccel_avg
                 car_speed = car_speed + (car_accel * elapsed_time)
                 l_dist = (car_speed * elapsed_time) + (0.5 * math.abs(car_accel) * math.pow(elapsed_time, 2))
-                -- VER2.5 VERBOSE : freinage anticipé au seuil
-                logMsg(string.format(
-                    "FollowMe[BRK] THRESHOLD BRAKE  node=%d/%d  rem=%.1fm  stop_dist=%.1fm  spd=%.1fkts  accel=%.2f",
-                    curr_node + 1, #t_node,
-                    remaining_dist_leg, l_dist_stop,
-                    car_speed * 1.94384, car_accel))
             end
         end
     end
@@ -1148,6 +1110,9 @@ function plot_position(in_act_dist)
 
     l_act_dist = in_act_dist
 
+    -- ==========================================================
+    -- Straight line motion
+    -- ==========================================================
     if turning_is_active == 0 then
         if curr_node + 1 ~= #t_node then
             remaining_dist_leg = 0
@@ -1199,28 +1164,15 @@ function plot_position(in_act_dist)
                     t_node[curr_node + 1].radius,
                     t_node[curr_node + 1].dir
                 )
-                -- VER2.5 VERBOSE : début d'arc de virage
-                logMsg(string.format(
-                    "FollowMe[ARC] START  node=%d  dir=%d  AoC=%.1f  radius=%.1fm  dist_b4=%.1fm  head1_exit=%s  CoR=(%.1f,%.1f)",
-                    curr_node + 1,
-                    t_node[curr_node + 1].dir,
-                    t_node[curr_node + 1].AoC or -1,
-                    t_node[curr_node + 1].radius or -1,
-                    t_node[curr_node + 1].dist_b4_turn or -1,
-                    tostring(t_node[curr_node + 1].head1_exit),
-                    t_node[curr_node + 1].rot_x, t_node[curr_node + 1].rot_z))
             else
-                -- VER2.5 VERBOSE : pas d'arc, ligne droite vers nœud suivant
-                logMsg(string.format(
-                    "FollowMe[ARC] SKIP->STRAIGHT  node=%d  dir=%s  last=%s",
-                    curr_node + 1,
-                    tostring(t_node[curr_node + 1].dir),
-                    tostring(curr_node + 1 == #t_node)))
                 l_goto_nextnode = true
             end
         end
     end
 
+    -- ==========================================================
+    -- Primary turn phase
+    -- ==========================================================
     if turning_is_active == 1 then
         if t_node[curr_node + 1].head1_exit == nil then
             l_head2, l_dist =
@@ -1234,10 +1186,6 @@ function plot_position(in_act_dist)
             l_heading_from_center = minus_delta_clockwise(l_head2, l_AoR, t_node[curr_node + 1].dir)
             t_node[curr_node + 1].head1_exit = add_delta_clockwise(l_heading_from_center, 90, t_node[curr_node + 1].dir)
             t_node[curr_node + 1].heading = t_node[curr_node + 1].head1_exit
-            -- VER2.5 VERBOSE : head1_exit calculé
-            logMsg(string.format(
-                "FollowMe[ARC] head1_exit=%.1f  dist_CoR_to_next=%.1fm  AoR_tangent=%.1f  node=%d",
-                t_node[curr_node + 1].head1_exit, l_dist, l_AoR, curr_node + 1))
         end
 
         l_remaining_rot =
@@ -1251,19 +1199,8 @@ function plot_position(in_act_dist)
             l_AoR = l_remaining_rot
             l_act_dist = l_remaining_act_dist
             if t_node[curr_node + 1].heading ~= t_node[curr_node + 1].head1_exit then
-                -- VER2.5 VERBOSE : passage en arc S-curve (phase 2)
-                logMsg(string.format(
-                    "FollowMe[ARC] PHASE2 S-CURVE  node=%d  car_hdg=%.1f  head1_exit=%.1f  rem_rot=%.1f",
-                    curr_node + 1, car_body_heading,
-                    t_node[curr_node + 1].head1_exit, l_remaining_rot))
                 turning_is_active = 2
             else
-                -- VER2.5 VERBOSE : arc terminé normalement
-                logMsg(string.format(
-                    "FollowMe[ARC] END  node=%d  car_hdg=%.1f  head1_exit=%.1f  car=(%.1f,%.1f)",
-                    curr_node + 1, car_body_heading,
-                    t_node[curr_node + 1].head1_exit,
-                    car_x, car_z))
                 l_goto_nextnode = true
             end
         end
@@ -1307,6 +1244,9 @@ function plot_position(in_act_dist)
         end
     end
 
+    -- ==========================================================
+    -- Secondary turn phase
+    -- ==========================================================
     if turning_is_active == 2 then
         l_remaining_rot =
             compute_angle_diff_dir(car_body_heading, t_node[curr_node + 1].head1_exit, t_node[curr_node + 1].dir * -1)
@@ -1337,6 +1277,9 @@ function plot_position(in_act_dist)
         determine_steering(l_AoR, l_remaining_turn_dist, t_node[curr_node + 1].dir * -1, t_node[curr_node + 1].steering)
     end
 
+    -- ==========================================================
+    -- Reach a Node
+    -- ==========================================================
     if l_goto_nextnode then
         turning_is_active = 0
         curr_node = curr_node + 1
@@ -1348,24 +1291,8 @@ function plot_position(in_act_dist)
             l_head1, remaining_dist_leg = heading_n_dist(car_x, car_z, t_node[curr_node + 1].x, t_node[curr_node + 1].z)
             t_node[curr_node].heading = l_head1
             remaining_dist_leg = remaining_dist_leg - l_act_dist
-            -- VER2.5 VERBOSE : transition vers le nœud suivant
-            logMsg(string.format(
-                "FollowMe[NAV] NODE->%d/%d  car=(%.1f,%.1f)  hdg=%.1f  next=(%.1f,%.1f)  leg=%.1fm  spd=%.1fkts",
-                curr_node, #t_node,
-                car_x, car_z,
-                l_head1,
-                t_node[curr_node + 1].x, t_node[curr_node + 1].z,
-                remaining_dist_leg,
-                car_speed * 1.94384))
         elseif curr_node == #t_node then
             remaining_dist_leg = 0
-            -- VER2.5 VERBOSE : arrivée au nœud final (GPS threshold)
-            logMsg(string.format(
-                "FollowMe[NAV] NODE->%d/%d THRESHOLD REACHED  car=(%.1f,%.1f)  hdg=%.1f  spd=%.1fkts",
-                curr_node, #t_node,
-                car_x, car_z,
-                car_body_heading,
-                car_speed * 1.94384))
         end
     end
 
@@ -1549,22 +1476,6 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
         t_node[curr_node + 1].ref_rot_radius = math.sqrt((car_rear_wheel_to_ref ^ 2) + (t_node[curr_node + 1].radius ^ 2))
         t_node[curr_node + 1].steering = math.deg(math.atan(car_front_to_back_wheel / (t_node[curr_node + 1].radius - width_btw_midtire / 2)))
         t_node[curr_node + 1].AoC = l_AoC
-        -- VER2.5 VERBOSE : résumé de la géométrie de virage calculée
-        logMsg(string.format(
-            "FollowMe[TURN] node=%d  hdg1=%.1f->hdg2=%.1f  dir=%d  AoC=%.1f  radius=%.1fm  dist_b4=%.1fm  speed=%.1fkts  dist_avail=%.1fm",
-            curr_node + 1,
-            in_head1, in_head2,
-            t_node[curr_node + 1].dir,
-            l_AoC,
-            t_node[curr_node + 1].radius,
-            t_node[curr_node + 1].dist_b4_turn,
-            t_node[curr_node + 1].speed * 1.94384,
-            in_dist))
-    else
-        -- VER2.5 VERBOSE : pas de virage (ligne droite)
-        logMsg(string.format(
-            "FollowMe[TURN] node=%d  hdg1=%.1f->hdg2=%.1f  dir=0 STRAIGHT",
-            curr_node + 1, in_head1, in_head2))
     end
 end
 
@@ -3983,15 +3894,15 @@ function build_window(wnd, x, y)
         imgui.PopStyleColor()
     end
     imgui.SameLine()
-    imgui.SetCursorPosX(216)
+    imgui.SetCursorPosX(172)
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
     imgui.TextUnformatted("FM Car")
     imgui.PopStyleColor()
     imgui.SameLine()
-    imgui.SetCursorPosX(263)
+    imgui.SetCursorPosX(219)
     if FM_car_active then
         local l_car_kts = car_speed * 1.94384
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFFCCCCCC)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
         imgui.TextUnformatted(string.format("%.1f kts", l_car_kts))
         imgui.PopStyleColor()
     else
@@ -3999,6 +3910,26 @@ function build_window(wnd, x, y)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
+
+    -- VER2.5 : Distance to destination (runway threshold for departure, gate for arrival)
+    if #t_node > 0 then
+        local _, l_dist_dest = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+        imgui.SameLine()
+        imgui.SetCursorPosX(280)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+        imgui.TextUnformatted("Target")
+        imgui.PopStyleColor()
+        imgui.SameLine()
+        imgui.SetCursorPosX(329)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
+        if l_dist_dest >= 1000 then
+            imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
+        else
+            imgui.TextUnformatted(string.format("%d m", math.floor(l_dist_dest + 0.5)))
+        end
+        imgui.PopStyleColor()
+    end
+
 
 ------------------------------
     -- VER2.0 : Real-time directional message - updated every frame when FM car is active.
@@ -5210,98 +5141,6 @@ function process_possible_routes()
             t_node[l_last + 1].hotzone = "1"
             t_node[l_last + 1].heading = t_node[l_last].heading
             t_node[l_last + 1].dist = 0
-        end
-    end
-
-    -- =====================================================================
-    -- VER2.5 : Route simplification — two-pass post-processing of t_node[]
-    -- =====================================================================
-    -- Runs AFTER all nodes (including centreline projection + GPS threshold)
-    -- are built, and BEFORE the DRIVE NODES log so the log reflects the
-    -- final simplified route.
-    --
-    -- PASS 1 — Regression elimination
-    --   Any node B between A and C where dist(B→end) > dist(A→end) means
-    --   the car moves AWAY from the destination.  Such nodes cause the
-    --   back-and-forth behaviour seen at CYHU RWY 24R (nœud 11, hdg 190°).
-    --   Rule: remove B if dist(B→end) > dist(A→end) + tolerance (5 m).
-    --   The last two nodes (centreline + threshold) are protected.
-    --   Iterate until no more regressions exist (handles chains).
-    --
-    -- PASS 2 — Collinear node elimination
-    --   Three consecutive nodes A→B→C where the heading change at B is
-    --   less than 20° (AoC > 160°) and B adds no useful geometry.
-    --   Rule: remove B if angle_diff(hdg_AB, hdg_BC) < 20°.
-    --   The last two nodes are protected.
-    --   Iterate until stable.
-    -- =====================================================================
-    if #t_node >= 3 then
-
-        -- PASS 1 : régression (nœud s'éloignant de la destination)
-        local l_fin_x = t_node[#t_node].x
-        local l_fin_z = t_node[#t_node].z
-        local l_pass1_removed = 0
-        local l_changed = true
-        while l_changed do
-            l_changed = false
-            -- Protect last 2 nodes (centreline + threshold)
-            for l_i = 2, #t_node - 2 do
-                local _, l_dte_prev = heading_n_dist(t_node[l_i - 1].x, t_node[l_i - 1].z, l_fin_x, l_fin_z)
-                local _, l_dte_curr = heading_n_dist(t_node[l_i].x,     t_node[l_i].z,     l_fin_x, l_fin_z)
-                if l_dte_curr > l_dte_prev + 5 then
-                    logMsg(string.format(
-                        "FollowMe[SIMP] PASS1 remove node=%d  dToEnd=%.1fm > prev=%.1fm (+%.1fm)  hdg=%.1f",
-                        l_i, l_dte_curr, l_dte_prev, l_dte_curr - l_dte_prev,
-                        t_node[l_i].heading or 0))
-                    table.remove(t_node, l_i)
-                    l_pass1_removed = l_pass1_removed + 1
-                    l_changed = true
-                    break  -- restart scan after removal
-                end
-            end
-        end
-
-        -- PASS 2 : nœuds colinéaires (changement de cap < 20°)
-        local l_pass2_removed = 0
-        l_changed = true
-        while l_changed do
-            l_changed = false
-            -- Protect last 2 nodes
-            for l_i = 2, #t_node - 2 do
-                local l_hdg_ab, _ = heading_n_dist(
-                    t_node[l_i - 1].x, t_node[l_i - 1].z,
-                    t_node[l_i].x,     t_node[l_i].z)
-                local l_hdg_bc, _ = heading_n_dist(
-                    t_node[l_i].x,     t_node[l_i].z,
-                    t_node[l_i + 1].x, t_node[l_i + 1].z)
-                local l_aoc_diff, _ = compute_angle_diff(l_hdg_ab, l_hdg_bc)
-                -- compute_angle_diff returns AoR (angle of rotation), AoC = 180 - AoR
-                -- A straight line has AoR~0, AoC~180.  We remove if AoR < 20 (quasi-straight).
-                if l_aoc_diff ~= nil and l_aoc_diff < 20 then
-                    logMsg(string.format(
-                        "FollowMe[SIMP] PASS2 remove node=%d  hdg_AB=%.1f  hdg_BC=%.1f  AoR=%.1f (<20 collinear)",
-                        l_i, l_hdg_ab, l_hdg_bc, l_aoc_diff))
-                    table.remove(t_node, l_i)
-                    l_pass2_removed = l_pass2_removed + 1
-                    l_changed = true
-                    break
-                end
-            end
-        end
-
-        -- Recalculate heading and dist for all nodes after simplification
-        if l_pass1_removed + l_pass2_removed > 0 then
-            for l_i = 1, #t_node - 1 do
-                t_node[l_i].heading, t_node[l_i].dist =
-                    heading_n_dist(t_node[l_i].x, t_node[l_i].z,
-                                   t_node[l_i + 1].x, t_node[l_i + 1].z)
-            end
-            logMsg(string.format(
-                "FollowMe[SIMP] DONE  removed=%d (pass1=%d regression  pass2=%d collinear)  nodes_remaining=%d",
-                l_pass1_removed + l_pass2_removed,
-                l_pass1_removed, l_pass2_removed, #t_node))
-        else
-            logMsg("FollowMe[SIMP] DONE  no nodes removed  route is already optimal")
         end
     end
 
