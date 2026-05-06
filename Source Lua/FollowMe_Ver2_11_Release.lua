@@ -597,6 +597,7 @@ local curr_node = 1
 local tire_rotate = 0
 local steering = 0
 local car_sign = 0
+local last_car_sign = -1   -- VER2.11 debug : détecte les changements de car_sign
 
 local elapsed_time = 0
 local car_speed = 0
@@ -4164,9 +4165,9 @@ function show_navigation_window()
         end
 	end
 
-    navigation_wnd = float_wnd_create(405, 30, 1, true)
+    navigation_wnd = float_wnd_create(485, 30, 1, true)
     float_wnd_set_title(navigation_wnd, navigation_title)
-    float_wnd_set_position(navigation_wnd, screen_width - 425 - Holder_len, Win_Y)
+    float_wnd_set_position(navigation_wnd, screen_width - 505 - Holder_len, Win_Y)
     float_wnd_set_imgui_builder(navigation_wnd, "build_navigation_window")
     float_wnd_set_onclose(navigation_wnd, "closed_navigation_window")
 
@@ -4196,13 +4197,14 @@ end
 function build_navigation_window(wnd, x, y)
 
     -- VER1.6 : Speed display zone - reserved read-only row below button
+    local d = 50
     imgui.SetCursorPosY(8)
-    imgui.SetCursorPosX(10)
+    imgui.SetCursorPosX(8+d)
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
     imgui.TextUnformatted("GND SPD")
     imgui.PopStyleColor()
     imgui.SameLine()
-    imgui.SetCursorPosX(70)
+    imgui.SetCursorPosX(68+d)
     if FM_car_active then
         local l_plane_kts = fm_gnd_spd * 1.94384
         local l_spd_color = (speed_limiter and l_plane_kts > 20) and 0xFF0000FF or 0xFF00FF00
@@ -4215,12 +4217,12 @@ function build_navigation_window(wnd, x, y)
         imgui.PopStyleColor()
     end
     imgui.SameLine()
-    imgui.SetCursorPosX(134)
+    imgui.SetCursorPosX(131+d)
     imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
     imgui.TextUnformatted("FM Car")
     imgui.PopStyleColor()
     imgui.SameLine()
-    imgui.SetCursorPosX(181)
+    imgui.SetCursorPosX(179+d)
     if FM_car_active then
         local l_car_kts = car_speed * 1.94384
         imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
@@ -4236,12 +4238,12 @@ function build_navigation_window(wnd, x, y)
     if #t_node > 0 then
         local _, l_dist_dest = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
         imgui.SameLine()
-        imgui.SetCursorPosX(242)
+        imgui.SetCursorPosX(240+d)
         imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
         imgui.TextUnformatted("Target")
         imgui.PopStyleColor()
         imgui.SameLine()
-        imgui.SetCursorPosX(291)
+        imgui.SetCursorPosX(289+d)
         imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
         if l_dist_dest >= 1000 then
             imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
@@ -4257,7 +4259,7 @@ function build_navigation_window(wnd, x, y)
 	if (FM_car_active and car_x ~= 0) or fm_arrived then
 
 	    -- 1. Déterminer la cible et la couleur selon la condition
-	    local target_x, target_z, triangle_color
+	    local target_x, target_z, triangle_color, fm_ti
 
 	    if fm_arrived then
 		    if car_timer > 6 then
@@ -4268,10 +4270,12 @@ function build_navigation_window(wnd, x, y)
 			        car_timer_last = fm_run_time
 			    end
 			end
+
+			fm_ti = car_timer
+			triangle_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and 0xFF000000 or 0xFF00FF00
 	        -- Cas "Arrivé" : Cible le dernier noeud et couleur VERTE
 	        target_x = t_node[#t_node].x
 	        target_z = t_node[#t_node].z
-	        triangle_color = 0xFF00FF00 -- Vert
 	    else
 	        -- Cas "En route" : Cible la voiture et couleur JAUNE
 	        target_x = car_x
@@ -4287,7 +4291,7 @@ function build_navigation_window(wnd, x, y)
 	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
 
 	    -- Paramètres de dessin
-	    local cx, cy    = 375, 15
+	    local cx, cy    = 375+d, 15
 	    local tip_len   = 13
 	    local wing_len  = 8
 	    local tail_len  = 6
@@ -4310,6 +4314,69 @@ function build_navigation_window(wnd, x, y)
 	    -- 3. Dessin unique avec la couleur dynamique
 	    imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, triangle_color)
 	end
+
+	--=====================================================
+	-- VER2.11 debug : log seulement quand car_sign change (1 ligne par transition)
+	if car_sign ~= last_car_sign then
+	    logMsg(string.format(
+	        "FollowMe NAV_WND car_sign CHANGED  old=%d  new=%d  curr_node=%d  #t_node=%d  fm_arrived=%s  FM_car_active=%s",
+	        last_car_sign, car_sign, curr_node, #t_node,
+	        tostring(fm_arrived), tostring(FM_car_active)))
+	    last_car_sign = car_sign
+	end
+
+	--=====================================================
+	-- VER 2.10 : TRIANGLES LATERAUX car_sign (gauche / droite)
+	-- Triangle équilatéral pointant vers la gauche  (côté gauche)
+	-- Triangle équilatéral pointant vers la droite  (côté droit)
+	-- car_sign == 0 : gauche NOIR,  droite NOIR
+	-- car_sign == 1 : gauche ROUGE, droite ROUGE
+	-- car_sign == 2 : gauche NOIR,  droite ROUGE
+	-- car_sign == 3 : gauche ROUGE, droite NOIR
+	--=====================================================
+	local nav_color_left, nav_color_right
+	if car_sign == 1 or car_sign == 0 then
+	    nav_color_left  = 0xFF0000FF   -- Rouge
+	    nav_color_right = 0xFF0000FF   -- Rouge
+	elseif car_sign == 2 then
+	    nav_color_left  = 0xFF333333   -- Noir (gris foncé visible)
+	    nav_color_right = 0xFF0000FF   -- Rouge
+	elseif car_sign == 3 then
+	    nav_color_left  = 0xFF0000FF   -- Rouge
+	    nav_color_right = 0xFF333333   -- Noir (gris foncé visible)
+	else
+	    nav_color_left  = 0xFF333333   -- Noir (gris foncé visible)
+	    nav_color_right = 0xFF333333   -- Noir (gris foncé visible)
+	end
+
+	-- Dimensions du triangle équilatéral
+	-- side = 20, hauteur h = side * sqrt(3)/2 ≈ 17.3
+	local nav_side = 20
+	local nav_h    = nav_side * math.sqrt(3) / 2
+	local nav_half = nav_side / 2
+	local nav_mid_y = 15
+
+	-- Triangle GAUCHE (pointe vers la gauche)
+	local nav_lc_x   = 8 + nav_h / 2
+	local nav_lg_tip_x = nav_lc_x - nav_h / 2
+	local nav_lg_top_x = nav_lc_x + nav_h / 2
+	local nav_lg_bot_x = nav_lc_x + nav_h / 2
+	imgui.DrawList_AddTriangleFilled(
+	    nav_lg_tip_x, nav_mid_y,
+	    nav_lg_top_x, nav_mid_y - nav_half,
+	    nav_lg_bot_x, nav_mid_y + nav_half,
+	    nav_color_left)
+
+	-- Triangle DROIT (pointe vers la droite)
+	local nav_rc_x   = 485 - 8 - nav_h / 2
+	local nav_rg_tip_x = nav_rc_x + nav_h / 2
+	local nav_rg_top_x = nav_rc_x - nav_h / 2
+	local nav_rg_bot_x = nav_rc_x - nav_h / 2
+	imgui.DrawList_AddTriangleFilled(
+	    nav_rg_tip_x, nav_mid_y,
+	    nav_rg_top_x, nav_mid_y - nav_half,
+	    nav_rg_bot_x, nav_mid_y + nav_half,
+	    nav_color_right)
 
 end
 
@@ -6057,18 +6124,6 @@ function exit_plugin()
     dr_sign = nil
 end
 
-function Bubble_6()
-	if car_timer > 0 and car_timer < 7 then
-	    glColor3f(1,1,0)
-	    glColor3f(1,0,1)
-	    glColor3f(0,0,1)
-	    glColor3f(0,1,0)
-	    glColor3f(0,1,1)
-	    glColor3f(1,0,0)
-		draw_string_Times_Roman_24( (SCREEN_WIDTH / 2), (SCREEN_HIGHT / 2), car_timer )
-	end
-end
-
 -- ====================================================
 -- MAIN SECTION (Initialization and flywithlua event
 -- ====================================================
@@ -6080,5 +6135,4 @@ load_probe()
 
 do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
-do_every_draw("Bubble_6()")
 do_on_exit("exit_plugin()")
