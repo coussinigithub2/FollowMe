@@ -3141,9 +3141,6 @@ end
 -- a location change without restarting X-Plane (VER1.12).
 -- ====================================================
 function full_reset()
-
-    XPLMSpeakString("full reset")
-
     if FM_car_active then
         unload_object()
         unload_path()
@@ -3155,6 +3152,9 @@ function full_reset()
     kill_is_manual = false
     ground_time = 0
     flightstart = 0
+	car_timer = 0
+	car_timer_last = 0
+	fm_arrived = false
 
 	-- new airport = fresh runway list
     t_deleted_runway = {}
@@ -3365,6 +3365,8 @@ function handle_plugin_window()
         load_object()
         load_path()
         start_car()
+        hide_window()
+        show_navigation_window()
         rampstart_chg = true
         prepare_show_objects = false
     end
@@ -3378,9 +3380,6 @@ function handle_plugin_window()
             unload_rampstart()
             rampstart_chg = false
             kill_is_manual = false
-			car_timer = 0
-			car_timer_last = 0
-			fm_arrived = false
             -- VER1.9 : say goodbye when user manually cancels
             update_msg("7")
             -- VER2.3 : force apt.dat reload for the KNOWN curr_ICAO instead of
@@ -3499,8 +3498,8 @@ end
 function show_window()
     window_first_access = true
     -- 490 est la hauteur
-    followme_wnd = float_wnd_create(405, 460, 1, true)
-    float_wnd_set_position(followme_wnd, screen_width - 425 - Holder_len, Win_Y)
+    followme_wnd = float_wnd_create(405, 460, 2, true)
+    float_wnd_set_position(followme_wnd, screen_width - 405 - Holder_len, Win_Y)
     float_wnd_set_imgui_builder(followme_wnd, "build_window")
     float_wnd_set_onclose(followme_wnd, "closed_window")
 end
@@ -4265,7 +4264,6 @@ function build_navigation_window(wnd, x, y)
 	    -- 1. Déterminer la cible et la couleur selon la condition
 	    local target_x, target_z, triangle_color, fm_ti
 
-	    -- Ici on affiche un triangle vert pour le reste de la course pour orienter l'avion
 	    if fm_arrived then
 		    if car_timer > 6 then
 		        unload_object()
@@ -6129,10 +6127,6 @@ function exit_plugin()
     dr_sign = nil
 end
 
-function Steffi_says()
-	local pos = 0
-	pos = big_bubble(20, pos, "FM_car_active :"..tostring(FM_car_active), "car_x :"..car_x, "fm_arrived :"..tostring(fm_arrived), "car_timer :"..car_timer, "fm_run_time :"..fm_run_time, "car_timer_last :"..car_timer_last)
-end
 -- ====================================================
 -- MAIN SECTION (Initialization and flywithlua event
 -- ====================================================
@@ -6145,4 +6139,3 @@ load_probe()
 do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
 do_on_exit("exit_plugin()")
-do_every_draw("Steffi_says()")
