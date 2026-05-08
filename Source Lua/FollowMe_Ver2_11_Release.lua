@@ -380,6 +380,19 @@ typedef struct {
 
 ffi.cdef(cdefs)
 
+-- List of color codes used in the program
+YELLOW      = 0xFF00FFFF
+RED         = 0xFF0000FF
+GREEN       = 0xFF00FF00
+
+LIGHT_GRAY  = 0xFF888888
+MEDIUM_GRAY = 0xFF444444
+GRAY        = 0xFF666666
+DARK_GRAY   = 0xFF333333
+
+WHITE       = 0xFFFFFFFF
+BLACK       = 0xFF000000
+
 local char_str = ffi.new("char[256]")
 local datarefs_addr = ffi.new("const char**")
 local dataref_name = ffi.new("char[150]")
@@ -3623,7 +3636,7 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
 	-- light gray
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+    imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
 
     if get_from_SimBrief then
         imgui.TextUnformatted("Simbrief Departure Airport")
@@ -3649,7 +3662,7 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosY(35)
     imgui.SetCursorPosX(10)
 	-- light gray
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+    imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
 
 ------------------------------
 
@@ -3670,7 +3683,7 @@ function build_window(wnd, x, y)
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_dest_icao ~= "" then
         imgui.TextUnformatted(sb_dest_icao .. "   " .. sb_dest_name)
     else
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
+        imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
@@ -3925,9 +3938,9 @@ function build_window(wnd, x, y)
 	    imgui.SetCursorPosX(18)
 	    imgui.SetCursorPosY(210)
 	    if Err_Msg_color == "RED" then
-	        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
 	    else
-	        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
+	        imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
 	    end
 	    imgui.TextUnformatted(Err_Msg)
 	    imgui.PopStyleColor()
@@ -4134,21 +4147,21 @@ function build_window(wnd, x, y)
     if sb_fetch_status == "OK" then
         if get_from_SimBrief then
             if sb_airport_mismatch then
-                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+                imgui.PushStyleColor(imgui.constant.Col.Text, RED)
                 imgui.TextUnformatted("The current airport does not match the Simbrief data")
                 imgui.PopStyleColor()
             else
-                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
+                imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
                 imgui.TextUnformatted("SimBrief Runways  Dep:" .. sb_runway_takeoff .. "  Arr:" .. sb_runway_landing)
                 imgui.PopStyleColor()
             end
         end
     elseif sb_fetch_status == "LOADING" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
+        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
         imgui.TextUnformatted("Fetching SimBrief data...")
         imgui.PopStyleColor()
     elseif sb_fetch_status == "ERROR" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
         imgui.TextUnformatted("SimBrief fetch error")
         imgui.PopStyleColor()
     end
@@ -4234,51 +4247,61 @@ function build_navigation_window(wnd, x, y)
     local d = 50
     imgui.SetCursorPosY(8)
     imgui.SetCursorPosX(8+d)
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
+    imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
     imgui.TextUnformatted("GND SPD")
     imgui.PopStyleColor()
     imgui.SameLine()
     imgui.SetCursorPosX(68+d)
     if FM_car_active then
         local l_plane_kts = fm_gnd_spd * 1.94384
-        local l_spd_color = (speed_limiter and l_plane_kts > 20) and 0xFF0000FF or 0xFF00FF00
+        local l_spd_color = (speed_limiter and l_plane_kts > 20) and RED or GREEN
         imgui.PushStyleColor(imgui.constant.Col.Text, l_spd_color)
         imgui.TextUnformatted(string.format("%.1f kts", l_plane_kts))
         imgui.PopStyleColor()
     else
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF444444)
+        imgui.PushStyleColor(imgui.constant.Col.Text, MEDIUM_GRAY)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
     imgui.SameLine()
     imgui.SetCursorPosX(131+d)
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
+    imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
     imgui.TextUnformatted("FM Car")
     imgui.PopStyleColor()
     imgui.SameLine()
     imgui.SetCursorPosX(179+d)
     if FM_car_active then
         local l_car_kts = car_speed * 1.94384
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
+        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
         imgui.TextUnformatted(string.format("%.1f kts", l_car_kts))
         imgui.PopStyleColor()
     else
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF444444)
+        imgui.PushStyleColor(imgui.constant.Col.Text, MEDIUM_GRAY)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
 
     -- VER2.5 : Distance to destination (runway threshold for departure, gate for arrival)
     if #t_node > 0 then
-        local _, l_dist_dest = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+    	local l_dist_dest = 0
+    	if depart_arrive == 1 then
+        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_node[#t_node].x, t_node[#t_node].z)
+        end
+    	if depart_arrive == 2 then
+        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_gate[arrival_gate].x, t_gate[arrival_gate].z)
+        end
         imgui.SameLine()
         imgui.SetCursorPosX(240+d)
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+        imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
         imgui.TextUnformatted("Target")
         imgui.PopStyleColor()
         imgui.SameLine()
         imgui.SetCursorPosX(289+d)
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
+	    if fm_arrived == 0 then
+	        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
+	    else
+	        imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+	    end
         if l_dist_dest >= 1000 then
             imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
         else
@@ -4307,7 +4330,7 @@ function build_navigation_window(wnd, x, y)
 			end
 
 			fm_ti = car_timer
-			triangle_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and 0xFF000000 or 0xFF00FF00
+			triangle_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or GREEN
 			if fm_arrived == 1 then
 		        -- Cas "Arrivé" : Cible le dernier noeud et couleur VERTE
 		        target_x = t_node[#t_node].x
@@ -4320,7 +4343,7 @@ function build_navigation_window(wnd, x, y)
 	        -- Cas "En route" : Cible la voiture et couleur JAUNE
 	        target_x = car_x
 	        target_z = car_z
-	        triangle_color = 0xFF00FFFF -- Jaune
+	        triangle_color = YELLOW -- Jaune
 	    end
 
 	    -- 2. Calculs mathématiques communs
@@ -4376,17 +4399,17 @@ function build_navigation_window(wnd, x, y)
 	--=====================================================
 	local nav_color_left, nav_color_right
 	if car_sign == 1 or car_sign == 0 then
-	    nav_color_left  = 0xFF0000FF   -- Rouge
-	    nav_color_right = 0xFF0000FF   -- Rouge
+	    nav_color_left  = RED   -- Rouge
+	    nav_color_right = RED   -- Rouge
 	elseif car_sign == 2 then
-	    nav_color_left  = 0xFF333333   -- Noir (gris foncé visible)
-	    nav_color_right = 0xFF0000FF   -- Rouge
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = RED   -- Rouge
 	elseif car_sign == 3 then
-	    nav_color_left  = 0xFF0000FF   -- Rouge
-	    nav_color_right = 0xFF333333   -- Noir (gris foncé visible)
+	    nav_color_left  = RED   -- Rouge
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
 	else
-	    nav_color_left  = 0xFF333333   -- Noir (gris foncé visible)
-	    nav_color_right = 0xFF333333   -- Noir (gris foncé visible)
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
 	end
 
 	-- Dimensions du triangle équilatéral
@@ -5961,7 +5984,7 @@ function build_holder(wnd, x, y)
     local l_in_flight = (fm_gear1_gnd == 0 and fm_gear2_gnd == 0)
 
     -- Text and circle: grey when in flight, white on ground
-    local l_color = l_in_flight and 0xFF666666 or 0xFFFFFFFF
+    local l_color = l_in_flight and GRAY or WHITE
     local l_text = "FM"
     local l_text_width, l_text_height = imgui.CalcTextSize(l_text)
 
@@ -5975,7 +5998,7 @@ function build_holder(wnd, x, y)
     -- Red diagonal bar when in flight (top-right to bottom-left, inside the circle)
     if l_in_flight then
         local l_r = 10
-        imgui.DrawList_AddLine(l_cx + l_r, l_cy - l_r, l_cx - l_r, l_cy + l_r, 0xFF0000FF, 2)
+        imgui.DrawList_AddLine(l_cx + l_r, l_cy - l_r, l_cx - l_r, l_cy + l_r, RED, 2)
     end
 
 	-- Guards the FM badge click: toggles the main panel only when on the ground,
