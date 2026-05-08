@@ -210,11 +210,11 @@
 --                           (the exact GPS threshold node). Now it stops as soon as the
 --                           car-to-threshold distance drops to 100 m or less.
 --                           Implementation:
---                           (a) New boolean flag fm_arrived (default false).
+--                           (a) New numeric flag fm_arrived (default 0).
 --                               Set to true in manage_car_motion() the first frame the
 --                               car-to-threshold distance <= 100 m (departure only).
 --                               Reset to false in start_car() and initialise_routes().
---                           (b) manage_car_motion(): when fm_arrived becomes true the
+--                           (b) manage_car_motion(): when fm_arrived becomes 1 or 2 the
 --                               car speed is forced to 0 and car_accel to 0.
 --                               The normal last-node braking (curr_node+1==#t_node) is
 --                               still active for the final metres so the car decelerates
@@ -225,9 +225,9 @@
 --                               arrived condition now triggers on fm_arrived in addition
 --                               to curr_node >= #t_node (stop sign + arrived sound).
 --                           (e) object_physics() (~1872): car stops being moved/drawn
---                               as moving once fm_arrived is true.
+--                               as moving once fm_arrived is 1 or 2.
 --                           (f) handle_plugin_window() (~3246): taxi-light-off auto-kill
---                               also fires when fm_arrived is true.
+--                               also fires when fm_arrived is 1 or 2.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -451,9 +451,11 @@ local depart_arrive = 0
 local depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
 -- VER1.8 : true when runway has no direct taxiway exit (back-taxi)
 local is_backtaxi = false
--- VER2.6 : true once the car is within 100 m of the target (threshold / gate)
-local fm_arrived = false
-local ARRIVE_DIST = 60  -- metres
+
+-- VER2.6 : When depart_arrive = 1 and FM car arrive to a runway the fm_arrived = 1
+-- VER2.6 : When depart_arrive = 2 and FM car arrive to terminal the fm_arrived = 2
+local fm_arrived = 0
+local ARRIVE_DIST = 60  -- metres (only for runway as target)
 
 local curr_ICAO, curr_ICAO_Name = "", ""
 -- VER2.3 : set true on manual cancel to reload apt.dat for the KNOWN curr_ICAO
@@ -766,7 +768,7 @@ function start_car()
     remaining_dist_leg = 0
     turning_is_active = 0
     curr_node = 1
-    fm_arrived = false  -- VER2.6 : reset distance-stop flag
+    fm_arrived = 0  -- VER2.6 : reset distance-stop flag
 
     -- Clear any previous messages to avoid collision (e.g. "Arrived" + "Follow Me")
     Err_Msg = ""
@@ -1077,17 +1079,40 @@ function manage_car_motion()
     -- VER2.6 : stop the car when it is within 100 m of the target (departure only).
     -- This check runs AFTER plot_position() so the car position is already updated
     -- for this frame. We only arm it for departures (#t_node > 0, depart_arrive == 1).
-    if not fm_arrived and depart_arrive == 1 and #t_node > 0 then
+    if fm_arrived == 0 and depart_arrive == 1 and #t_node > 0 then
         local _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
         if l_dist_to_target <= ARRIVE_DIST then
-            fm_arrived = true
+            fm_arrived = 1
             car_speed  = 0
             car_accel  = 0
             -- Trigger STOP sign and "We have arrived at destination" sound immediately,
-            -- right here where fm_arrived becomes true (guaranteed single execution).
-            -- Cannot rely on plot_position() because its guard now returns early when fm_arrived.
+            -- right here where fm_arrived becomes 1 (guaranteed single execution).
+            -- Cannot rely on plot_position() because its guard now returns early when fm_arrived not = 0.
             if not is_backtaxi then
                 car_sign = 1
+                XPLMSpeakString("1")
+                if not string.find(Err_Msg or "", "We have arrived") then
+                    update_msg("5")  -- sets text + plays snd_arrived
+                end
+            end
+            logMsg(string.format(
+                "FollowMe VER2.6 : fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
+                l_dist_to_target, curr_node, #t_node, car_sign))
+        end
+    end
+
+    if fm_arrived == 0 and depart_arrive == 2 then
+        local _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+        if l_dist_to_target < 1 then
+            fm_arrived = 2
+            car_speed  = 0
+            car_accel  = 0
+            -- Trigger STOP sign and "We have arrived at destination" sound immediately,
+            -- right here where fm_arrived becomes 1 (guaranteed single execution).
+            -- Cannot rely on plot_position() because its guard now returns early when fm_arrived not = 0.
+            if not is_backtaxi then
+                car_sign = 1
+                XPLMSpeakString("1")
                 if not string.find(Err_Msg or "", "We have arrived") then
                     update_msg("5")  -- sets text + plays snd_arrived
                 end
@@ -1127,7 +1152,7 @@ function plot_position(in_act_dist)
     local l_AoR = 0
     local l_act_dist = 0
 
-    if curr_node == #t_node or fm_arrived then  -- VER2.6 : also freeze when stopped by distance
+    if curr_node == #t_node or fm_arrived ~= 0 then  -- VER2.6 : also freeze when stopped by distance
         return
     end
 
@@ -1322,8 +1347,8 @@ function plot_position(in_act_dist)
     car_y = probe_y(car_x, car_y, car_z)
     tire_rotate = math.fmod(tire_rotate + (in_act_dist * 360 / (tire_diameter * math.pi)), 360)
 
-    if car_sign == 0 or curr_node >= #t_node - 2 or fm_arrived then  -- VER2.6 : also keep sign visible when stopped by distance
-        if curr_node ~= #t_node and not fm_arrived then
+    if car_sign == 0 or curr_node >= #t_node - 2 or fm_arrived ~= 0 then  -- VER2.6 : also keep sign visible when stopped by distance
+        if curr_node ~= #t_node and fm_arrived == 0 then
             if remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
                     t_node[curr_node + 1].AoC < 160
              then
@@ -1339,14 +1364,15 @@ function plot_position(in_act_dist)
             if depart_arrive == 1 and curr_node >= #t_node then
                 if not is_backtaxi then
                     car_sign = 1
+                    XPLMSpeakString("2")
                     if not string.find(Err_Msg or "", "Arrived at destination") then
                         update_msg("5")
                     end
                 end
             end
-        elseif not fm_arrived then
+        elseif fm_arrived == 0 then
             -- curr_node == #t_node (original path: car physically reached last node)
-            if depart_arrive ~= 1 then
+            if depart_arrive == 2 then
                 local l_gate_in_sight, l_to_gate_heading, _ =
                     chk_line_of_sight(
                     car_body_heading,
@@ -1370,16 +1396,20 @@ function plot_position(in_act_dist)
                 end
 
                 flightstart = 0
-                update_msg("5")
+                XPLMSpeakString("3")
+                if not string.find(Err_Msg or "", "Arrived at destination") then
+                    update_msg("5")
+                end
             else
                 car_sign = 1
                 -- VER1.9 : send "Arrived at destination" for departures (back-taxi and normal)
+                XPLMSpeakString("4")
                 if not string.find(Err_Msg or "", "Arrived at destination") then
                     update_msg("5")
                 end
             end
         end
-        -- VER2.6 : when fm_arrived==true, car_sign was already set to 1 in manage_car_motion().
+        -- VER2.6 : when fm_arrived not = 0, car_sign was already set to 1 in manage_car_motion().
         -- Nothing to do here; the sign stays at 1 every frame automatically.
     end
 end
@@ -1895,7 +1925,7 @@ function object_physics()
         end
     end
 
-    if obj_instance[0] ~= nil and #t_node > 0 and curr_node ~= #t_node and not fm_arrived then  -- VER2.6 : freeze when stopped by distance
+    if obj_instance[0] ~= nil and #t_node > 0 and curr_node ~= #t_node and fm_arrived == 0 then  -- VER2.6 : freeze when stopped by distance
         local l_dist = 0
         local l_car_in_sight, l_car_is_behind = false, false
         l_car_in_sight, _, l_dist = chk_line_of_sight(fm_plane_head, 80, 80, fm_plane_x, fm_plane_z, car_x, car_z)
@@ -3206,7 +3236,7 @@ function initialise_routes()
     depart_arrive = 0
 	-- VER1.8
     is_backtaxi = false
-    fm_arrived = false  -- VER2.6
+    fm_arrived = 0  -- VER2.6
     window_first_access = true
 end
 
@@ -3281,7 +3311,7 @@ function handle_plugin_window()
     local l_err = ""
 
     if FM_car_active == true and #t_node > 0 and prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 0 then
-        if (depart_arrive == 1 and (curr_node >= #t_node or fm_arrived)) or (depart_arrive == 2 and curr_node == #t_node) then  -- VER2.6 : fm_arrived
+        if (depart_arrive == 1 and (curr_node >= #t_node or fm_arrived ~= 0)) or (depart_arrive == 2 and curr_node == #t_node) then  -- VER2.6 : fm_arrived
             prepare_kill_objects = true
         end
     end
@@ -3380,7 +3410,7 @@ function handle_plugin_window()
             kill_is_manual = false
 			car_timer = 0
 			car_timer_last = 0
-			fm_arrived = false
+			fm_arrived = 0
             -- VER1.9 : say goodbye when user manually cancels
             update_msg("7")
             -- VER2.3 : force apt.dat reload for the KNOWN curr_ICAO instead of
@@ -4260,13 +4290,13 @@ function build_navigation_window(wnd, x, y)
 	--=====================================================
 	-- VER 2.0 & 2.8 : ARROW POINTER (Triangle)
 	--=====================================================
-	if (FM_car_active and car_x ~= 0) or fm_arrived then
+	if (FM_car_active and car_x ~= 0) or fm_arrived ~= 0 then
 
 	    -- 1. Déterminer la cible et la couleur selon la condition
 	    local target_x, target_z, triangle_color, fm_ti
 
 	    -- Ici on affiche un triangle vert pour le reste de la course pour orienter l'avion
-	    if fm_arrived then
+	    if fm_arrived ~= 0 then
 		    if car_timer > 6 then
 		        unload_object()
 		    else
@@ -4278,9 +4308,14 @@ function build_navigation_window(wnd, x, y)
 
 			fm_ti = car_timer
 			triangle_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and 0xFF000000 or 0xFF00FF00
-	        -- Cas "Arrivé" : Cible le dernier noeud et couleur VERTE
-	        target_x = t_node[#t_node].x
-	        target_z = t_node[#t_node].z
+			if fm_arrived == 1 then
+		        -- Cas "Arrivé" : Cible le dernier noeud et couleur VERTE
+		        target_x = t_node[#t_node].x
+		        target_z = t_node[#t_node].z
+			else
+			    target_x = t_gate[arrival_gate].x
+			    target_z = t_gate[arrival_gate].z
+			end
 	    else
 	        -- Cas "En route" : Cible la voiture et couleur JAUNE
 	        target_x = car_x
@@ -4975,7 +5010,7 @@ end
 function apply_runway_axis_filter()
 
     -- Only applies to departures with a built route
-    if depart_arrive ~= 1 or #t_node < 2 then
+    if depart_arrive == 2 or #t_node < 2 then
         return
     end
 
@@ -6128,11 +6163,29 @@ function exit_plugin()
     XPLM.XPLMUnregisterDataAccessor(dr_sign)
     dr_sign = nil
 end
-
 function Steffi_says()
-	local pos = 0
-	pos = big_bubble(20, pos, "FM_car_active :"..tostring(FM_car_active), "car_x :"..car_x, "fm_arrived :"..tostring(fm_arrived), "car_timer :"..car_timer, "fm_run_time :"..fm_run_time, "car_timer_last :"..car_timer_last)
+    local pos = 150
+    local l_dist_to_target = 99999999
+
+    pos = big_bubble(20, pos,
+        "FM_car_active :" .. tostring(FM_car_active),
+        "car_x :"        .. car_x,
+        "car_timer :"    .. car_timer,
+        "fm_run_time :"  .. fm_run_time,
+        "car_timer_last :".. car_timer_last)
+
+    if t_node ~= nil and #t_node > 0 then
+        -- PAS de "local" ici : on écrit dans la variable déclarée au-dessus
+        _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+    end
+
+    pos = 0
+    pos = big_bubble(20, pos,
+        "depart_arrive :"    .. depart_arrive,
+        "fm_arrived :"       .. fm_arrived,
+        "l_dist_to_target :" .. string.format("%.1f", l_dist_to_target))
 end
+
 -- ====================================================
 -- MAIN SECTION (Initialization and flywithlua event
 -- ====================================================
