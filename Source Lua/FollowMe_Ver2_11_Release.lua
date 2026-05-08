@@ -4399,17 +4399,23 @@ function build_navigation_window(wnd, x, y)
 	--=====================================================
 	local nav_color_left, nav_color_right
 	if car_sign == 1 or car_sign == 0 then
-	    nav_color_left  = RED   -- Rouge
-	    nav_color_right = RED   -- Rouge
+	   return
+	    --nav_color_left  = RED   -- Rouge
+	    --nav_color_right = RED   -- Rouge
 	elseif car_sign == 2 then
-	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_left  = BLACK   -- Noir (gris foncé visible)
 	    nav_color_right = RED   -- Rouge
 	elseif car_sign == 3 then
 	    nav_color_left  = RED   -- Rouge
-	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = BLACK   -- Noir (gris foncé visible)
 	else
-	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
-	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_left  = BLACK   -- Noir (gris foncé visible)
+	    nav_color_right = BLACK   -- Noir (gris foncé visible)
+	end
+
+	if math.floor(fm_run_time) % 2 == 0 then
+	    nav_color_left  = BLACK   -- Noir (gris foncé visible)
+	    nav_color_right = BLACK   -- Noir (gris foncé visible)
 	end
 
 	-- Dimensions du triangle équilatéral
@@ -6186,28 +6192,6 @@ function exit_plugin()
     XPLM.XPLMUnregisterDataAccessor(dr_sign)
     dr_sign = nil
 end
-function Steffi_says()
-    local pos = 150
-    local l_dist_to_target = 99999999
-
-    pos = big_bubble(20, pos,
-        "FM_car_active :" .. tostring(FM_car_active),
-        "car_x :"        .. car_x,
-        "car_timer :"    .. car_timer,
-        "fm_run_time :"  .. fm_run_time,
-        "car_timer_last :".. car_timer_last)
-
-    if t_node ~= nil and #t_node > 0 then
-        -- PAS de "local" ici : on écrit dans la variable déclarée au-dessus
-        _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
-    end
-
-    pos = 0
-    pos = big_bubble(20, pos,
-        "depart_arrive :"    .. depart_arrive,
-        "fm_arrived :"       .. fm_arrived,
-        "l_dist_to_target :" .. string.format("%.1f", l_dist_to_target))
-end
 
 -- ====================================================
 -- MAIN SECTION (Initialization and flywithlua event
@@ -6221,4 +6205,3 @@ load_probe()
 do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
 do_on_exit("exit_plugin()")
-do_every_draw("Steffi_says()")
