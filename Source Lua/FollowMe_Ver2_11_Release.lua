@@ -1103,7 +1103,6 @@ function manage_car_motion()
             -- Cannot rely on plot_position() because its guard now returns early when fm_arrived not = 0.
             if not is_backtaxi then
                 car_sign = 1
-                XPLMSpeakString("1")
                 if not string.find(Err_Msg or "", "We have arrived") then
                     update_msg("5")  -- sets text + plays snd_arrived
                 end
@@ -1125,7 +1124,6 @@ function manage_car_motion()
             -- Cannot rely on plot_position() because its guard now returns early when fm_arrived not = 0.
             if not is_backtaxi then
                 car_sign = 1
-                XPLMSpeakString("1")
                 if not string.find(Err_Msg or "", "We have arrived") then
                     update_msg("5")  -- sets text + plays snd_arrived
                 end
@@ -1377,7 +1375,6 @@ function plot_position(in_act_dist)
             if depart_arrive == 1 and curr_node >= #t_node then
                 if not is_backtaxi then
                     car_sign = 1
-                    XPLMSpeakString("2")
                     if not string.find(Err_Msg or "", "Arrived at destination") then
                         update_msg("5")
                     end
@@ -1409,14 +1406,12 @@ function plot_position(in_act_dist)
                 end
 
                 flightstart = 0
-                XPLMSpeakString("3")
                 if not string.find(Err_Msg or "", "Arrived at destination") then
                     update_msg("5")
                 end
             else
                 car_sign = 1
                 -- VER1.9 : send "Arrived at destination" for departures (back-taxi and normal)
-                XPLMSpeakString("4")
                 if not string.find(Err_Msg or "", "Arrived at destination") then
                     update_msg("5")
                 end
@@ -3185,8 +3180,6 @@ end
 -- ====================================================
 function full_reset()
 
-    XPLMSpeakString("full reset")
-
     if FM_car_active then
         unload_object()
         unload_path()
@@ -3297,7 +3290,6 @@ function handle_plugin_window()
 	            ground_time = 0
 	            prepare_kill_objects = true
                 hide_window()
-	            XPLMSpeakString("Hide Window 1")
             end
             if navigation_wnd ~= nil then
 	            hide_navigation_window()
@@ -3310,12 +3302,10 @@ function handle_plugin_window()
     if holder_wnd and toggle_window == true then
         toggle_window = false
         if followme_wnd ~= nil then
-            XPLMSpeakString("Hide Window 2")
             hide_window()
             show_navigation_window()
         else
             window_is_open = true
-            XPLMSpeakString("Open Window")
             show_window()
             hide_navigation_window()
         end
@@ -3652,10 +3642,11 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.2)
 
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_origin_icao ~= "" then
-        imgui.TextUnformatted(sb_origin_icao .. "   " .. sb_origin_name)
+        imgui.TextUnformatted(sb_origin_icao .. " " .. string.format("%-3s", sb_runway_takeoff) .. " " .. sb_origin_name)
     else
         -- Fallback: display current sim airport
-        imgui.TextUnformatted(curr_ICAO .. "   " .. curr_ICAO_name)
+
+        imgui.TextUnformatted(curr_ICAO .. " " .. curr_ICAO_name)
     end
 
     imgui.SetWindowFontScale(1.1)
@@ -3681,7 +3672,7 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.2)
 
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_dest_icao ~= "" then
-        imgui.TextUnformatted(sb_dest_icao .. "   " .. sb_dest_name)
+        imgui.TextUnformatted(sb_dest_icao .. " " .. string.format("%-3s", sb_runway_landing) .. " " .. sb_dest_name)
     else
         imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
         imgui.TextUnformatted("---")
@@ -4152,7 +4143,7 @@ function build_window(wnd, x, y)
                 imgui.PopStyleColor()
             else
                 imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
-                imgui.TextUnformatted("SimBrief Runways  Dep:" .. sb_runway_takeoff .. "  Arr:" .. sb_runway_landing)
+                imgui.TextUnformatted("SimBrief data fetched successfully")
                 imgui.PopStyleColor()
             end
         end
