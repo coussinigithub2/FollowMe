@@ -446,8 +446,6 @@ local holder_wnd = nil
 local screen_width = 1920
 local Holder_len = 30
 local toggle_window = false
--- counter to block parasitic IsMouseReleased after hide_window
-local ignore_next_release = 0
 local window_is_open = false
 local text_was_chg = false
 
@@ -3530,9 +3528,13 @@ end
 -- the FM badge, anchored to the right edge of the screen.
 -- ====================================================
 function show_window()
+
+	followme_title = "Follow Me Window"
+
     window_first_access = true
     -- 490 est la hauteur
     followme_wnd = float_wnd_create(405, 460, 1, true)
+    float_wnd_set_title(followme_wnd, followme_title)
     float_wnd_set_position(followme_wnd, screen_width - 425 - Holder_len, Win_Y)
     float_wnd_set_imgui_builder(followme_wnd, "build_window")
     float_wnd_set_onclose(followme_wnd, "closed_window")
@@ -3889,6 +3891,7 @@ function build_window(wnd, x, y)
     if FM_car_active == false then
         if imgui.Button("Request Follow Me Car", 170, 25) then
             combo_filter_list = false
+            toggle_window = true
             l_err = determine_XP_route()
             if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
                 prepare_show_objects = true
@@ -4390,23 +4393,22 @@ function build_navigation_window(wnd, x, y)
 	--=====================================================
 	local nav_color_left, nav_color_right
 	if car_sign == 1 or car_sign == 0 then
-	   return
-	    --nav_color_left  = RED   -- Rouge
-	    --nav_color_right = RED   -- Rouge
+		nav_color_left  = DARK_GRAY   -- Rouge
+	    nav_color_right = DARK_GRAY   -- Rouge
 	elseif car_sign == 2 then
-	    nav_color_left  = BLACK   -- Noir (gris foncé visible)
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
 	    nav_color_right = RED   -- Rouge
 	elseif car_sign == 3 then
 	    nav_color_left  = RED   -- Rouge
-	    nav_color_right = BLACK   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
 	else
-	    nav_color_left  = BLACK   -- Noir (gris foncé visible)
-	    nav_color_right = BLACK   -- Noir (gris foncé visible)
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
 	end
 
 	if math.floor(fm_run_time) % 2 == 0 then
-	    nav_color_left  = BLACK   -- Noir (gris foncé visible)
-	    nav_color_right = BLACK   -- Noir (gris foncé visible)
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
 	end
 
 	-- Dimensions du triangle équilatéral
@@ -5969,9 +5971,7 @@ end
 -- available), grey with a red diagonal cross-bar when airborne (service
 -- unavailable). On left-mouse release while on the ground, sets
 -- toggle_window = true so handle_plugin_window() opens or closes the
--- main control panel on the next frame. Ignores the release event
--- immediately after the window was hidden (ignore_next_release counter)
--- to prevent a phantom re-open click.
+-- main control panel on the next frame.
 -- ====================================================
 function build_holder(wnd, x, y)
     local l_win_width = imgui.GetWindowWidth()
@@ -6001,9 +6001,7 @@ function build_holder(wnd, x, y)
 	-- Guards the FM badge click: toggles the main panel only when on the ground,
 	-- and ignores spurious release events that follow a window close.
     if imgui.IsMouseReleased(0) then
-        if ignore_next_release > 0 then
-            ignore_next_release = ignore_next_release - 1
-        elseif fm_gear1_gnd ~= 0 and fm_gear2_gnd ~= 0 then
+        if fm_gear1_gnd ~= 0 and fm_gear2_gnd ~= 0 then
             toggle_window = true
         end
     end
