@@ -12,7 +12,7 @@
 --                           instead of stopping at the first hotzone node on the runway
 --    VER1.9 Coussini 2026 : Back-taxi GPS node - adds a virtual node at the exact runway threshold
 --                           coordinates so the car drives in a straight line to the threshold
---                           and stops there with "Arrived at destination"
+--                           and stops there with "We have arrived at destination"
 --    VER1.10 Coussini 2026: Fix back-taxi false detection - a runway with a taxiway exit within
 --                           200m of the threshold is NOT a back-taxi (e.g. CYHU RWY 06L via K)
 --                           Only truly isolated thresholds (e.g. MDPC RWY 27) trigger back-taxi
@@ -20,15 +20,12 @@
 --                           node WITH a taxiway neighbour closest to the threshold, instead of
 --                           the closest node regardless of connectivity. The virtual GPS threshold
 --                           node handles all on-runway travel automatically (back-taxi, TNCB, etc.)
---                           is_backtaxi detection simplified: always add virtual node if entry
+--                           backtaxi detection simplified: always add virtual node if entry
 --                           is more than 50m from the threshold.
 --    VER1.12 Coussini 2026: (1) full_reset() - single cleanup entry point that unloads all 3D
 --                           objects and reinitialises all state variables. Called when X-Plane
 --                           starts a new flight (fm_new_flight resets) and from exit_plugin().
 --                           Fixes double-car bug after location change without restarting X-Plane.
---                           (2) Car proximity fix - if the car would spawn more than 150m from
---                           the aircraft, it is placed directly behind the aircraft instead so
---                           the pilot can always see it immediately.
 --    VER1.15 Coussini 2026: Universal gate fallback - when determine_pos_on_segment() finds no
 --                           reachable segment from a gate position (common when apt.dat has isolated
 --                           1201 nodes near parking areas with no 1202 segments, e.g. CYQB has 88
@@ -55,7 +52,7 @@
 --                           is projected onto the runway centreline, then a GPS threshold
 --                           node is added. Eliminates wrong-runway stops at intersecting
 --                           runways (e.g. KSYR RWY 28 stopping at RWY 33 threshold) and
---                           the diagonal-into-grass bug. is_backtaxi removed - no longer
+--                           the diagonal-into-grass bug. backtaxi removed - no longer
 --                           needed since all departures use the same GPS threshold logic.
 --    VER1.19 Coussini 2026: Cross-runway taxiway fix - at airports where a taxiway passes
 --                           through a runway threshold node (e.g. KSYR: taxiways M and L
@@ -154,6 +151,95 @@
 --                           full t_node[] list is built and BEFORE the VER1.17
 --                           centreline-projection / GPS-threshold block, which is
 --                           unaffected.
+--    VER2.3 Coussini 2026:  Fix wrong-airport detection after manual Cancel at a runway
+--                           threshold located near an adjacent airport (e.g. CYHU RWY 24R
+--                           threshold sits physically close to heliport CTG2).
+--                           Root cause: on manual cancel, VER1.12 cleared curr_ICAO = ""
+--                           to force an apt.dat reload on the next frame. get_airport_elements()
+--                           then called XPLMFindNavAid from the aircraft's current GPS position
+--                           (the runway threshold) and received CTG2 instead of CYHU because
+--                           CTG2 is the closest nav-aid at that map location, triggering the
+--                           "Follow Me Service is not available at this airport" audio/message.
+--                           Fix: a new boolean flag force_apt_reload is introduced.
+--                           On manual cancel, force_apt_reload = true is set instead of
+--                           curr_ICAO = "". In get_airport_elements(), when force_apt_reload
+--                           is true the function re-reads apt.dat for the KNOWN curr_ICAO
+--                           (bypassing XPLMFindNavAid entirely) and clears the flag.
+--                           XPLMFindNavAid is only called when the aircraft genuinely moves
+--                           to a different airport, not on an in-place cancel.
+--    VER2.4 Coussini 2026:  FIX-A : add_new_taxinode_segment dead-end guard.
+--                           Old guard string.find(Segment,",") required a junction.
+--                           Dead-end endpoint (single segment, no comma) left the
+--                           virtual start node disconnected → degenerate A* route →
+--                           straight-line drive (reproduced at MDPC Gate 7 → RWY 27).
+--                           Fix: Segment ~= "" instead of comma check.
+--                           FIX-B : Comprehensive diagnostic logging added throughout
+--                           the route-build pipeline so any future regression or
+--                           U-turn detour is immediately visible in Log.txt:
+--                           - determine_possible_routes logs gate info, chosen
+--                             start node, and distance gate-to-startNode.
+--                           - add_new_taxinode_segment logs N1/N2 Segment strings,
+--                             dead-end flag, and whether FIX-A was triggered.
+--                           - transverse logs every node expansion (node id, f/g/h,
+--                             cost, heading) and the final chosen route with cost.
+--                           - process_possible_routes logs each DRIVE NODE with
+--                             x/z/hdg/dist-to-threshold and flags any regression
+--                             (U-turn / detour) with *** REGRESSION ***.
+--                           FIX-C : start_car() spawn-distance threshold raised and
+--                           gate-perpendicular detection added.
+--                           Root cause (confirmed by log at MDPC Gate 7 → RWY 27):
+--                           startNode=207 is 108.8m from the gate. The VER1.12
+--                           proximity fallback only triggers when dist > 150m, so
+--                           the car spawns 108.8m away on the taxiway and immediately
+--                           starts driving toward the runway, leaving the aircraft
+--                           stranded at the gate with no visible guide.
+--                           Fix 1: lower the spawn-fallback threshold from 150m to 80m
+--                           so any startNode more than 80m from the gate triggers the
+--                           "place behind aircraft" logic.
+--                           Fix 2: in departure mode with a known gate, if the car
+--                           spawns on the taxiway (dist_to_plane > 50m) and the gate
+--                           heading is roughly perpendicular to the first route leg
+--                           (angle > 45°), insert a synthetic waypoint at the gate
+--                           position as t_node[0-pre] so the car first drives to the
+--                           gate, then follows the normal route to the runway. This
+--                           ensures the car is always visible to the pilot from the
+--                           very first frame, regardless of how far the taxiway is
+--                           from the gate stand.
+--    VER2.6 Coussini 2026:  Stop at 100 m from TARGET (runway threshold for departure).
+--                           Previously the car drove all the way to curr_node == #t_node
+--                           (the exact GPS threshold node). Now it stops as soon as the
+--                           car-to-threshold distance drops to 100 m or less.
+--                           Implementation:
+--                           (a) New numeric flag fm_arrived (default 0).
+--                               Set to true in manage_car_motion() the first frame the
+--                               car-to-threshold distance <= 100 m (departure only).
+--                               Reset to false in start_car() and initialise_routes().
+--                           (b) manage_car_motion(): when fm_arrived becomes 1 or 2 the
+--                               car speed is forced to 0 and car_accel to 0.
+--                               The normal last-node braking (curr_node+1==#t_node) is
+--                               still active for the final metres so the car decelerates
+--                               smoothly, then the distance check stops it at 100 m.
+--                           (c) plot_position() guard (line ~1107): extended with
+--                               "or fm_arrived" so the car body freezes immediately.
+--                           (d) plot_position() signboard block (~1302-1316): the
+--                               arrived condition now triggers on fm_arrived in addition
+--                               to curr_node >= #t_node (stop sign + arrived sound).
+--                           (e) object_physics() (~1872): car stops being moved/drawn
+--                               as moving once fm_arrived is 1 or 2.
+--                           (f) handle_plugin_window() (~3246): taxi-light-off auto-kill
+--                               also fires when fm_arrived is 1 or 2.
+--    VER2.13 Coussini 2026: Smart menu state management.
+--                           Navigation Window is always disabled in the Plugins menu
+--                           (accessible only from within the FM interface).
+--                           Follow Me Window is enabled only when at rest (no FM session
+--                           active, no window open, aircraft on ground).
+--                           New update_menu_state() function centralises all enable/disable
+--                           logic and is called from: show_followme_window(),
+--                           closed_followme_window(), closed_navigation_window(),
+--                           full_reset(), and on we_fly / fm_car_active state transitions.
+--                           Ensures the user must cancel an active FM session before
+--                           reopening the main window. The X button on the FM window
+--                           or the Cancel button both restore menu access.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -302,9 +388,37 @@ typedef struct {
 			XPLMDataRef XPLMFindDataRef(const char * inDataRefName);
 			void XPLMSetDataf(XPLMDataRef inDataRef, float inValue);
 			void XPLMSetDatavf(XPLMDataRef inDataRef, float * inValues, int inOffset, int inCount);
+			/* --- Menus --- */
+			typedef void *XPLMMenuID;
+			typedef void (*XPLMMenuHandler_f)(void *inMenuRef, void *inItemRef);
+
+			XPLMMenuID XPLMFindPluginsMenu(void);
+			XPLMMenuID XPLMCreateMenu(const char *inName, XPLMMenuID inParentMenu,
+			                           int inParentItem, XPLMMenuHandler_f inHandler,
+			                           void *inMenuRef);
+			int  XPLMAppendMenuItem(XPLMMenuID inMenu, const char *inItemName,
+			                        void *inItemRef, int inDeprecatedAndIgnored);
+			void XPLMClearAllMenuItems(XPLMMenuID inMenuID);
+			void XPLMRemoveMenuItem(XPLMMenuID inMenu, int inIndex);
+			void XPLMEnableMenuItem(XPLMMenuID inMenu, int index, int enabled);
+			void XPLMDestroyMenu(XPLMMenuID inMenuID);
 			]]
 
 ffi.cdef(cdefs)
+
+-- List of color codes used in the program
+YELLOW      = 0xFF00BFFF
+RED         = 0xFF0000FF
+GREEN       = 0xFF00AA77
+BLUE        = 0xFFCCAA55
+
+LIGHT_GRAY  = 0xFF888888
+MEDIUM_GRAY = 0xFF444444
+GRAY        = 0xFF666666
+DARK_GRAY   = 0xFF333333
+
+WHITE       = 0xFFFFFFFF
+BLACK       = 0xFF000000
 
 local char_str = ffi.new("char[256]")
 local datarefs_addr = ffi.new("const char**")
@@ -350,19 +464,14 @@ local z1_value = ffi.new("double[1]")
 local syspath = ""
 local BUFSIZE = 102400
 
-local flightstart = 0
+local flight_start_cpt = 0
+local we_fly = false
 
 local followme_wnd = nil
-local holder_wnd = nil
-
-local screen_width = 1920
-local Holder_len = 30
--- VER1.6 : prev_mouse_Y removed - holder position is fixed
-local holder_drag = 0
+local navigation_wnd = nil
 local toggle_window = false
--- counter to block parasitic IsMouseReleased after hide_window
-local ignore_next_release = 0
-local window_is_open = false
+local followme_window_open = false
+local navigation_window_open = false
 local text_was_chg = false
 
 local prepare_show_objects = false
@@ -372,14 +481,22 @@ local kill_is_manual = false
 
 local init_load = 0
 local window_first_access = false
-local FM_car_active = false
+local fm_car_active = false
 
 local depart_arrive = 0
 local depart_gate, arrival_gate, depart_runway, gatetext = 0, 0, "", ""
 -- VER1.8 : true when runway has no direct taxiway exit (back-taxi)
-local is_backtaxi = false
+local backtaxi = false
+
+-- VER2.6 : When depart_arrive = 1 and FM car arrive to a runway the fm_arrived = 1
+-- VER2.6 : When depart_arrive = 2 and FM car arrive to terminal the fm_arrived = 2
+local fm_arrived = 0
+local ARRIVE_DIST = 60  -- metres (only for runway as target)
 
 local curr_ICAO, curr_ICAO_Name = "", ""
+-- VER2.3 : set true on manual cancel to reload apt.dat for the KNOWN curr_ICAO
+--          without calling XPLMFindNavAid (avoids wrong-airport snap at thresholds)
+local force_apt_reload = false
 local t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
 
 -- VER1.3 : Runways without defined routes
@@ -392,10 +509,8 @@ local t_possible_route = {}
 local t_node = {}
 local t_suitable_gates = {}
 
-local Err_Msg = {}
-Err_Msg[1] = {}
-Err_Msg[2] = {}
-Err_Msg[3] = {}
+local Err_Msg = ""
+local Err_Msg_color = "GREEN"
 
 local ac_types = {
     "0 - Fighter",
@@ -411,9 +526,9 @@ local ac_types = {
 
 -- Preference / Config Values
 -- VER1.6 : fixed position - no longer saved/loaded from preferences
-local Win_Y = 400
+local Win_Y = 405
 -- VER1.4 : default LIGHT PROP for Cessna
-local Aircraft_Type = "8"
+local aircraft_Type = "8"
 -- VER1.6 : aircraft types table { ICAO = type } loaded from FollowMeXplane12.prf
 local t_aircraft = {}
 -- VER1.5 : replaces get_from_FMS
@@ -463,18 +578,6 @@ dataref("fm_plane_z", "sim/flightmodel/position/local_z")
 dataref("fm_gnd_spd", "sim/flightmodel/position/groundspeed", "readonly")
 dataref("fm_plane_head", "sim/flightmodel/position/psi", "readonly")
 
--- VER1.4 : Automatic detection of Toliss vs other aircraft
-local fm_taxi_light = 0
-local fm_beacon_light = 0
-
-if (string.lower(PLANE_AUTHOR) == "gliding kiwi") or (string.lower(PLANE_AUTHOR) == "glidingkiwi") then
-    dataref("fm_taxi_light", "AirbusFBW/OHPLightSwitches", "readonly", 3)
-    dataref("fm_beacon_light", "AirbusFBW/OHPLightSwitches", "readonly", 7)
-else
-    dataref("fm_taxi_light", "sim/cockpit/electrical/taxi_light_on", "readonly")
-    dataref("fm_beacon_light", "sim/cockpit/electrical/strobe_lights_on", "readonly")
-end
-
 local snd_arrived = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/arrived.wav")
 local snd_followme = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/followme.wav")
 local snd_safe_flight_goodbye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safe_flight_goodbye.wav")
@@ -484,6 +587,8 @@ local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welc
 local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/keep_your_speed_20kts.wav")
 -- VER2.0 : Add a sound test file. Much clearer.
 local snd_test = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/sound_test.wav")
+-- VER2.13 : Add a sound for slow down in approach.
+local snd_slow_down = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/slow_down.wav")
 
 local path_is_shown = false
 local rampstart_chg = false
@@ -520,6 +625,7 @@ local curr_node = 1
 local tire_rotate = 0
 local steering = 0
 local car_sign = 0
+local last_car_sign = -1   -- VER2.11 debug : détecte les changements de car_sign
 
 local elapsed_time = 0
 local car_speed = 0
@@ -536,10 +642,17 @@ local prev_new_flight = 0
 local prev_plane_x = 0
 local prev_plane_z = 0
 local taxiway_network = ""
-local play_time = 0
-local play_text = ""
 -- VER1.6 fix : cooldown timer to avoid repeating speed warning every frame
 local speed_warn_time = 0
+
+local fm_car_completed_timer = 0
+local last_fm_car_completed_timer = 0
+
+-- MENUS Variables
+local menu_handler = nil
+local plugins_menu = nil
+local my_menu_item = nil
+local my_menu = nil
 
 -- VER1.5 : SimBrief functions
 -- ====================================================
@@ -614,7 +727,7 @@ end
 -- Function: apply_simbrief_runway
 -- Description:
 -- Maps the SimBrief runway to the FollowMe route system. Reads the
--- departure or arrival runway from the last successful SimBrief fetch
+-- departure runway from the last successful SimBrief fetch
 -- and checks whether that runway exists in t_runway (the list of runways
 -- that have a valid taxiway route at the current airport). If found,
 -- sets depart_runway so the pilot does not have to pick it manually.
@@ -637,10 +750,7 @@ function apply_simbrief_runway()
 
     if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
         -- Departure: use SimBrief takeoff runway
-        l_rwy = tostring(tonumber(sb_runway_takeoff))
-    elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
-        -- Arrival: use SimBrief landing runway
-        l_rwy = tostring(tonumber(sb_runway_landing))
+        l_rwy = sb_runway_takeoff
     end
 
     if l_rwy == "" then
@@ -670,14 +780,14 @@ end
 -- Description:
 -- Initialises all car motion state variables (speed, acceleration,
 -- steering, sign, node counter) to zero and places the Follow Me car at
--- the first waypoint of the computed route. If the route start point is
--- more than 150 m away from the aircraft (e.g. the gate is on the far
--- side of the apron), the car is spawned directly 15 m behind the plane
--- instead so it is always immediately visible to the pilot. Determines
--- whether the car is already visible in front of the aircraft; if not,
--- rotates car_body_heading toward the plane so move_car() can begin
--- accelerating on the very first frame (VER1.25 freeze fix). Posts the
--- appropriate ready message ("3" = car ahead, "6" = car behind you).
+-- the first waypoint of the computed route. If departure mode is active
+-- and the gate is perpendicular to the taxiway (angle > 45°) and more than
+-- 50 m away, a pre-waypoint is inserted at the gate so the car is visible
+-- from the first frame (VER2.4 FIX-C/2). Determines whether the car is
+-- already visible in front of the aircraft; if not, rotates
+-- car_body_heading toward the plane so move_car() can begin accelerating
+-- on the very first frame (VER1.25 freeze fix). Posts the appropriate
+-- ready message ("3" = car ahead, "6" = car behind you).
 -- ====================================================
 function start_car()
     car_speed = 0
@@ -688,26 +798,63 @@ function start_car()
     remaining_dist_leg = 0
     turning_is_active = 0
     curr_node = 1
+    fm_arrived = 0  -- VER2.6 : reset distance-stop flag
 
     -- Clear any previous messages to avoid collision (e.g. "Arrived" + "Follow Me")
-    Err_Msg[1] = {}
-    Err_Msg[2] = {}
-    Err_Msg[3] = {}
+    Err_Msg = ""
+    Err_Msg_color = "GREEN"
 
     car_body_heading = t_node[1].heading
     car_x = t_node[1].x
     car_y = t_node[1].y
     car_z = t_node[1].z
 
-    -- VER1.12 : if the route startpt is more than 150m away, place the car
-    -- directly behind the aircraft so the pilot can always see it immediately.
-    -- The car will then drive forward to join its route normally.
+    -- VER2.4 FIX-C/2 : Gate-perpendicular pre-waypoint insertion.
+    -- If we are in departure mode with a known gate AND the car spawns more
+    -- than 50m from the aircraft, insert a pre-waypoint at the gate position
+    -- as the new t_node[1], pushing the existing route one index forward.
+    -- The car drives to the gate first (so the pilot sees it immediately),
+    -- then follows the normal taxiway route to the runway.
     local _, l_dist_to_plane = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
-    if l_dist_to_plane > 150 then
-        local l_behind_heading = add_delta_clockwise(fm_plane_head, 180, 1)
-        car_x, car_z = coordinates_of_adjusted_ref(fm_plane_x, fm_plane_z, 0, 15, l_behind_heading)
-        car_y = probe_y(car_x, car_y, car_z)
-        car_body_heading = fm_plane_head
+    logMsg(string.format(
+        "FollowMe : start_car  spawnNode=t_node[1]  x=%.1f  z=%.1f  dist_to_plane=%.1fm  gate=%d",
+        car_x, car_z, l_dist_to_plane, depart_gate))
+
+    if depart_arrive == 1 and depart_gate > 0 and l_dist_to_plane > 50 then
+        -- FIX-C/2: car is on taxiway but gate is far - insert gate as pre-waypoint
+        -- so the car drives to the gate stand first, visible to the pilot from frame 1.
+        local l_gate_x = t_gate[depart_gate].x
+        local l_gate_y = t_gate[depart_gate].y
+        local l_gate_z = t_gate[depart_gate].z
+        -- Compute heading from gate position toward the current t_node[1] (taxiway)
+        local l_hdg_gate_to_n1, l_dist_gate_to_n1 = heading_n_dist(l_gate_x, l_gate_z, t_node[1].x, t_node[1].z)
+        -- Check if gate heading is perpendicular to first route leg (> 45° difference)
+        local l_angle_diff = math.abs(l_hdg_gate_to_n1 - t_node[1].heading)
+        if l_angle_diff > 180 then l_angle_diff = 360 - l_angle_diff end
+        logMsg(string.format(
+            "FollowMe : start_car  gate_to_node1_hdg=%.1f°  node1_leg_hdg=%.1f°  angle_diff=%.1f°",
+            l_hdg_gate_to_n1, t_node[1].heading or 0, l_angle_diff))
+        if l_angle_diff > 45 then
+            -- Insert gate as new t_node[1], shift existing nodes up
+            -- New t_node[1] = gate position, heading toward old t_node[1]
+            -- Old t_node[1] becomes t_node[2], etc.
+            local l_pre = {}
+            l_pre.x       = l_gate_x
+            l_pre.y       = l_gate_y
+            l_pre.z       = l_gate_z
+            l_pre.hotzone = ""
+            l_pre.heading = l_hdg_gate_to_n1
+            l_pre.dist    = l_dist_gate_to_n1
+            table.insert(t_node, 1, l_pre)
+            -- Spawn car at gate position
+            car_x = l_gate_x
+            car_y = l_gate_y
+            car_z = l_gate_z
+            car_body_heading = l_hdg_gate_to_n1
+            logMsg(string.format(
+                "FollowMe : start_car  FIX-C/2 gate pre-waypoint inserted  gate_x=%.1f  gate_z=%.1f  hdg=%.1f°",
+                l_gate_x, l_gate_z, l_hdg_gate_to_n1))
+        end
     end
 
     local l_car_is_in_front = false
@@ -729,7 +876,7 @@ function start_car()
         car_body_heading = l_head_to_plane
     end
 
-    if l_car_is_in_front == false and depart_gate == 0 then
+    if not l_car_is_in_front and depart_gate == 0 then
         update_msg("6")
     else
         update_msg("3")
@@ -841,6 +988,7 @@ end
 -- Delegates motion integration to manage_car_motion().
 -- ====================================================
 function move_car(in_dist, in_car_in_sight, in_car_is_behind)
+
     -- VER1.6 fix : when speed_limiter is active, cap the plane speed reference so
     -- the car never accelerates beyond speed_max to follow the aircraft
     local l_ref_spd = fm_gnd_spd
@@ -879,7 +1027,7 @@ function move_car(in_dist, in_car_in_sight, in_car_is_behind)
         else
             car_accel = accel_max
         end
-    elseif in_dist < min_dist_from_plane or in_car_is_behind == true then
+    elseif in_dist < min_dist_from_plane or in_car_is_behind then
         car_accel = accel_max
     else
         if car_speed > 0 then
@@ -904,6 +1052,7 @@ end
 -- to advance the car along the route geometry by the computed distance.
 -- ====================================================
 function manage_car_motion()
+
     local l_dist = 0
     local l_dist_stop = 0
     local l_dist_turn = 0
@@ -956,6 +1105,51 @@ function manage_car_motion()
     end
 
     plot_position(l_dist)
+
+    -- VER2.6 : stop the car when it is within 100 m of the target (departure only).
+    -- This check runs AFTER plot_position() so the car position is already updated
+    -- for this frame. We only arm it for departures (#t_node > 0, depart_arrive == 1).
+    if fm_arrived == 0 and depart_arrive == 1 and #t_node > 0 then
+        local _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+        if l_dist_to_target <= ARRIVE_DIST then
+            fm_arrived = 1
+            car_speed  = 0
+            car_accel  = 0
+            -- Trigger STOP sign and "We have arrived at destination" sound immediately,
+            -- right here where fm_arrived becomes 1 (guaranteed single execution).
+            -- Cannot rely on plot_position() because its guard now returns early when fm_arrived not = 0.
+            if not backtaxi then
+                car_sign = 1
+                if not string.find(Err_Msg or "", "We have arrived") then
+                    update_msg("5")  -- sets text + plays snd_arrived
+                end
+            end
+            logMsg(string.format(
+                "FollowMe VER2.6 : fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
+                l_dist_to_target, curr_node, #t_node, car_sign))
+        end
+    end
+
+    if fm_arrived == 0 and depart_arrive == 2 then
+        local _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+        if l_dist_to_target < 1 then
+            fm_arrived = 2
+            car_speed  = 0
+            car_accel  = 0
+            -- Trigger STOP sign and "We have arrived at destination" sound immediately,
+            -- right here where fm_arrived becomes 1 (guaranteed single execution).
+            -- Cannot rely on plot_position() because its guard now returns early when fm_arrived not = 0.
+            if not backtaxi then
+                car_sign = 1
+                if not string.find(Err_Msg or "", "We have arrived") then
+                    update_msg("5")  -- sets text + plays snd_arrived
+                end
+            end
+            logMsg(string.format(
+                "FollowMe VER2.6 : fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
+                l_dist_to_target, curr_node, #t_node, car_sign))
+        end
+    end
 end
 
 -- ====================================================
@@ -986,12 +1180,15 @@ function plot_position(in_act_dist)
     local l_AoR = 0
     local l_act_dist = 0
 
-    if curr_node == #t_node then
+    if curr_node == #t_node or fm_arrived ~= 0 then  -- VER2.6 : also freeze when stopped by distance
         return
     end
 
     l_act_dist = in_act_dist
 
+    -- ==========================================================
+    -- Straight line motion
+    -- ==========================================================
     if turning_is_active == 0 then
         if curr_node + 1 ~= #t_node then
             remaining_dist_leg = 0
@@ -1049,6 +1246,9 @@ function plot_position(in_act_dist)
         end
     end
 
+    -- ==========================================================
+    -- Primary turn phase
+    -- ==========================================================
     if turning_is_active == 1 then
         if t_node[curr_node + 1].head1_exit == nil then
             l_head2, l_dist =
@@ -1120,6 +1320,9 @@ function plot_position(in_act_dist)
         end
     end
 
+    -- ==========================================================
+    -- Secondary turn phase
+    -- ==========================================================
     if turning_is_active == 2 then
         l_remaining_rot =
             compute_angle_diff_dir(car_body_heading, t_node[curr_node + 1].head1_exit, t_node[curr_node + 1].dir * -1)
@@ -1150,6 +1353,9 @@ function plot_position(in_act_dist)
         determine_steering(l_AoR, l_remaining_turn_dist, t_node[curr_node + 1].dir * -1, t_node[curr_node + 1].steering)
     end
 
+    -- ==========================================================
+    -- Reach a Node
+    -- ==========================================================
     if l_goto_nextnode then
         turning_is_active = 0
         curr_node = curr_node + 1
@@ -1169,8 +1375,8 @@ function plot_position(in_act_dist)
     car_y = probe_y(car_x, car_y, car_z)
     tire_rotate = math.fmod(tire_rotate + (in_act_dist * 360 / (tire_diameter * math.pi)), 360)
 
-    if car_sign == 0 or curr_node >= #t_node - 2 then
-        if curr_node ~= #t_node then
+    if car_sign == 0 or curr_node >= #t_node - 2 or fm_arrived ~= 0 then  -- VER2.6 : also keep sign visible when stopped by distance
+        if curr_node ~= #t_node and fm_arrived == 0 then
             if remaining_dist_leg < avg_dist_from_plane and t_node[curr_node + 1].dir ~= nil and
                     t_node[curr_node + 1].AoC < 160
              then
@@ -1184,15 +1390,16 @@ function plot_position(in_act_dist)
             -- VER1.20: The arrived condition only triggers at the last node (#t_node = GPS threshold VER1.17).
             -- The old hotzone+curr_node>=#t_node-2 condition triggered too early (e.g., CYQB node 78).
             if depart_arrive == 1 and curr_node >= #t_node then
-                if not is_backtaxi then
+                if not backtaxi then
                     car_sign = 1
-                    if not string.find(Err_Msg[1].text, "Arrived at destination") then
+                    if not string.find(Err_Msg or "", "Arrived at destination") then
                         update_msg("5")
                     end
                 end
             end
-        else
-            if depart_arrive ~= 1 then
+        elseif fm_arrived == 0 then
+            -- curr_node == #t_node (original path: car physically reached last node)
+            if depart_arrive == 2 then
                 local l_gate_in_sight, l_to_gate_heading, _ =
                     chk_line_of_sight(
                     car_body_heading,
@@ -1215,16 +1422,21 @@ function plot_position(in_act_dist)
                     end
                 end
 
-                flightstart = 0
-                update_msg("5")
+                flight_start_cpt = 0
+                we_fly = false
+                if not string.find(Err_Msg or "", "Arrived at destination") then
+                    update_msg("5")
+                end
             else
                 car_sign = 1
                 -- VER1.9 : send "Arrived at destination" for departures (back-taxi and normal)
-                if not string.find(Err_Msg[1].text or "", "Arrived at destination") then
+                if not string.find(Err_Msg or "", "Arrived at destination") then
                     update_msg("5")
                 end
             end
         end
+        -- VER2.6 : when fm_arrived not = 0, car_sign was already set to 1 in manage_car_motion().
+        -- Nothing to do here; the sign stays at 1 every frame automatically.
     end
 end
 
@@ -1329,7 +1541,7 @@ function determine_dir_of_turn(in_head1, in_head2, in_dist)
                 l_revised = true
             end
 
-            if l_revised == true then
+            if l_revised then
                 t_node[curr_node + 1].radius = t_node[curr_node + 1].dist_b4_turn / math.tan(math.rad(l_AoR / 2))
                 if t_node[curr_node + 1].radius < min_rot_radius then
                     t_node[curr_node + 1].radius = min_rot_radius
@@ -1724,11 +1936,11 @@ function object_physics()
 
     elapsed_time = l_dt
 
-    if path_instance[0] ~= nil and path_is_shown == false then
+    if path_instance[0] ~= nil and not path_is_shown then
         draw_path()
     end
 
-    if rampstart_chg == true then
+    if rampstart_chg then
         if show_rampstart then
             load_rampstart()
         else
@@ -1739,7 +1951,7 @@ function object_physics()
         end
     end
 
-    if obj_instance[0] ~= nil and #t_node > 0 and curr_node ~= #t_node then
+    if obj_instance[0] ~= nil and #t_node > 0 and curr_node ~= #t_node and fm_arrived == 0 then  -- VER2.6 : freeze when stopped by distance
         local l_dist = 0
         local l_car_in_sight, l_car_is_behind = false, false
         l_car_in_sight, _, l_dist = chk_line_of_sight(fm_plane_head, 80, 80, fm_plane_x, fm_plane_z, car_x, car_z)
@@ -1891,7 +2103,7 @@ end
 -- the callback fires and path_instance[0] becomes non-nil.
 -- ====================================================
 function load_path()
-    if FM_car_active and show_path and #t_node > 0 then
+    if fm_car_active and show_path and #t_node > 0 then
         XPLM.XPLMLoadObjectAsync(
             SCRIPT_DIRECTORY .. "follow_me/objects/pushpin_yellow.obj",
             function(inObject, inRefcon)
@@ -1935,7 +2147,7 @@ end
 -- corresponding waypoint in t_node so the full planned route is visible
 -- on the airport surface. Called once after load_path() completes and
 -- also by object_physics() if the instances exist but have not yet been
--- positioned (path_is_shown == false). Sets path_is_shown = true after
+-- positioned (not path_is_shown). Sets path_is_shown = true after
 -- positioning so the pins are not repositioned every frame.
 -- ====================================================
 function draw_path()
@@ -2185,6 +2397,25 @@ end
 -- lights) so the network is always fresh for the current position.
 -- ====================================================
 function get_airport_elements()
+    -- VER2.3 : if a manual cancel set force_apt_reload, reload apt.dat for the
+    --          already-known curr_ICAO without calling XPLMFindNavAid.
+    --          This prevents XPLMFindNavAid from snapping to a neighbouring
+    --          airport (e.g. heliport CTG2) when the aircraft is parked at a
+    --          runway threshold that is physically close to that other airport.
+    if force_apt_reload then
+        force_apt_reload = false
+        world_alt = 0
+        taxiway_network = read_apt_file(curr_ICAO)
+        if taxiway_network ~= "" then
+            XPLMSpeakString("Follow Me Service is not available at this airport")
+            return
+        end
+        if sb_fetch_status == "OK" then
+            sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
+        end
+        -- skip the XPLMFindNavAid block entirely
+    else
+
     local l_airport_index = XPLMFindNavAid(nil, nil, LATITUDE, LONGITUDE, nil, xplm_Nav_Airport)
     local l_new_ICAO, l_new_ICAO_name = "", ""
 
@@ -2207,17 +2438,20 @@ function get_airport_elements()
         end
     end
 
+    end -- VER2.3 : end of else (normal XPLMFindNavAid path)
+
     if #t_deleted_runway > 0 then
         update_msg("-18")
     end
 
     depart_gate = check_gate()
     if depart_arrive == 0 then
-        if flightstart == 9999 then
+        if flight_start_cpt == 9999 then
             if depart_gate == 0 then
                 depart_arrive = 2
             else
-                flightstart = 0
+                flight_start_cpt = 0
+                we_fly = false
                 depart_arrive = 1
             end
         else
@@ -2278,7 +2512,6 @@ function read_apt_file(in_ICAO)
                 else
                     l_filename2 = syspath .. l_str1 .. "Earth nav data/apt.dat"
                 end
-
                 l_file2 = io.open(l_filename2, "r")
                 if l_file2 then
                     while true do
@@ -2290,7 +2523,7 @@ function read_apt_file(in_ICAO)
                             l_new_lines = l_new_lines .. l_rest .. "\n"
                         end
 
-                        if l_airport_found == false then
+                        if not l_airport_found then
                             l_start = 0
                             while true do
                                 if l_start > 0 then
@@ -2320,7 +2553,7 @@ function read_apt_file(in_ICAO)
                                         break
                                     end
                                 end
-                                if l_airport_found == true then
+                                if l_airport_found then
                                     break
                                 end
                             end
@@ -2328,7 +2561,7 @@ function read_apt_file(in_ICAO)
 
                         if l_airport_found then
                             for l_line2 in l_new_lines:gmatch("[^\r\n]+") do
-                                if l_not_first_line == false then
+                                if not l_not_first_line then
                                     l_not_first_line = true
                                 else
                                     if string.find(l_line2, "^1%s") or l_line2 == "99" then
@@ -2372,7 +2605,7 @@ function read_apt_file(in_ICAO)
                                 if string.match(l_line2, "^100%s") then
                                     decipher_runway(l_line2, t_runway)
                                 end
-                                if string.match(l_line2, "^1301%s") and l_processed_1300 == true then
+                                if string.match(l_line2, "^1301%s") and l_processed_1300 then
                                     decipher_ramp_operation(l_line2)
                                 end
                                 if string.match(l_line2, "^1300%s") then
@@ -2389,19 +2622,19 @@ function read_apt_file(in_ICAO)
                                     decipher_vehicle_edge(l_line2)
                                 end
                                 if string.match(l_line2, "^1204%s") then
-                                    if l_processed_1204 == false then
+                                    if not l_processed_1204 then
                                         decipher_taxisegment_hotzone(l_line2)
                                         l_processed_1204 = true
                                     end
                                 end
                             end
-                            if l_terminate_loop == true then
+                            if l_terminate_loop then
                                 break
                             end
                         end
                     end
                     l_file2:close()
-                    if l_terminate_loop == true then
+                    if l_terminate_loop then
                         break
                     end
                 end
@@ -2410,7 +2643,7 @@ function read_apt_file(in_ICAO)
     until not l_line1
     l_file1:close()
 
-    if l_airport_found == false and l_terminate_loop == false then
+    if not l_airport_found and not l_terminate_loop then
         l_filename2 = syspath .. "Global Scenery/Global Airports/Earth nav data/apt.dat"
         l_file2 = io.open(l_filename2, "r")
         if l_file2 then
@@ -2483,7 +2716,7 @@ end
 -- and gate name. Normalises the raw size-class string (heavy/jets/
 -- turboprops/props/all/helos) into a space-separated list of FollowMe
 -- aircraft-type numbers (0-8) stored in t_gate[i].Types. This list is
--- later compared against the pilot's selected Aircraft_Type to filter
+-- later compared against the pilot's selected aircraft_Type to filter
 -- suitable gates in the UI and in auto_assign_gate().
 -- ====================================================
 function decipher_ramp(in_str)
@@ -2965,24 +3198,31 @@ end
 -- a location change without restarting X-Plane (VER1.12).
 -- ====================================================
 function full_reset()
-    if FM_car_active then
+
+    if fm_car_active then
         unload_object()
         unload_path()
         unload_rampstart()
     end
-    FM_car_active = false
+    fm_car_active = false
     prepare_kill_objects = false
     prepare_show_objects = false
     kill_is_manual = false
     ground_time = 0
-    flightstart = 0
+    flight_start_cpt = 0
+    we_fly = false
+
 	-- new airport = fresh runway list
     t_deleted_runway = {}
 	-- VER1.12 : force apt.dat reload on next get_airport_elements()
     curr_ICAO = ""
+    -- VER2.3 : clear force_apt_reload flag (full reset implies genuine airport change,
+    --          XPLMFindNavAid should run normally)
+    force_apt_reload = false
     initialise_airport()
     initialise_routes()
     logMsg("FollowMe : full_reset() completed")
+    update_menu_state()  -- VER2.13: sync menu after full reset
 end
 
 -- ====================================================
@@ -3018,12 +3258,12 @@ end
 -- ====================================================
 function initialise_routes()
     t_node = {}
-    Err_Msg[1] = {}
-    Err_Msg[2] = {}
-    Err_Msg[3] = {}
+    Err_Msg = ""
+    Err_Msg_color = "GREEN"
     depart_arrive = 0
 	-- VER1.8
-    is_backtaxi = false
+    backtaxi = false
+    fm_arrived = 0  -- VER2.6
     window_first_access = true
 end
 
@@ -3033,7 +3273,7 @@ end
 -- Master per-frame event dispatcher, registered with do_every_frame().
 -- Handles: new-flight detection and teleport detection (both trigger
 -- full_reset()), airborne timer that auto-cancels the FM car 3 min after
--- takeoff, window show/hide toggle from the holder button, taxi-light
+-- takeoff, window show/hide toggle from menu, taxi-light
 -- off event that auto-kills the car when the route is complete, SimBrief
 -- auto-trigger when taxi or beacon light turns on, speed-warning sound
 -- when the aircraft exceeds 20 kts with speed_limiter active, arrival
@@ -3061,121 +3301,48 @@ function handle_plugin_window()
     prev_plane_x = fm_plane_x
     prev_plane_z = fm_plane_z
 
-    --When the airplane leaves the ground, the follow-me car window closes
-    if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
-        if flightstart == 0 then
-
-        	--After 3 minutes in flight (180), the Follow Me Car is destroyed if still active
-            flightstart = fm_run_time + 180
-            -- VER1.6 : close the main window automatically at takeoff
-            if followme_wnd ~= nil then
-                hide_window()
-            end
-        end
-        if fm_run_time > flightstart and flightstart ~= 9999 then
-            arrival_gate = 0
-            flightstart = 9999
-            ground_time = 0
-            prepare_kill_objects = true
-        end
-    end
-
-    -- Process window toggle unconditionally (not inside else)
-    -- so it works regardless of flight/ground state
-    if holder_wnd and toggle_window == true then
-        toggle_window = false
-        if followme_wnd ~= nil then
-            hide_window()
-        else
-            window_is_open = true
-            show_window()
-        end
-    end
-
     local l_err = ""
-
-    if FM_car_active == true and #t_node > 0 and prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 0 then
-        if (depart_arrive == 1 and curr_node >= #t_node) or (depart_arrive == 2 and curr_node == #t_node) then
-            prepare_kill_objects = true
-        end
-    end
-
-    -- VER1.5 : Auto-trigger via SimBrief (replaces FMS)
-    if FM_car_active == false and get_from_SimBrief == true and fm_gear1_gnd == 1 and holder_wnd then
-        if (prev_taxi_light ~= fm_taxi_light and fm_taxi_light == 1) or
-                (prev_beacon_light ~= fm_beacon_light and fm_beacon_light == 1)
-         then
-            get_airport_elements()
-            if taxiway_network == "" then
-                if depart_runway ~= "" then
-                    l_err = determine_XP_route()
-                    if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-                        prepare_show_objects = true
-                    else
-                        update_msg(l_err)
-                    end
-                end
-            else
-                update_msg("-15")
-            end
-        end
-    end
-    prev_taxi_light = fm_taxi_light
-    prev_beacon_light = fm_beacon_light
 
     -- VER1.6 fix : speed warning when aircraft exceeds 20 kts and speed_limiter is active
     -- 10.288 m/s = 20 kts ; warning repeats every 15 seconds max
-    if speed_limiter and FM_car_active and fm_gear1_gnd == 1 and fm_gear2_gnd == 1 and fm_gnd_spd > 10.288 and
-            fm_run_time > speed_warn_time
+    if speed_limiter and fm_car_active and
+    	fm_gear1_gnd == 1 and fm_gear2_gnd == 1 and
+    	fm_gnd_spd > 10.288 and fm_run_time > speed_warn_time
      then
         play_sound(snd_keep_speed)
 		-- repeat at most every 15 seconds
         speed_warn_time = fm_run_time + 15
     end
 
-    if FM_car_active == false and flightstart == 9999 and (fm_gear1_gnd == 1 and fm_gear2_gnd == 1) and
-            ground_time == 0 and
-            fm_taxi_light == 1 and
-            fm_gnd_spd < 15
-     then
-        get_airport_elements()
-        if taxiway_network == "" then
-            if random_gate == true or arrival_gate > 0 then
-                if arrival_gate == 0 then
-                    l_err = auto_assign_gate()
-                    if l_err == "1" then
-                        play_text = "No suitable gate for this aircraft. Randomly assigned to gate " .. t_gate[arrival_gate].ID
-                    elseif l_err == "2" then
-                        play_text = "Assigned to " .. t_gate[arrival_gate].ID
-                    end
-                    play_time = fm_run_time + 5
-                end
-
-                if window_is_open == false then
-                    l_err = determine_XP_route()
-                    if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-                        prepare_show_objects = true
-                    else
-                        update_msg(l_err)
-                    end
-                end
+    if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
+        if flight_start_cpt == 0 then
+        	-- if we fly for more than 5 seconds, prepare_kill_objects
+            flight_start_cpt = fm_run_time + 5
+        end
+        if fm_run_time > flight_start_cpt and flight_start_cpt ~= 9999 then
+        	we_fly = true
+        	update_menu_state()  -- VER2.13: grise les menus pendant le vol
+            prepare_kill_objects = true
+            -- VER1.6 : close the main window automatically at takeoff
+            if followme_wnd ~= nil then
+	            arrival_gate = 0
+	            flight_start_cpt = 9999
+	            ground_time = 0
+                hide_followme_window()
             end
-        else
-            update_msg("-15")
+            if navigation_wnd ~= nil then
+	            hide_navigation_window()
+            end
         end
-        ground_time = 1
+    else
+    	flight_start_cpt = 0
+        we_fly = false
+        update_menu_state()  -- VER2.13: réactive les menus à l'atterrissage
     end
 
-    if play_time ~= 0 then
-        if fm_run_time > play_time then
-            XPLMSpeakString(play_text)
-            play_text = ""
-            play_time = 0
-        end
-    end
-
-    if prepare_show_objects == true then
-        FM_car_active = true
+    if prepare_show_objects then
+        fm_car_active = true
+        update_menu_state()  -- VER2.13: grise FM Window quand voiture active
         load_object()
         load_path()
         start_car()
@@ -3183,8 +3350,9 @@ function handle_plugin_window()
         prepare_show_objects = false
     end
 
-    if prepare_kill_objects == true then
-        FM_car_active = false
+    if prepare_kill_objects then
+        fm_car_active = false
+        update_menu_state()  -- VER2.13: libère FM Window quand voiture arrêtée
         unload_object()
         unload_path()
         -- VER1.4 : behavior based on cancel type
@@ -3192,10 +3360,15 @@ function handle_plugin_window()
             unload_rampstart()
             rampstart_chg = false
             kill_is_manual = false
+			fm_car_completed_timer = 0
+			last_fm_car_completed_timer = 0
+			fm_arrived = 0
             -- VER1.9 : say goodbye when user manually cancels
             update_msg("7")
-            -- VER1.12 : force airport reload so window_first_access re-reads apt.dat
-            curr_ICAO = ""
+            -- VER2.3 : force apt.dat reload for the KNOWN curr_ICAO instead of
+            --          clearing curr_ICAO, which caused XPLMFindNavAid to snap
+            --          to a neighbouring airport (e.g. CTG2 at CYHU RWY 24R threshold)
+            force_apt_reload = true
             -- Preserve all routing state so the user can immediately re-request
             -- without having to re-select runway, mode, or gate
             local l_saved_runway = depart_runway
@@ -3213,8 +3386,13 @@ function handle_plugin_window()
             if show_rampstart and (arrival_gate > 0 or depart_gate > 0) then
                 rampstart_chg = true
             end
+			if navigation_window_open then
+			    followme_window_open = true
+			    navigation_window_open = false
+			    hide_navigation_window()
+			end
         else
-            if flightstart == 9999 then
+            if flight_start_cpt == 9999 then
                 unload_rampstart()
             end
             initialise_routes()
@@ -3222,120 +3400,69 @@ function handle_plugin_window()
         prepare_kill_objects = false
     end
 
-    if not holder_wnd and fm_new_flight > 1 then
-        screen_width = SCREEN_WIDTH
-        show_holder()
-    end
-
-    if holder_wnd and screen_width ~= SCREEN_WIDTH then
-        screen_width = SCREEN_WIDTH
-        float_wnd_set_position(holder_wnd, screen_width - Holder_len, Win_Y)
+    -- Process window toggle unconditionally (not inside else)
+    if toggle_window then
+        toggle_window = false
         if followme_wnd ~= nil then
-            float_wnd_set_position(followme_wnd, screen_width - 430, Win_Y)
+            followme_window_open = false
+            navigation_window_open = true
+            hide_followme_window()
+            show_navigation_window()
+        else
+            followme_window_open = true
+            navigation_window_open = false
+            show_followme_window()
+            hide_navigation_window()
         end
     end
 
-    if holder_wnd then
-        if MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
-                MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
-                MOUSE_Y <= SCREEN_HIGHT - Win_Y
-         then
-            float_wnd_bring_to_front(holder_wnd)
-        end
-        if holder_drag == 3 and followme_wnd ~= nil then
-            float_wnd_set_position(followme_wnd, screen_width - 430, Win_Y)
-            holder_drag = 2
-        end
-    end
-
-    if followme_wnd ~= nil then
-        -- Only bring FM window to front if mouse is over it but NOT over the holder icon
-        local l_over_holder =
-            (MOUSE_X >= SCREEN_WIDTH - Holder_len and MOUSE_X <= SCREEN_WIDTH and
-            MOUSE_Y >= SCREEN_HIGHT - (Win_Y + Holder_len) and
-            MOUSE_Y <= SCREEN_HIGHT - Win_Y)
-        if not l_over_holder then
-            if MOUSE_X >= SCREEN_WIDTH - 400 - Holder_len and MOUSE_X <= SCREEN_WIDTH - Holder_len and
-                    MOUSE_Y >= SCREEN_HIGHT - (Win_Y + 400) and
-                    MOUSE_Y <= SCREEN_HIGHT - Win_Y
-             then
-                float_wnd_bring_to_front(followme_wnd)
-            end
-        end
-    end
 end
 
 -- ====================================================
--- Function: show_holder
+-- Function: show_followme_window
 -- Description:
--- Creates the small "FM" badge floating window in the top-right corner
--- of the screen. Loads user preferences on first call (init_load guard).
--- The badge is always visible after the first flight starts and acts as
--- the click target to toggle the main FollowMe window open or closed.
--- Its appearance changes between white (on ground) and grey with a red
--- diagonal bar (in flight) to indicate service availability.
--- ====================================================
-function show_holder()
-    if init_load == 0 then
-        load_config()
-        init_load = 1
-    end
-    holder_wnd = float_wnd_create(Holder_len, Holder_len, 2, true)
-    float_wnd_set_position(holder_wnd, screen_width - Holder_len, Win_Y)
-    float_wnd_set_imgui_builder(holder_wnd, "build_holder")
-    float_wnd_set_onclose(holder_wnd, "closed_holder")
-end
-
--- ====================================================
--- Function: hide_holder
--- Description:
--- Destroys the "FM" badge floating window and sets holder_wnd to nil.
--- Not currently called during normal operation (the badge persists for
--- the entire flight session) but available for cleanup if needed.
--- ====================================================
-function hide_holder()
-    if holder_wnd then
-        float_wnd_destroy(holder_wnd)
-        holder_wnd = nil
-    end
-end
-
--- ====================================================
--- Function: show_window
--- Description:
--- Creates the main FollowMe control panel (405 x 525 px) and attaches
--- the build_window() imgui builder callback to it. Sets window_first_access
--- = true so build_window() triggers a fresh get_airport_elements() call
+-- Creates the main FollowMe control panel (405 x 460 px) and attaches
+-- the build_followme_window() imgui builder callback to it. Sets window_first_access
+-- = true so build_followme_window() triggers a fresh get_airport_elements() call
 -- on the first rendered frame. The window is positioned to the left of
 -- the FM badge, anchored to the right edge of the screen.
 -- ====================================================
-function show_window()
+function show_followme_window()
+
+	followme_title = "Follow Me Window"
+
     window_first_access = true
-    followme_wnd = float_wnd_create(405, 530, 2, true)
-    float_wnd_set_position(followme_wnd, screen_width - 405 - Holder_len, Win_Y)
-    float_wnd_set_imgui_builder(followme_wnd, "build_window")
-    float_wnd_set_onclose(followme_wnd, "closed_window")
+    -- 490 est la hauteur
+
+	local pos_x = (SCREEN_WIDTH - 490) / 2
+	local pos_y = SCREEN_HIGHT / 2  -- tout en haut
+
+
+    followme_wnd = float_wnd_create(405, 460, 1, true)
+    float_wnd_set_title(followme_wnd, followme_title)
+	float_wnd_set_position(followme_wnd, pos_x, pos_y)
+    float_wnd_set_imgui_builder(followme_wnd, "build_followme_window")
+    float_wnd_set_onclose(followme_wnd, "closed_followme_window")
+    update_menu_state()  -- VER2.13: grise FM Window dès ouverture
 end
 
 -- ====================================================
--- Function: hide_window
+-- Function: hide_followme_window
 -- Description:
 -- Destroys the main FollowMe control panel, sets followme_wnd to nil,
--- and marks window_is_open = false. Called automatically at takeoff
--- (handle_plugin_window), by the window close button (closed_window
+-- and marks followme_window_open = false. Called automatically at takeoff
+-- (handle_plugin_window), by the window close button (closed_followme_window
 -- callback), and by the toggle logic when the pilot clicks the FM badge
 -- while the window is open.
 -- ====================================================
-function hide_window()
+function hide_followme_window()
     if followme_wnd ~= nil then
-        float_wnd_destroy(followme_wnd)
-        followme_wnd = nil
-        window_is_open = false
+        closed_followme_window()
     end
 end
 
 -- ====================================================
--- Function: build_window
+-- Function: build_followme_window
 -- Description:
 -- imgui draw callback invoked every frame while the main window is open.
 -- Renders the complete FollowMe control panel: airport header (departure
@@ -3348,7 +3475,7 @@ end
 -- area. Also updates the direction label (ahead / right / behind / left)
 -- in real time from the current bearing to the car.
 -- ====================================================
-function build_window(wnd, x, y)
+function build_followme_window(wnd, x, y)
     local l_err = ""
     local l_is_selected = false
     local l_changed = false
@@ -3364,34 +3491,40 @@ function build_window(wnd, x, y)
         imgui.constant.WindowFlags.NoSavedSettings
     )
 
-    if window_first_access == true then
+    if window_first_access then
+    	load_config()
         get_airport_elements()
         l_err = taxiway_network
         window_first_access = false
     end
 
-    if FM_car_active == true or #t_runway == 0 then
-        imgui.PushStyleVar(imgui.constant.StyleVar.Alpha, 0.7)
-        imgui.PushStyleVar(imgui.constant.StyleVar.WindowBorderSize, 0)
-        if FM_car_active == false then
-            imgui.SetNextWindowFocus()
-        end
-        if FM_car_active == true then
-            imgui.SetNextWindowPos(0, 75)
-            imgui.SetNextWindowSize(405, 120)
-        else
-            imgui.SetNextWindowPos(0, 75)
-            imgui.SetNextWindowSize(405, 170)
-        end
-        if imgui.Begin("##Disabled", nil, l_flags) then
-            imgui.End()
-        end
-        imgui.PopStyleVar()
-        imgui.PopStyleVar()
-        if FM_car_active == false then
-            imgui.SetNextWindowFocus()
-        end
+    ------------------------------------------------------------------------------------------
+    -- Begining : Disable the Departure and Arival to avoid selection when FM car is active --
+    ------------------------------------------------------------------------------------------
+    if fm_car_active or #t_runway == 0 then
+		imgui.PushStyleVar(imgui.constant.StyleVar.Alpha, 0.7)
+		imgui.PushStyleVar(imgui.constant.StyleVar.WindowBorderSize, 0)
+		imgui.SetNextWindowPos(0, 68)
+
+		if fm_car_active then
+		    imgui.SetNextWindowSize(405, 108)
+		else
+		    imgui.SetNextWindowSize(405, 170)
+		    imgui.SetNextWindowFocus()
+		end
+
+		if imgui.Begin("##Disabled", nil, l_flags) then
+		    imgui.End()
+		end
+
+		imgui.PopStyleVar()
+		imgui.PopStyleVar()
     end
+    -----------------------------------------------------------------------------------------
+    -- Endding : Disable the Departure and Arival to avoid selection when FM car is active --
+    -----------------------------------------------------------------------------------------
+
+------------------------------
 
     --=====================================================
     -- Show Departure and Arrival airport (ICAO + name)
@@ -3400,7 +3533,7 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
 	-- light gray
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+    imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
 
     if get_from_SimBrief then
         imgui.TextUnformatted("Simbrief Departure Airport")
@@ -3408,29 +3541,36 @@ function build_window(wnd, x, y)
         imgui.TextUnformatted("Departure Airport")
     end
 
+------------------------------
+
     imgui.PopStyleColor()
     imgui.SetCursorPosY(18)
     imgui.SetCursorPosX(10)
     imgui.SetWindowFontScale(1.2)
 
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_origin_icao ~= "" then
-        imgui.TextUnformatted(sb_origin_icao .. "   " .. sb_origin_name)
+        imgui.TextUnformatted(sb_origin_icao .. " " .. string.format("%-3s", sb_runway_takeoff) .. " " .. sb_origin_name)
     else
         -- Fallback: display current sim airport
-        imgui.TextUnformatted(curr_ICAO .. "   " .. curr_ICAO_name)
+
+        imgui.TextUnformatted(curr_ICAO .. " " .. curr_ICAO_name)
     end
 
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(35)
     imgui.SetCursorPosX(10)
 	-- light gray
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
+    imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
+
+------------------------------
 
     if get_from_SimBrief then
         imgui.TextUnformatted("Simbrief Arrival Airport")
     else
         imgui.TextUnformatted("Arrival Airport")
     end
+
+------------------------------
 
     imgui.PopStyleColor()
 
@@ -3439,28 +3579,32 @@ function build_window(wnd, x, y)
     imgui.SetWindowFontScale(1.2)
 
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_dest_icao ~= "" then
-        imgui.TextUnformatted(sb_dest_icao .. "   " .. sb_dest_name)
+        imgui.TextUnformatted(sb_dest_icao .. " " .. string.format("%-3s", sb_runway_landing) .. " " .. sb_dest_name)
     else
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
+        imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
 
     imgui.SetWindowFontScale(1.0)
+
+------------------------------
+
     imgui.SetCursorPosY(65)
     imgui.Separator()
+
+------------------------------
 
     --=====================================================
     -- Allow selection for Departure & Arrival
     -- Show "Request Follow Me Car" button or "Cancel Follow Me Car"
-    -- Show Aircraft Speed and Follow Me car Speed
-    -- Show Follow Me car Pointer (yellow triangle)
     --=====================================================
-    imgui.SetCursorPosY(75)
+    imgui.SetCursorPosY(68)
     imgui.SetCursorPosX(18)
     if imgui.RadioButton(" Departure", depart_arrive == 1, false) then
         depart_arrive = 1
-        flightstart = 0
+        flight_start_cpt = 0
+        we_fly = false
         rampstart_chg = true
         if get_from_SimBrief then
             apply_simbrief_runway()
@@ -3469,12 +3613,13 @@ function build_window(wnd, x, y)
 
     if depart_gate > 0 then
         imgui.SameLine()
-        --imgui.SetCursorPosX(160)
         imgui.SetCursorPosX(134)
         imgui.TextUnformatted(t_gate[depart_gate].ID)
     end
 
-    imgui.SetCursorPosY(100)
+------------------------------
+
+    imgui.SetCursorPosY(93)
     imgui.SetCursorPosX(48)
     imgui.TextUnformatted("To Runway : ")
 
@@ -3493,7 +3638,8 @@ function build_window(wnd, x, y)
                 if imgui.Selectable(t_runway[i].ID, l_is_selected) then
                     depart_runway = t_runway[i].ID
                     depart_arrive = 1
-                    flightstart = 0
+                    flight_start_cpt = 0
+	                we_fly = false
                 end
                 if l_is_selected then
                     imgui.SetItemDefaultFocus()
@@ -3526,7 +3672,9 @@ function build_window(wnd, x, y)
     imgui.SameLine()
     imgui.TextUnformatted("Use SimBrief data")
 
-    imgui.SetCursorPosY(135)
+------------------------------
+
+    imgui.SetCursorPosY(120)
     imgui.SetCursorPosX(18)
 
     if imgui.RadioButton(" Arrival", depart_arrive == 2, false) then
@@ -3537,7 +3685,7 @@ function build_window(wnd, x, y)
         end
     end
 
-    if depart_arrive == 2 and random_gate == true and arrival_gate == 0 then
+    if depart_arrive == 2 and random_gate and arrival_gate == 0 then
         auto_assign_gate()
     end
 
@@ -3547,7 +3695,7 @@ function build_window(wnd, x, y)
     l_changed, l_newval = imgui.Checkbox("##Auto Assign", random_gate)
     if l_changed then
         random_gate = l_newval
-        if random_gate == true and arrival_gate == 0 then
+        if random_gate and arrival_gate == 0 then
             auto_assign_gate()
         end
     end
@@ -3555,7 +3703,9 @@ function build_window(wnd, x, y)
     imgui.SameLine()
     imgui.TextUnformatted("Auto Assign")
 
-    imgui.SetCursorPosY(160)
+------------------------------
+
+    imgui.SetCursorPosY(145)
     imgui.SetCursorPosX(48)
     imgui.TextUnformatted("To Gate/Ramp : ")
 
@@ -3574,7 +3724,7 @@ function build_window(wnd, x, y)
         combo_filter_list = true
     end
 
-    if combo_filter_list == true then
+    if combo_filter_list then
         imgui.SetNextWindowFocus()
         imgui.SetNextWindowPos(160, 180)
         imgui.SetNextWindowSize(150, 80)
@@ -3585,8 +3735,8 @@ function build_window(wnd, x, y)
             end
             t_suitable_gates = {}
             for i = 1, #t_gate do
-                if string.match(t_gate[i].Types, Aircraft_Type) == Aircraft_Type or
-                        (Aircraft_Type == "0" and string.match(t_gate[i].Types, "7"))
+                if string.match(t_gate[i].Types, aircraft_Type) == aircraft_Type or
+                        (aircraft_Type == "0" and string.match(t_gate[i].Types, "7"))
                  then
                     t_suitable_gates[#t_suitable_gates + 1] = i
                 end
@@ -3606,7 +3756,7 @@ function build_window(wnd, x, y)
                         l_into_list = false
                     end
                 end
-                if l_into_list == true then
+                if l_into_list then
                     l_is_selected = (l_gate == t_gate[t_suitable_gates[i]].ID)
                     if imgui.Selectable(t_gate[t_suitable_gates[i]].ID, l_is_selected) then
                         depart_arrive = 2
@@ -3626,7 +3776,7 @@ function build_window(wnd, x, y)
     end
 
     if l_err == "-17" then
-        if Err_Msg[1].text ~= nil and string.find(Err_Msg[1].text, "No suitable gate for this plane. Lift") then
+        if Err_Msg ~= nil and string.find(Err_Msg, "No suitable gate for this plane. Lift") then
             l_err = ""
         end
     end
@@ -3640,12 +3790,35 @@ function build_window(wnd, x, y)
         rampstart_chg = true
     end
 
-    imgui.SetCursorPosY(200)
+------------------------------
+
+    imgui.SetCursorPosY(176)
+    imgui.SetCursorPosX(48)
+
+    if not fm_car_active then
+        if imgui.Button("Request Follow Me Car", 170, 25) then
+	        if not (depart_runway == "" and gatetext == "") then
+	            combo_filter_list = false
+	            toggle_window = true
+	            l_err = determine_XP_route()
+	            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
+	                prepare_show_objects = true
+	            end
+            end
+        end
+    else
+        if imgui.Button("Cancel Follow Me Car", 170, 25) then
+            prepare_kill_objects = true
+            kill_is_manual = true
+        end
+    end
+
+    imgui.SetCursorPosY(178)
     imgui.SetCursorPosX(230)
     l_changed, l_newval = imgui.Checkbox("##Limit Car Speed", speed_limiter)
     if l_changed then
         speed_limiter = l_newval
-        if speed_limiter == true then
+        if speed_limiter then
 			-- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
             speed_max = 10.288
         else
@@ -3653,118 +3826,36 @@ function build_window(wnd, x, y)
         end
     end
     imgui.SameLine()
-    imgui.TextUnformatted("Limit speed \nto 20kts")
+    imgui.TextUnformatted("Limit speed to 20kts")
 
     imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
     imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
     imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
 
-    imgui.SetCursorPosY(200)
-    imgui.SetCursorPosX(48)
-
-    if FM_car_active == false then
-        if imgui.Button("Request Follow Me Car", 170, 30) then
-            combo_filter_list = false
-            l_err = determine_XP_route()
-            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-                prepare_show_objects = true
-            end
-        end
-    else
-        if imgui.Button("Cancel Follow Me Car", 170, 30) then
-            prepare_kill_objects = true
-            kill_is_manual = true
-        end
-    end
 
     imgui.PopStyleColor(3)
 
-    -- VER2.0 : ARROW POINTER FOLLOW ME CAR
-    -- Replaced simple line with a filled arrowhead triangle pointing toward the FM car
-    -- relative to the aircraft heading. The tip points in the car direction.
-	if FM_car_active and car_x ~= 0 then
-	    -- Absolute bearing from aircraft to FM car
-	    local l_bearing_to_car, l_dist_to_car = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
-
-	    -- Relative angle: 0=front, 90=right, 180=rear, 270=left  (aircraft-relative, 0-360)
-	    local l_rel_angle = l_bearing_to_car - fm_plane_head
-	    while l_rel_angle < 0   do l_rel_angle = l_rel_angle + 360 end
-	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
-
-	    -- Draw a filled yellow arrow triangle pointing toward the car
-	    local cx, cy    = 370, 220
-		-- distance from center to tip
-	    local tip_len   = 18
-		-- half-width of arrow base
-	    local wing_len  = 10
-		-- distance from center to base (behind center)
-	    local tail_len  = 8
-
-	    -- Tip direction (0 deg = up = north = forward)
-	    local tip_rad   = math.rad(l_rel_angle - 90)
-	    -- Base direction (opposite of tip)
-	    local base_rad  = math.rad(l_rel_angle + 90)
-	    -- Wing perpendicular directions
-		-- perpendicular left
-	    local left_rad  = math.rad(l_rel_angle - 90 + 90)
-		-- perpendicular right
-	    local right_rad = math.rad(l_rel_angle - 90 - 90)
-
-	    local tip_x  = cx + math.cos(tip_rad)   * tip_len
-	    local tip_y  = cy + math.sin(tip_rad)   * tip_len
-	    local base_x = cx + math.cos(base_rad)  * tail_len
-	    local base_y = cy + math.sin(base_rad)  * tail_len
-
-	    local lw_x = base_x + math.cos(left_rad)  * wing_len
-	    local lw_y = base_y + math.sin(left_rad)  * wing_len
-	    local rw_x = base_x + math.cos(right_rad) * wing_len
-	    local rw_y = base_y + math.sin(right_rad) * wing_len
-
-	    -- Filled yellow triangle (tip, left-wing, right-wing)
-	    imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, 0xFF00FFFF)
-	end
-
-    -- VER1.6 : Speed display zone - reserved read-only row below button
-    imgui.SetCursorPosY(239)
-    imgui.SetCursorPosX(48)
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
-    imgui.TextUnformatted("GND SPD")
-    imgui.PopStyleColor()
-    imgui.SameLine()
-    imgui.SetCursorPosX(108)
-    if FM_car_active then
-        local l_plane_kts = fm_gnd_spd * 1.94384
-        local l_spd_color = (speed_limiter and l_plane_kts > 20) and 0xFF0000FF or 0xFF00FF00
-        imgui.PushStyleColor(imgui.constant.Col.Text, l_spd_color)
-        imgui.TextUnformatted(string.format("%.1f kts", l_plane_kts))
-        imgui.PopStyleColor()
-    else
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF444444)
-        imgui.TextUnformatted("---")
-        imgui.PopStyleColor()
+------------------------------
+    -- Affichage du message unique Err_Msg à la place du message directionnel
+    if Err_Msg ~= "" and Err_Msg ~= nil then
+	    imgui.SetCursorPosX(18)
+	    imgui.SetCursorPosY(210)
+	    if Err_Msg_color == "RED" then
+	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	    else
+	        imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+	    end
+	    imgui.TextUnformatted(Err_Msg)
+	    imgui.PopStyleColor()
     end
-    imgui.SameLine()
-    imgui.SetCursorPosX(216)
-    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
-    imgui.TextUnformatted("FM Car")
-    imgui.PopStyleColor()
-    imgui.SameLine()
-    imgui.SetCursorPosX(263)
-    if FM_car_active then
-        local l_car_kts = car_speed * 1.94384
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFFCCCCCC)
-        imgui.TextUnformatted(string.format("%.1f kts", l_car_kts))
-        imgui.PopStyleColor()
-    else
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF444444)
-        imgui.TextUnformatted("---")
-        imgui.PopStyleColor()
-    end
+------------------------------
 
-    imgui.SetCursorPosY(265)
+    imgui.SetCursorPosY(230)
     imgui.Separator()
 
-    imgui.SetCursorPosY(275)
+------------------------------
+
+    imgui.SetCursorPosY(235)
     imgui.SetCursorPosX(20)
     imgui.TextUnformatted("Model")
     imgui.SameLine()
@@ -3774,7 +3865,7 @@ function build_window(wnd, x, y)
     imgui.SetCursorPosX(160)
     imgui.TextUnformatted("* Helps find suitable gate/ramp")
 
-    imgui.SetCursorPosY(295)
+    imgui.SetCursorPosY(255)
     imgui.SetCursorPosX(20)
     imgui.TextUnformatted(PLANE_ICAO)
     imgui.SameLine()
@@ -3784,13 +3875,13 @@ function build_window(wnd, x, y)
 
     local l_ac_types = ""
 
-    if Aircraft_Type == "" then
+    if aircraft_Type == "" then
         l_ac_types = ""
     else
-        l_ac_types = ac_types[tonumber(Aircraft_Type) + 1]
+        l_ac_types = ac_types[tonumber(aircraft_Type) + 1]
     end
 
-    if FM_car_active == true and depart_arrive == 2 then
+    if fm_car_active and depart_arrive == 2 then
         imgui.InputText("##text_actype", l_ac_types, 250, imgui.constant.InputTextFlags.ReadOnly)
     else
         imgui.PushItemWidth(250)
@@ -3799,13 +3890,12 @@ function build_window(wnd, x, y)
                 l_is_selected = (l_ac_types == ac_types[i])
                 if imgui.Selectable(ac_types[i], l_is_selected) then
                     l_ac_types = ac_types[i]
-                    Aircraft_Type = tostring(i - 1)
+                    aircraft_Type = tostring(i - 1)
                     gatetext = ""
                     arrival_gate = 0
                     rampstart_chg = true
-                    Err_Msg[1] = {}
-                    Err_Msg[2] = {}
-                    Err_Msg[3] = {}
+                    Err_Msg = ""
+                    Err_Msg_color = "GREEN"
                     depart_gate = check_gate()
                 end
                 if l_is_selected then
@@ -3817,18 +3907,19 @@ function build_window(wnd, x, y)
         imgui.PopItemWidth()
         imgui.SameLine()
         if imgui.Button("X##clear_type", 20, 20) then
-            Aircraft_Type = ""
+            aircraft_Type = ""
             gatetext = ""
             arrival_gate = 0
             rampstart_chg = true
-            Err_Msg[1] = {}
-            Err_Msg[2] = {}
-            Err_Msg[3] = {}
+            Err_Msg = ""
+            Err_Msg_color = "GREEN"
             depart_gate = check_gate()
         end
     end
 
-    imgui.SetCursorPosY(330)
+------------------------------
+
+    imgui.SetCursorPosY(285)
     imgui.SetCursorPosX(20)
     l_changed, l_newval = imgui.Checkbox(" Show Path", show_path)
     if l_changed then
@@ -3840,7 +3931,9 @@ function build_window(wnd, x, y)
         end
     end
 
-    imgui.SetCursorPosY(355)
+------------------------------
+
+    imgui.SetCursorPosY(310)
     imgui.SetCursorPosX(20)
     l_changed, l_newval = imgui.Checkbox(" Show Ramp Start", show_rampstart)
     if l_changed then
@@ -3852,6 +3945,8 @@ function build_window(wnd, x, y)
         end
     end
 
+------------------------------
+
 	-- Dark green (RGBA hex)
 	imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
 	-- Lighter green on hover
@@ -3859,16 +3954,18 @@ function build_window(wnd, x, y)
 	-- Green when clicked
 	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
 
-	imgui.SetCursorPosY(335)
+	imgui.SetCursorPosY(293)
 	imgui.SetCursorPosX(220)
-	if imgui.Button("Save Preferences", 130, 30) then
+	if imgui.Button("Save Preferences", 130, 25) then
 	    l_err = save_config()
 	end
 
 	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
 	imgui.PopStyleColor(3)
 
-    imgui.SetCursorPosY(385)
+------------------------------
+
+    imgui.SetCursorPosY(340)
     imgui.SetCursorPosX(20)
     imgui.TextUnformatted("Vol ")
     imgui.SameLine()
@@ -3880,43 +3977,48 @@ function build_window(wnd, x, y)
         vol = l_newval
         set_sound_vol()
     end
-    imgui.SetCursorPosY(380)
+    imgui.SetCursorPosY(337)
     imgui.SetCursorPosX(220)
-    if imgui.Button("Test Volume", 90, 30) then
+    if imgui.Button("Test Volume", 90, 25) then
         play_sound(snd_test)
     end
 
+------------------------------
+
     -- Vehicle selection
     imgui.SetCursorPosX(20)
-    imgui.SetCursorPosY(413)
+    imgui.SetCursorPosY(370)
     if imgui.RadioButton(" Ferrari", car_type_fmcar == "Ferrari", false) then
         car_type_fmcar = "Ferrari"
     end
     imgui.SetCursorPosX(110)
-    imgui.SetCursorPosY(413)
+    imgui.SetCursorPosY(370)
     if imgui.RadioButton(" FM Van", car_type_fmcar == "Van", false) then
         car_type_fmcar = "Van"
     end
     imgui.SetCursorPosX(195)
-    imgui.SetCursorPosY(413)
+    imgui.SetCursorPosY(370)
     if imgui.RadioButton(" FM Truck", car_type_fmcar == "Truck", false) then
         car_type_fmcar = "Truck"
     end
     imgui.SetCursorPosX(290)
-    imgui.SetCursorPosY(413)
+    imgui.SetCursorPosY(370)
     if imgui.RadioButton(" Auto Select", car_type_fmcar == "Auto", false) then
         car_type_fmcar = "Auto"
     end
 
-    -- VER1.5 : SimBrief ID row
-    imgui.SetCursorPosY(438)
+------------------------------
+    imgui.SetCursorPosY(400)
     imgui.Separator()
 
-    imgui.SetCursorPosY(446)
+------------------------------
+
+    -- VER1.5 : SimBrief ID row
+    imgui.SetCursorPosY(410)
     imgui.SetCursorPosX(10)
     imgui.TextUnformatted("SimBrief ID")
 
-    imgui.SameLine()
+    imgui.SetCursorPosY(408)
     imgui.SetCursorPosX(95)
     imgui.PushItemWidth(90)
     l_changed, l_newtext = imgui.InputText("##simbrief_id", simbrief_id, 11, imgui.constant.InputTextFlags.CharsDecimal)
@@ -3930,8 +4032,9 @@ function build_window(wnd, x, y)
     imgui.PopItemWidth()
 
     imgui.SameLine()
+    imgui.SetCursorPosY(406)
     imgui.SetCursorPosX(195)
-    if imgui.Button("Fetch SimBrief", 120, 30) then
+    if imgui.Button("Fetch SimBrief", 120, 25) then
         if simbrief_id ~= "" then
             check_SimBrief()
         else
@@ -3939,83 +4042,380 @@ function build_window(wnd, x, y)
         end
     end
 
+------------------------------
+
     -- SimBrief fetch status display
-    imgui.SetCursorPosY(480)
+    imgui.SetCursorPosY(436)
     imgui.SetCursorPosX(10)
     if sb_fetch_status == "OK" then
         if get_from_SimBrief then
             if sb_airport_mismatch then
-                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+                imgui.PushStyleColor(imgui.constant.Col.Text, RED)
                 imgui.TextUnformatted("The current airport does not match the Simbrief data")
                 imgui.PopStyleColor()
             else
-                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
-                imgui.TextUnformatted("SimBrief Runways  Dep:" .. sb_runway_takeoff .. "  Arr:" .. sb_runway_landing)
+                imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+                imgui.TextUnformatted("SimBrief data fetched successfully")
                 imgui.PopStyleColor()
             end
         end
     elseif sb_fetch_status == "LOADING" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
+        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
         imgui.TextUnformatted("Fetching SimBrief data...")
         imgui.PopStyleColor()
     elseif sb_fetch_status == "ERROR" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
         imgui.TextUnformatted("SimBrief fetch error")
         imgui.PopStyleColor()
     end
 
-    imgui.SetCursorPosY(500)
-    imgui.Separator()
+------------------------------
 
     if l_err ~= "" then
         update_msg(l_err)
     end
+end
 
-    -- VER2.0 : Real-time directional message - updated every frame when FM car is active.
-    -- Overrides Err_Msg[1] with the current direction of the car relative to the aircraft.
-    -- The four zones match the arrow pointer zones exactly:
-    --   Front (300-360 / 0-60 deg) : "Follow Me Car is ahead"
-    --   Right (60-120 deg)         : "Follow Me Car is on the right"
-    --   Rear  (120-240 deg)        : "Follow Me Car is behind"
-    --   Left  (240-300 deg)        : "Follow Me Car is on the left"
-    if FM_car_active and car_x ~= 0 then
-        local l_bear_rt, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
-        local l_rel_rt = l_bear_rt - fm_plane_head
-        while l_rel_rt < 0   do l_rel_rt = l_rel_rt + 360 end
-        while l_rel_rt >= 360 do l_rel_rt = l_rel_rt - 360 end
-        local l_dir_msg
-        if l_rel_rt > 300 or l_rel_rt < 60 then
-            l_dir_msg = "Follow Me Car is ahead"
-        elseif l_rel_rt >= 60 and l_rel_rt < 120 then
-            l_dir_msg = "Follow Me Car is on the right"
-        elseif l_rel_rt >= 120 and l_rel_rt < 240 then
-            l_dir_msg = "Follow Me Car is behind"
-        else
-            l_dir_msg = "Follow Me Car is on the left"
-        end
-        Err_Msg[1].text  = l_dir_msg
-        Err_Msg[1].color = "GREEN"
+-- ====================================================
+-- Function: closed_followme_window
+-- Description:
+-- FlyWithLua callback invoked when the main FollowMe control panel is
+-- closed by the user (X button). Sets followme_window_open = false so
+-- handle_plugin_window() knows the window is gone and the auto-arrival
+-- route logic can proceed without waiting for the window to close.
+-- ====================================================
+function closed_followme_window(wnd)
+    if followme_wnd ~= nil then
+        float_wnd_destroy(followme_wnd)
+        followme_wnd = nil
+        followme_window_open = false
+        update_menu_state()  -- VER2.13: réactive FM Window quand fermée
+    end
+end
+
+-- ====================================================
+-- Function: show_navigation_window
+-- Description:
+-- Creates the navigation window panel (495 x 30 px) and attaches
+-- the build_navigation_window() imgui builder callback to it. Sets window_first_access
+-- = true so build_navigation_window() triggers a fresh get_airport_elements() call
+-- on the first rendered frame. The window is positioned to the left of
+-- the FM badge, anchored to the right edge of the screen.
+-- ====================================================
+function show_navigation_window()
+
+	local pos_x = (SCREEN_WIDTH - 495) / 2
+	local pos_y = SCREEN_HIGHT / 2  -- tout en haut
+
+    navigation_wnd = float_wnd_create(495, 35, 1, true)
+	float_wnd_set_position(navigation_wnd, pos_x, pos_y)
+    float_wnd_set_imgui_builder(navigation_wnd, "build_navigation_window")
+    float_wnd_set_onclose(navigation_wnd, "closed_navigation_window")
+
+end
+
+-- ====================================================
+-- Function: hide_navigation_window
+-- Description:
+-- Destroys the navigation window panel, sets navigation_wnd to nil.
+-- Called automatically at takeoff
+-- (handle_plugin_window), by the window close button (closed_navigation_window
+-- callback), and by the toggle logic when the pilot clicks the FM badge
+-- while the window is open.
+-- ====================================================
+function hide_navigation_window()
+    if navigation_wnd ~= nil then
+    	closed_navigation_window()
+    end
+end
+
+-- ====================================================
+-- Function: build_navigation_window
+-- Description:
+-- imgui draw callback invoked every frame while the navigation window is open.
+-- ====================================================
+function build_navigation_window(wnd, x, y)
+
+	if fm_car_active then
+		if depart_arrive == 1 then
+	        navigation_title = "Depart Rwy : "..depart_runway
+		end
+		if depart_arrive == 2 then
+		    if gatetext ~= "" then
+	        	navigation_title = "Gate : "..gatetext
+	        end
+		end
+	else
+		navigation_title = "Navigation Window"
+	end
+
+    float_wnd_set_title(navigation_wnd, navigation_title)
+
+    -- Timer for the completed ride
+    if fm_arrived ~= 0 then
+	    if fm_car_completed_timer < 7 then
+	        if fm_run_time >= last_fm_car_completed_timer + 1 then
+		        fm_car_completed_timer = fm_car_completed_timer + 1
+		        last_fm_car_completed_timer = fm_run_time
+		    end
+		end
+	end
+
+	local fm_ti = fm_car_completed_timer
+
+    if fm_car_active then
+	    -- Dark green (RGBA hex)
+	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
+	    -- Lighter green on hover
+	    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, RED)
+	    -- Green when clicked
+	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
+
+	    imgui.SetCursorPosY(7)
+	    imgui.SetCursorPosX(8)
+
+	    if imgui.Button("X", 22, 20) then
+	        prepare_kill_objects = true
+	        kill_is_manual = true
+	    end
+
+	    imgui.PopStyleColor(3)
     end
 
-    local l_y2 = 16
-    for i = 1, 3 do
-        imgui.SetCursorPosY(488 + l_y2 * i)
-        imgui.SetCursorPosX(10)
-        if not Err_Msg[i].text then
-            break
-        end
-        if i == 1 then
-            if Err_Msg[i].color == "RED" then
-                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
-            else
-                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
-            end
-        else
-            imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF696969)
-        end
-        imgui.TextUnformatted(Err_Msg[i].text)
+    -- VER1.6 : Speed display zone - reserved read-only row below button
+    local d = 70
+
+    imgui.SetCursorPosY(11)
+    imgui.SetCursorPosX(8+d)
+    if fm_car_active and depart_arrive ~= 0 and fm_arrived == 0 then
+    	imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+	else
+    	imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
+	end
+    imgui.TextUnformatted("GND SPD")
+    imgui.PopStyleColor()
+    imgui.SameLine()
+    imgui.SetCursorPosX(68+d)
+    if fm_car_active and depart_arrive ~= 0 and fm_arrived == 0 then
+        local l_plane_kts = fm_gnd_spd * 1.94384
+        local l_spd_color = (speed_limiter and l_plane_kts > 20) and RED or GREEN
+        imgui.PushStyleColor(imgui.constant.Col.Text, l_spd_color)
+        imgui.TextUnformatted(string.format("%.1f kts", l_plane_kts))
+        imgui.PopStyleColor()
+    else
+        imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
+        imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
+    imgui.SameLine()
+    imgui.SetCursorPosX(131+d)
+    if fm_car_active and  depart_arrive ~= 0 and fm_arrived == 0 then
+    	imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
+	else
+    	imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
+	end
+    imgui.TextUnformatted("FM Car")
+    imgui.PopStyleColor()
+    imgui.SameLine()
+    imgui.SetCursorPosX(179+d)
+    if fm_car_active and depart_arrive ~= 0 and fm_arrived == 0 then
+        local l_car_kts = car_speed * 1.94384
+        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
+        imgui.TextUnformatted(string.format("%.1f kts", l_car_kts))
+        imgui.PopStyleColor()
+    else
+        imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
+        imgui.TextUnformatted("---")
+        imgui.PopStyleColor()
+    end
+
+    -- VER2.5 : Distance to destination (runway threshold for departure, gate for arrival)
+    if #t_node > 0 then
+    	local l_dist_dest = 0
+    	if depart_arrive == 1 then
+        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_node[#t_node].x, t_node[#t_node].z)
+        end
+    	if depart_arrive == 2 then
+        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_gate[arrival_gate].x, t_gate[arrival_gate].z)
+        end
+        imgui.SameLine()
+        imgui.SetCursorPosX(240+d+40)
+		text_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
+        if depart_arrive ~= 0 and fm_arrived == 0 then
+        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
+    	else
+        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
+    	end
+        imgui.TextUnformatted("Target")
+        imgui.PopStyleColor()
+        imgui.SameLine()
+        imgui.SetCursorPosX(289+d+40)
+        if depart_arrive ~= 0 and fm_arrived == 0 then
+        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
+    	else
+        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
+    	end
+
+    	-- In case we are arrived and we want to fly the following message not appears
+		if math.floor(l_dist_dest + 0.5) == 300 and fm_arrived == 0 then
+	        play_sound(snd_slow_down)
+		end
+
+        if l_dist_dest >= 1000 then
+            imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
+        else
+            imgui.TextUnformatted(string.format("%d m", math.floor(l_dist_dest + 0.5)))
+        end
+        imgui.PopStyleColor()
+    end
+
+	--=====================================================
+	-- VER 2.0 & 2.8 : ARROW POINTER (Triangle)
+	--=====================================================
+	if (fm_car_active and car_x ~= 0) or fm_arrived ~= 0 then
+
+	    -- 1. Déterminer la cible et la couleur selon la condition
+	    local target_x, target_z, triangle_color
+
+	    -- Ici on affiche un triangle vert pour le reste de la course pour orienter l'avion
+	    if fm_arrived ~= 0 then
+		    if fm_ti > 6 then
+		        unload_object()
+			end
+
+			triangle_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
+			if fm_arrived == 1 then
+		        -- Cas "Arrivé" : Cible le dernier noeud et couleur VERTE
+		        target_x = t_node[#t_node].x
+		        target_z = t_node[#t_node].z
+			else
+			    target_x = t_gate[arrival_gate].x
+			    target_z = t_gate[arrival_gate].z
+			end
+	    else
+	        -- Cas "En route" : Cible la voiture et couleur JAUNE
+	        target_x = car_x
+	        target_z = car_z
+	        triangle_color = YELLOW -- Jaune
+	    end
+
+	    -- 2. Calculs mathématiques communs
+	    local l_bearing, _ = heading_n_dist(fm_plane_x, fm_plane_z, target_x, target_z)
+	    local l_rel_angle = l_bearing - fm_plane_head
+
+	    while l_rel_angle < 0   do l_rel_angle = l_rel_angle + 360 end
+	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
+
+	    -- Paramètres de dessin
+	    local cx, cy    = 255+d, 18
+	    local tip_len   = 13
+	    local wing_len  = 8
+	    local tail_len  = 6
+
+	    local tip_rad   = math.rad(l_rel_angle - 90)
+	    local base_rad  = math.rad(l_rel_angle + 90)
+	    local left_rad  = math.rad(l_rel_angle - 90 + 90)
+	    local right_rad = math.rad(l_rel_angle - 90 - 90)
+
+	    local tip_x  = cx + math.cos(tip_rad)   * tip_len
+	    local tip_y  = cy + math.sin(tip_rad)   * tip_len
+	    local base_x = cx + math.cos(base_rad)  * tail_len
+	    local base_y = cy + math.sin(base_rad)  * tail_len
+
+	    local lw_x = base_x + math.cos(left_rad)  * wing_len
+	    local lw_y = base_y + math.sin(left_rad)  * wing_len
+	    local rw_x = base_x + math.cos(right_rad) * wing_len
+	    local rw_y = base_y + math.sin(right_rad) * wing_len
+
+	    -- 3. Dessin unique avec la couleur dynamique
+	    imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, triangle_color)
+	end
+
+	--=====================================================
+	-- VER2.11 debug : log seulement quand car_sign change (1 ligne par transition)
+	if car_sign ~= last_car_sign then
+	    logMsg(string.format(
+	        "FollowMe NAV_WND car_sign CHANGED  old=%d  new=%d  curr_node=%d  #t_node=%d  fm_arrived=%s  fm_car_active=%s",
+	        last_car_sign, car_sign, curr_node, #t_node,
+	        tostring(fm_arrived), tostring(fm_car_active)))
+	    last_car_sign = car_sign
+	end
+
+	--=====================================================
+	-- VER 2.10 : TRIANGLES LATERAUX car_sign (gauche / droite)
+	-- Triangle équilatéral pointant vers la gauche  (côté gauche)
+	-- Triangle équilatéral pointant vers la droite  (côté droit)
+	-- car_sign == 0 : gauche NOIR,  droite NOIR
+	-- car_sign == 1 : gauche ROUGE, droite ROUGE
+	-- car_sign == 2 : gauche NOIR,  droite ROUGE
+	-- car_sign == 3 : gauche ROUGE, droite NOIR
+	--=====================================================
+	local nav_color_left, nav_color_right
+	if car_sign == 1 or car_sign == 0 or not fm_car_active then
+		nav_color_left  = DARK_GRAY   -- Rouge
+	    nav_color_right = DARK_GRAY   -- Rouge
+	elseif car_sign == 2 then
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = RED   -- Rouge
+	elseif car_sign == 3 then
+	    nav_color_left  = RED   -- Rouge
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	else
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	end
+
+	if math.floor(fm_run_time) % 2 == 0 then
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	end
+
+	-- Dimensions du triangle équilatéral
+	-- side = 20, hauteur h = side * sqrt(3)/2 ≈ 17.3
+	local nav_side = 20
+	local nav_h    = nav_side * math.sqrt(3) / 2
+	local nav_half = nav_side / 2
+	local nav_mid_y = 17
+
+	-- Triangle GAUCHE (pointe vers la gauche)
+	local nav_lc_x   = 48 + nav_h / 2
+	local nav_lg_tip_x = nav_lc_x - nav_h / 2
+	local nav_lg_top_x = nav_lc_x + nav_h / 2
+	local nav_lg_bot_x = nav_lc_x + nav_h / 2
+	imgui.DrawList_AddTriangleFilled(
+	    nav_lg_tip_x, nav_mid_y,
+	    nav_lg_top_x, nav_mid_y - nav_half,
+	    nav_lg_bot_x, nav_mid_y + nav_half,
+	    nav_color_left)
+
+	-- Triangle DROIT (pointe vers la droite)
+	local nav_rc_x   = 495 - 8 - nav_h / 2
+	local nav_rg_tip_x = nav_rc_x + nav_h / 2
+	local nav_rg_top_x = nav_rc_x - nav_h / 2
+	local nav_rg_bot_x = nav_rc_x - nav_h / 2
+	imgui.DrawList_AddTriangleFilled(
+	    nav_rg_tip_x, nav_mid_y,
+	    nav_rg_top_x, nav_mid_y - nav_half,
+	    nav_rg_bot_x, nav_mid_y + nav_half,
+	    nav_color_right)
+
+end
+
+-- ====================================================
+-- Function: closed_navigation_window
+-- Description:
+-- FlyWithLua callback invoked when the main FollowMe control panel is
+-- closed by the user (X button). Sets followme_window_open = false so
+-- handle_plugin_window() knows the window is gone and the auto-arrival
+-- route logic can proceed without waiting for the window to close.
+-- ====================================================
+function closed_navigation_window(wnd)
+    if navigation_wnd ~= nil then
+	    float_wnd_destroy(navigation_wnd)
+	    navigation_wnd = nil
+	    navigation_window_open = false
+        update_menu_state()  -- VER2.13: recalcule état menu après fermeture nav
+	end
 end
 
 -- ====================================================
@@ -4060,13 +4460,13 @@ function update_msg(in_msg)
     end
 
     if tonumber(in_msg) ~= nil and tonumber(in_msg) < 0 then
-        Err_Msg[1].color = "RED"
+        Err_Msg_color = "RED"
     else
-        Err_Msg[1].color = "GREEN"
+        Err_Msg_color = "GREEN"
     end
 
     if in_msg == "-18" then
-        in_msg = "Routes not defined for runway "
+        in_msg = "No routes have been defined for this airport"
         for i = 1, #t_deleted_runway do
             if i == #t_deleted_runway then
                 in_msg = in_msg .. t_deleted_runway[i]
@@ -4074,7 +4474,7 @@ function update_msg(in_msg)
                 in_msg = in_msg .. t_deleted_runway[i] .. ", "
             end
         end
-        if Err_Msg[1].text ~= nil and Err_Msg[1].text == in_msg then
+        if Err_Msg == in_msg then
             return
         end
     end
@@ -4088,18 +4488,13 @@ function update_msg(in_msg)
             l_rwy = sb_runway_landing
         end
         in_msg = "Routes not defined for Simbrief runway " .. l_rwy
-        if Err_Msg[1].text ~= nil and Err_Msg[1].text == in_msg then
+        if Err_Msg == in_msg then
             return
         end
     end
 
-    if Err_Msg[1].text then
-        Err_Msg[3].text = Err_Msg[2].text
-        Err_Msg[2].text = Err_Msg[1].text
-    end
-
     if in_msg == "6" then
-        in_msg = "Follow Me Car ready. Car is behind you."
+    	in_msg = nil
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
@@ -4112,35 +4507,12 @@ function update_msg(in_msg)
 	        play_sound(snd_welcome_bye)
 	    end
     elseif in_msg == "5" then
+    	in_msg = "We have arrived at destination"
         play_sound(snd_arrived)
     elseif in_msg == "4" then
         in_msg = "No route found. Remove taxiway limitation, trying again."
     elseif in_msg == "3" then
-        -- VER2.0 : Replace static "Follow Me Car is ready" with a direction-aware message.
-        -- Compute the absolute bearing from the aircraft to the FM car (0-360),
-        -- then map it to one of four compass zones relative to the aircraft heading:
-        --   Front : bearing within 60 deg on each side of the aircraft nose (300-360 and 0-60)
-        --   Right : bearing 60 to 120 deg (right side)
-        --   Rear  : bearing 120 to 240 deg (behind)
-        --   Left  : bearing 240 to 300 deg (left side)
-        if FM_car_active and car_x ~= 0 then
-            local l_bear, _ = heading_n_dist(fm_plane_x, fm_plane_z, car_x, car_z)
-            local l_rel = l_bear - fm_plane_head
-            while l_rel < 0   do l_rel = l_rel + 360 end
-            while l_rel >= 360 do l_rel = l_rel - 360 end
-            if l_rel > 300 or l_rel < 60 then
-                in_msg = "Follow Me Car is ahead"
-            elseif l_rel >= 60 and l_rel < 120 then
-                in_msg = "Follow Me Car is on the right"
-            elseif l_rel >= 120 and l_rel < 240 then
-                in_msg = "Follow Me Car is behind"
-            else
-                -- 240 <= l_rel <= 300
-                in_msg = "Follow Me Car is on the left"
-            end
-        else
-            in_msg = "Follow Me Car is ready"
-        end
+    	in_msg = nil
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
@@ -4183,7 +4555,7 @@ function update_msg(in_msg)
         in_msg = "SimBrief connection failed. Check network."
     end
 
-    Err_Msg[1].text = in_msg
+    Err_Msg = in_msg or ""
 end
 
 -- ====================================================
@@ -4194,7 +4566,7 @@ end
 -- type is selected, a mode (departure/arrival) is chosen, a runway is
 -- set for departure or a gate is set for arrival, and that the requested
 -- runway exists in t_runway[]. Returns an error code string on any
--- failure so build_window() can post it via update_msg(). On success,
+-- failure so build_followme_window() can post it via update_msg(). On success,
 -- calls check_gate() to detect if the aircraft is already parked at a
 -- known gate, then calls determine_possible_routes() to run the A*
 -- pathfinder and build t_node[].
@@ -4203,7 +4575,7 @@ function determine_XP_route()
     if #t_taxinode == 0 then
         return "-15"
     end
-    if Aircraft_Type == "" then
+    if aircraft_Type == "" then
         return "-1"
     end
     if depart_arrive == 0 then
@@ -4257,6 +4629,13 @@ function determine_possible_routes()
     local l_rev_heading = add_delta_clockwise(fm_plane_head, 180, 1)
 
     if depart_gate ~= 0 then
+        -- VER2.4 FIX-B: log gate info before determine_pos_on_segment
+        logMsg(string.format(
+            "FollowMe : determine_possible_routes  GATE=%s  heading=%.1f  x=%.1f  z=%.1f  type=%s",
+            t_gate[depart_gate].ID or "?",
+            t_gate[depart_gate].Heading,
+            t_gate[depart_gate].x, t_gate[depart_gate].z,
+            t_gate[depart_gate].Ramptype or "?"))
         l_found, l_startpt_node, l_startpt_x, l_startpt_z =
             determine_pos_on_segment(
             t_gate[depart_gate].Heading,
@@ -4264,22 +4643,33 @@ function determine_possible_routes()
             t_gate[depart_gate].z,
             t_gate[depart_gate].Ramptype
         )
+        if l_found then
+            local _, l_dgs = heading_n_dist(
+                t_gate[depart_gate].x, t_gate[depart_gate].z,
+                t_taxinode[l_startpt_node + 1].x, t_taxinode[l_startpt_node + 1].z)
+            logMsg(string.format(
+                "FollowMe : determine_possible_routes  startNode=%d  dist_gate_to_start=%.1fm  startSeg='%s'",
+                l_startpt_node, l_dgs,
+                t_taxinode[l_startpt_node + 1].Segment or "(empty)"))
+        else
+            logMsg("FollowMe : determine_possible_routes  FAILED - no start node found from gate")
+        end
     else
         local l_adj_fm_plane_x = 0
         local l_adj_fm_plane_z = 0
         l_adj_fm_plane_x, l_adj_fm_plane_z = coordinates_of_adjusted_ref(fm_plane_x, fm_plane_z, 0, 60, fm_plane_head)
         l_found, l_startpt_node, l_startpt_x, l_startpt_z =
             determine_pos_on_segment(fm_plane_head, l_adj_fm_plane_x, l_adj_fm_plane_z, "tie_down")
-        if l_found == false then
+        if not l_found then
             l_found, l_startpt_node, l_startpt_x, l_startpt_z =
                 determine_pos_on_segment(l_rev_heading, fm_plane_x, fm_plane_z, "tie_down")
         end
-        if l_found == false and depart_arrive == 2 then
+        if not l_found and depart_arrive == 2 then
             return "-16"
         end
     end
 
-    if l_found == false then
+    if not l_found then
         return "-12"
     end
 
@@ -4290,10 +4680,10 @@ function determine_possible_routes()
                 break
             end
         end
-		-- VER1.17: is_backtaxi removed
+		-- VER1.17: backtaxi removed
 		-- the new universal logic in process_possible_routes() ALWAYS sends the car to the GPS threshold,
-		-- whether there is a backtaxi or not. is_backtaxi remains permanently false.
-        is_backtaxi = false
+		-- whether there is a backtaxi or not. backtaxi remains permanently false.
+        backtaxi = false
     else
         l_found, l_endpt_node, l_endpt_x, l_endpt_z =
             determine_pos_on_segment(
@@ -4302,7 +4692,7 @@ function determine_possible_routes()
             t_gate[arrival_gate].z,
             "gate"
         )
-        if l_found == false then
+        if not l_found then
             return "-13"
         end
     end
@@ -4348,7 +4738,7 @@ end
 -- Maintains an open list and a closed list of taxinodes. At each step,
 -- expands the node with the lowest f_value (g + h) by examining all
 -- connected segments. The inner evaluate_node() helper enforces taxiway
--- size restrictions (codes A-E vs Aircraft_Type) and filters already-
+-- size restrictions (codes A-E vs aircraft_Type) and filters already-
 -- visited nodes. When the end node is reached, back-traces the parent
 -- chain to build t_possible_route[]. The in_heading parameter optionally
 -- biases the search away from segments that would require an immediate
@@ -4370,24 +4760,24 @@ function transverse(in_startnode, in_endnode, in_heading)
                 break
             end
         end
-        if l_in_open == true or l_in_close == true then
+        if l_in_open or l_in_close then
             return false
         end
         if not impose_restriction_chk then
             return true
         else
             if in_size ~= "" then
-                local l_aircraft_type = tonumber(Aircraft_Type)
+                local l_aircraft_Type = tonumber(aircraft_Type)
                 if in_size == "A" then
-                    if (l_aircraft_type > 0 and l_aircraft_type < 7) then
+                    if (l_aircraft_Type > 0 and l_aircraft_Type < 7) then
                         return false
                     end
                 elseif (in_size == "B" or in_size == "C" or in_size == "D") then
-                    if (l_aircraft_type > 0 and l_aircraft_type < 3) then
+                    if (l_aircraft_Type > 0 and l_aircraft_Type < 3) then
                         return false
                     end
                 elseif in_size == "E" then
-                    if (l_aircraft_type == 1) then
+                    if (l_aircraft_Type == 1) then
                         return false
                     end
                 end
@@ -4478,6 +4868,13 @@ function transverse(in_startnode, in_endnode, in_heading)
                     t_taxinode[l_node + 1].heading = l_curr_heading
                     t_open[l_idx].f_value = l_f_value
                     t_open[l_idx].cost = t_taxinode[l_node + 1].cost
+                    -- VER2.4 FIX-B: log every A* expansion so the chosen path is traceable
+                    logMsg(string.format(
+                        "FollowMe : A* expand  curr=%d → cand=%d  seg=%d  g=%.1f  h=%.1f  f=%.1f  cost=%d  AoC=%.0f  hdg=%.0f",
+                        l_curr_node, l_node, l_segment_idx,
+                        l_g_value, t_taxinode[l_node + 1].h_value, l_f_value,
+                        t_taxinode[l_node + 1].cost or 0,
+                        l_AoC or 0, l_curr_heading))
                 end
             end
         end
@@ -4518,6 +4915,13 @@ function transverse(in_startnode, in_endnode, in_heading)
         )
         if #t_open > 0 then
             l_curr_node = t_open[#t_open].Node
+            -- VER2.4 FIX-B: log the node selected as next to expand
+            logMsg(string.format(
+                "FollowMe : A* select   next=%d  f=%.1f  cost=%d  open=%d",
+                l_curr_node,
+                t_open[#t_open].f_value or 0,
+                t_open[#t_open].cost or 0,
+                #t_open))
         else
             l_curr_node = -1
         end
@@ -4593,7 +4997,7 @@ end
 function apply_runway_axis_filter()
 
     -- Only applies to departures with a built route
-    if depart_arrive ~= 1 or #t_node < 2 then
+    if depart_arrive == 2 or #t_node < 2 then
         return
     end
 
@@ -5001,6 +5405,35 @@ function process_possible_routes()
         )
         logMsg("FollowMe : DRIVE NODES : " .. l_node_list)
         logMsg("FollowMe : DRIVE NODES TOTAL=" .. #t_node)
+
+        -- VER2.4 FIX-B: per-node distance-to-last regression check.
+        -- Any node where dist-to-end INCREASES means the car goes away from its destination
+        -- (U-turn or detour). Log each such node with *** REGRESSION *** so the cause
+        -- of off-pavement driving is immediately visible without post-processing.
+        if #t_node >= 2 then
+            local l_fin_x = t_node[#t_node].x
+            local l_fin_z = t_node[#t_node].z
+            local l_prev_dte = math.huge
+            local l_n_regressions = 0
+            for l_ri = 1, #t_node do
+                local _, l_dte = heading_n_dist(t_node[l_ri].x, t_node[l_ri].z, l_fin_x, l_fin_z)
+                if l_dte > l_prev_dte then
+                    l_n_regressions = l_n_regressions + 1
+                    logMsg(string.format(
+                        "FollowMe : *** REGRESSION ***  driveNode=%d  x=%.1f  z=%.1f  dToEnd=%.1fm  prevDToEnd=%.1fm  delta=+%.1fm",
+                        l_ri, t_node[l_ri].x, t_node[l_ri].z,
+                        l_dte, l_prev_dte, l_dte - l_prev_dte))
+                end
+                l_prev_dte = l_dte
+            end
+            if l_n_regressions == 0 then
+                logMsg("FollowMe : DRIVE NODES regression check PASSED (no U-turns / detours)")
+            else
+                logMsg(string.format(
+                    "FollowMe : DRIVE NODES regression check FAILED  regressions=%d  → route has detour(s) causing off-pavement driving",
+                    l_n_regressions))
+            end
+        end
     end
 end
 
@@ -5031,15 +5464,15 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     local l_min_dist = 25
     local l_max_dist = 300
     local l_max_dist_node = 130
-    local l_aircraft_type = tonumber(Aircraft_Type)
+    local l_aircraft_Type = tonumber(aircraft_Type)
 
-    if l_aircraft_type == 0 or l_aircraft_type >= 7 then
+    if l_aircraft_Type == 0 or l_aircraft_Type >= 7 then
         l_min_dist = 5
-    elseif l_aircraft_type >= 3 and l_aircraft_type < 7 then
+    elseif l_aircraft_Type >= 3 and l_aircraft_Type < 7 then
         l_min_dist = 15
-    elseif l_aircraft_type == 2 then
+    elseif l_aircraft_Type == 2 then
         l_min_dist = 30
-    elseif l_aircraft_type == 1 then
+    elseif l_aircraft_Type == 1 then
         l_min_dist = 30
     end
 
@@ -5259,7 +5692,7 @@ function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
     local l_in_sight, _, l_dist_to_intersect =
         chk_line_of_sight(l_heading, 70, 70, in_x, in_z, l_intersect_x, l_intersect_z)
 
-    if l_in_sight == false and (in_type == "tie_down" or in_type == "hangar") then
+    if not l_in_sight and (in_type == "tie_down" or in_type == "hangar") then
         l_heading = add_delta_clockwise(in_heading, 180, 1)
         l_in_sight, _, l_dist_to_intersect =
             chk_line_of_sight(l_heading, 70, 70, in_x, in_z, l_intersect_x, l_intersect_z)
@@ -5339,7 +5772,20 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
     t_taxinode[l_idx].heading = nil
     l_new_node = l_idx - 1
 
-    if string.find(t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment, ",") then
+    -- VER2.4 FIX-A: was string.find(Segment,",") → missed dead-end nodes (no comma).
+    -- Now uses Segment ~= "" so any connected node (junction OR dead-end) is linked.
+    local l_n1_seg  = t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment
+    local l_n2_seg  = t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment
+    local l_n1_dead = (l_n1_seg ~= "" and not string.find(l_n1_seg, ","))
+    local l_n2_dead = (l_n2_seg ~= "" and not string.find(l_n2_seg, ","))
+    logMsg(string.format(
+        "FollowMe : add_new_taxinode_segment  seg=%d  N1=%d(seg='%s' deadend=%s)  N2=%d(seg='%s' deadend=%s)  newNode=%d",
+        in_segment_index,
+        t_segment[in_segment_index].Node1, l_n1_seg, tostring(l_n1_dead),
+        t_segment[in_segment_index].Node2, l_n2_seg, tostring(l_n2_dead),
+        l_new_node))
+
+    if l_n1_seg ~= "" then
         l_new_segment = #t_segment + 1
         t_segment[l_new_segment] = {}
         t_segment[l_new_segment].ID = "ADD_NEWSEGMENT"
@@ -5359,9 +5805,15 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment =
             t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment .. "," .. tostring(l_new_segment)
         t_taxinode[l_idx].Segment = tostring(l_new_segment)
+        logMsg(string.format("FollowMe :   N1 connected  N1(%d)→newNode(%d) newSeg=%d%s",
+            t_segment[l_new_segment].Node1, l_new_node, l_new_segment,
+            l_n1_dead and "  [DEAD-END FIX-A applied]" or ""))
+    else
+        logMsg(string.format("FollowMe :   N1(%d) SKIPPED Segment='' (pruned)",
+            t_segment[in_segment_index].Node1))
     end
 
-    if string.find(t_taxinode[t_segment[in_segment_index].Node2 + 1].Segment, ",") then
+    if l_n2_seg ~= "" then
         l_new_segment = #t_segment + 1
         t_segment[l_new_segment] = {}
         t_segment[l_new_segment].ID = "ADD_NEWSEGMENT"
@@ -5385,6 +5837,12 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         else
             t_taxinode[l_idx].Segment = t_taxinode[l_idx].Segment .. "," .. tostring(l_new_segment)
         end
+        logMsg(string.format("FollowMe :   N2 connected  newNode(%d)→N2(%d) newSeg=%d%s",
+            l_new_node, t_segment[l_new_segment].Node2, l_new_segment,
+            l_n2_dead and "  [DEAD-END FIX-A applied]" or ""))
+    else
+        logMsg(string.format("FollowMe :   N2(%d) SKIPPED Segment='' (pruned)",
+            t_segment[in_segment_index].Node2))
     end
     return l_new_node, l_new_segment
 end
@@ -5393,7 +5851,7 @@ end
 -- Function: auto_assign_gate
 -- Description:
 -- Randomly selects a gate suitable for the current aircraft type. Builds
--- a list of t_gate[] entries whose Types field contains Aircraft_Type,
+-- a list of t_gate[] entries whose Types field contains aircraft_Type,
 -- then picks one at random (randomised by os.time()). If no suitable gate
 -- exists (e.g. a GA plane at an airport with only heavy gates), falls
 -- back to a random gate from the full list and posts warning "-17". Also
@@ -5410,8 +5868,8 @@ function auto_assign_gate()
 
     t_suitable_gates = {}
     for l_index = 1, #t_gate do
-        if string.match(t_gate[l_index].Types, Aircraft_Type) == Aircraft_Type or
-                (Aircraft_Type == "0" and string.match(t_gate[l_index].Types, "7"))
+        if string.match(t_gate[l_index].Types, aircraft_Type) == aircraft_Type or
+                (aircraft_Type == "0" and string.match(t_gate[l_index].Types, "7"))
          then
             t_suitable_gates[#t_suitable_gates + 1] = l_index
         end
@@ -5425,7 +5883,7 @@ function auto_assign_gate()
     else
         arrival_gate = math.random(1, #t_gate)
         gatetext = t_gate[arrival_gate].ID
-        if (Err_Msg[1].text ~= nil and string.find(Err_Msg[1].text, "No suitable gate for this plane. Lift")) then
+        if (Err_Msg ~= nil and string.find(Err_Msg, "No suitable gate for this plane. Lift")) then
         else
             update_msg("-17")
         end
@@ -5471,98 +5929,25 @@ function check_gate()
 end
 
 -- ====================================================
--- Function: closed_window
--- Description:
--- FlyWithLua callback invoked when the main FollowMe control panel is
--- closed by the user (X button). Sets window_is_open = false so
--- handle_plugin_window() knows the window is gone and the auto-arrival
--- route logic can proceed without waiting for the window to close.
--- ====================================================
-function closed_window(wnd)
-    window_is_open = false
-end
-
--- ====================================================
--- Function: build_holder
--- Description:
--- imgui draw callback for the small "FM" badge floating window. Draws
--- the "FM" text and a circle: white when on the ground (service
--- available), grey with a red diagonal cross-bar when airborne (service
--- unavailable). On left-mouse release while on the ground, sets
--- toggle_window = true so handle_plugin_window() opens or closes the
--- main control panel on the next frame. Ignores the release event
--- immediately after the window was hidden (ignore_next_release counter)
--- to prevent a phantom re-open click.
--- ====================================================
-function build_holder(wnd, x, y)
-    local l_win_width = imgui.GetWindowWidth()
-    local l_win_height = imgui.GetWindowHeight()
-    local l_cx = l_win_width / 2
-    local l_cy = l_win_height / 2
-    local l_in_flight = (fm_gear1_gnd == 0 and fm_gear2_gnd == 0)
-
-    -- Text and circle: grey when in flight, white on ground
-    local l_color = l_in_flight and 0xFF666666 or 0xFFFFFFFF
-    local l_text = "FM"
-    local l_text_width, l_text_height = imgui.CalcTextSize(l_text)
-    imgui.SetCursorPos(l_cx - l_text_width / 2, l_cy - l_text_height / 2)
-    imgui.PushStyleColor(imgui.constant.Col.Text, l_color)
-    imgui.TextUnformatted(l_text)
-    imgui.PopStyleColor()
-    imgui.DrawList_AddCircle(l_cx, l_cy, 12, l_color)
-
-    -- Red diagonal bar when in flight (top-right to bottom-left, inside the circle)
-    if l_in_flight then
-        local l_r = 10
-        imgui.DrawList_AddLine(l_cx + l_r, l_cy - l_r, l_cx - l_r, l_cy + l_r, 0xFF0000FF, 2)
-    end
-
-    -- VER1.6 : drag mechanic removed - holder position is fixed at Win_Y = 400
-    -- DEBUG : log every mouse event on the holder (not every frame)
-    if imgui.IsMouseReleased(0) then
-        if ignore_next_release > 0 then
-            ignore_next_release = ignore_next_release - 1
-        elseif fm_gear1_gnd ~= 0 and fm_gear2_gnd ~= 0 then
-            if holder_drag < 2 then
-                toggle_window = true
-            end
-            holder_drag = 0
-        end
-    end
-end
-
--- ====================================================
--- Function: closed_holder
--- Description:
--- FlyWithLua callback invoked when the FM badge window is closed by the
--- user or by X-Plane. Currently a no-op placeholder; the badge is never
--- expected to be closed during normal operation since it is the only
--- access point to the main window.
--- ====================================================
-function closed_holder(wnd)
-end
-
--- ====================================================
 -- Function: load_config
 -- Description:
 -- Reads user preferences from Output/preferences/FollowMeXplane12.prf.
 -- Restores vol, car_type_fmcar, speed_limiter, random_gate, show_path,
 -- show_rampstart, simbrief_id, get_from_SimBrief, and all previously
 -- known aircraft ICAO-to-type mappings from the t_aircraft table.
--- If the current aircraft ICAO is found in the file, Aircraft_Type is
+-- If the current aircraft ICAO is found in the file, aircraft_Type is
 -- restored immediately. Returns "" on success with a known aircraft,
 -- "-1" if the aircraft type is not yet recorded (prompts the pilot to
 -- set it), or "-2" if the file does not exist yet (first run).
 -- ====================================================
 function load_config()
     -- VER1.6 : new preferences file FollowMeXplane12.prf
-    --          no more Win_Y (holder position is fixed)
     --          no more append logic - file is fully rewritten on save
     --          t_aircraft table keeps all known aircraft types in memory
     local l_file
     local l_line = ""
     local l_str1, l_str2 = "", ""
-    local l_aircraft_type = ""
+    local l_aircraft_Type = ""
 
     l_file = io.open(syspath .. "Output/preferences/FollowMeXplane12.prf", "r")
     if l_file == nil then
@@ -5574,23 +5959,7 @@ function load_config()
         if l_line then
             l_str1, l_str2 = string.match(l_line, "([%p%a%d]+)%S-(.*)")
             l_str2 = trim_str(l_str2)
-            if l_str1 == "get_from_SimBrief" then
-                get_from_SimBrief = (l_str2 == "1")
-            elseif l_str1 == "simbrief_id" then
-                simbrief_id = l_str2 or ""
-            elseif l_str1 == "show_path" then
-                show_path = (l_str2 == "1")
-            elseif l_str1 == "show_rampstart" then
-                rampstart_chg = true
-                show_rampstart = (l_str2 == "1")
-            elseif l_str1 == "random_gate" then
-                random_gate = (l_str2 == "1")
-            elseif l_str1 == "vol" then
-                vol = tonumber(l_str2)
-                set_sound_vol()
-            elseif l_str1 == "speed_limiter" then
-                speed_limiter = (l_str2 == "1")
-            elseif l_str1 == "car_type_fmcar" then
+            if l_str1 == "car_type_fmcar" then
                 if l_str2 == "Ferrari" then
                     car_type_fmcar = "Ferrari"
                 elseif l_str2 == "Van" then
@@ -5600,19 +5969,35 @@ function load_config()
                 elseif l_str2 == "Auto" then
                     car_type_fmcar = "Auto"
                 end
+            elseif l_str1 == "get_from_SimBrief" then
+                get_from_SimBrief = (l_str2 == "1")
+            elseif l_str1 == "random_gate" then
+                random_gate = (l_str2 == "1")
+            elseif l_str1 == "show_path" then
+                show_path = (l_str2 == "1")
+            elseif l_str1 == "show_rampstart" then
+                rampstart_chg = true
+                show_rampstart = (l_str2 == "1")
+            elseif l_str1 == "simbrief_id" then
+                simbrief_id = l_str2 or ""
+            elseif l_str1 == "speed_limiter" then
+                speed_limiter = (l_str2 == "1")
+            elseif l_str1 == "vol" then
+                vol = tonumber(l_str2)
+                set_sound_vol()
             elseif l_str1 ~= nil and l_str1 ~= "" then
                 -- VER1.6 : all other keys are aircraft ICAO types - store in t_aircraft table
                 t_aircraft[l_str1] = l_str2
                 if l_str1 == PLANE_ICAO then
-                    l_aircraft_type = l_str2
-                    Aircraft_Type = l_str2
+                    l_aircraft_Type = l_str2
+                    aircraft_Type = l_str2
                 end
             end
         end
     until not l_line
     l_file:close()
 
-    if l_aircraft_type ~= "" then
+    if l_aircraft_Type ~= "" then
         return ""
     else
         return "-1"
@@ -5650,7 +6035,7 @@ function save_config()
     l_content = l_content .. "get_from_SimBrief" .. "\t" .. (get_from_SimBrief and "1" or "0") .. "\n"
 
     -- VER1.6 : update current aircraft in t_aircraft table then write all known aircraft
-    t_aircraft[PLANE_ICAO] = Aircraft_Type
+    t_aircraft[PLANE_ICAO] = aircraft_Type
     for l_icao, l_type in pairs(t_aircraft) do
         l_content = l_content .. l_icao .. "\t" .. l_type .. "\n"
     end
@@ -5704,17 +6089,149 @@ function exit_plugin()
     unload_probe()
     XPLM.XPLMUnregisterDataAccessor(dr_sign)
     dr_sign = nil
+
+    if my_menu then
+        XPLM.XPLMClearAllMenuItems(my_menu)   -- Vide le sous-menu d'abord
+        XPLM.XPLMDestroyMenu(my_menu)          -- Détache le sous-menu de l'item parent
+        my_menu = nil
+    end
+
+    if plugins_menu and my_menu_item then
+        XPLM.XPLMRemoveMenuItem(plugins_menu, my_menu_item) -- Suprime FollowMe du menu
+        my_menu_item = nil
+    end
+end
+
+function Steffi_draw()
+
+	local pos_x = SCREEN_WIDTH / 2
+	local pos_y = SCREEN_HIGHT - 60
+
+	XPLMSetGraphicsState(0,0,0,1,1,0,0)
+
+
+	if we_fly then
+		draw_string_Helvetica_18(pos_x, pos_y, "NOUS SOMMES EN VOL")
+	else
+		draw_string_Helvetica_18(pos_x, pos_y, "NOUS SOMMES AU SOL")
+	end
+end
+
+function Steffi_says()
+    local pos = 250
+    local l_dist_to_target = 99999999
+
+    pos = big_bubble(20, pos,
+        "fm_car_active :" .. tostring(fm_car_active),
+        "followme_window_open :" .. tostring(followme_window_open),
+        "followme_wnd ~= nil :" .. tostring(followme_wnd ~= nil),
+        "navigation_window_open :" .. tostring(navigation_window_open),
+        "navigation_wnd ~= nil :" .. tostring(navigation_wnd ~= nil)
+        )
+
+    if t_node ~= nil and #t_node > 0 then
+        -- PAS de "local" ici : on écrit dans la variable déclarée au-dessus
+        _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
+    end
+
+    pos = 150
+    pos = big_bubble(20, pos,
+        "depart_arrive :"    .. depart_arrive,
+        "fm_arrived :"       .. fm_arrived,
+        "l_dist_to_target :" .. string.format("%.1f", l_dist_to_target),
+        "prepare_show_objects :" .. tostring(prepare_show_objects)
+        )
+
+    pos = 0
+    pos = big_bubble(20, pos,
+        "we_fly :"       .. tostring(we_fly),
+        "fm_gear1_gnd :"    .. fm_gear1_gnd,
+        "fm_gear2_gnd :"       .. fm_gear2_gnd,
+        "fm_new_flight :"       .. fm_new_flight,
+        "fm_gnd_spd > 60 :" .. tostring(((fm_gnd_spd * 1.94384) > 60))
+        )
 end
 
 -- ====================================================
--- MAIN SECTION (Initialization and flywithlua event
+-- Function: update_menu_state
+-- Description:
+-- Centralises enable/disable state for the two FollowMe menu items.
+--   item 0 "Follow Me Window"  : enabled only when at rest
+--                                (not we_fly, not fm_car_active,
+--                                 no window currently open).
+--   item 1 "Navigation Window" : always disabled in the Plugins menu
+--                                (opened only from within the FM interface).
+-- Called from: show_followme_window(), closed_followme_window(),
+-- closed_navigation_window(), full_reset(), and on every
+-- we_fly / fm_car_active state change in handle_plugin_window().
 -- ====================================================
+function update_menu_state()
+    if my_menu == nil then return end
+
+    -- Follow Me Window : actif uniquement quand tout est au repos
+    local fm_available = (not we_fly)
+                     and (not fm_car_active)
+                     and (followme_wnd == nil)
+                     and (navigation_wnd == nil)
+    XPLM.XPLMEnableMenuItem(my_menu, 0, fm_available and 1 or 0)
+
+    -- Navigation Window : actif uniquement si FM en cours ET fenêtre pas déjà ouverte
+    -- (permet de la rouvrir si l'utilisateur l'a fermée avec le bouton rouge)
+    local nav_available = (not we_fly)
+                      and fm_car_active
+                      and (navigation_wnd == nil)
+    XPLM.XPLMEnableMenuItem(my_menu, 1, nav_available and 1 or 0)
+end
+
+-- =====================================================
+-- = MAIN SECTION (Initialization and flywithlua event =
+-- =====================================================
 XPLM.XPLMGetSystemPath(char_str)
 syspath = ffi.string(char_str)
 
+-- =================
+-- = Prepare menus =
+-- =================
+-- Callback appelé quand l'utilisateur clique sur un item
+
+menu_handler = ffi.cast("XPLMMenuHandler_f", function(inMenuRef, inItemRef)
+    local item = tonumber(ffi.cast("intptr_t", inItemRef))
+    if we_fly then
+    else
+	    if item == 0 and followme_wnd == nil then
+	        followme_window_open = true
+	        navigation_window_open = false
+	    	show_followme_window()
+	    	hide_navigation_window()
+	    elseif item == 1 and navigation_wnd == nil then
+	        followme_window_open = false
+	        navigation_window_open = true
+	        hide_followme_window()
+	        show_navigation_window()
+	    end
+    end
+end)
+
+-- Trouver le menu Plugins (parent)
+plugins_menu = XPLM.XPLMFindPluginsMenu()
+
+-- Créer ton sous-menu sous "Plugins"
+my_menu_item = XPLM.XPLMAppendMenuItem(plugins_menu, "FollowMe", nil, 0)
+my_menu = XPLM.XPLMCreateMenu("FollowMe", plugins_menu, my_menu_item, menu_handler, nil)
+
+-- Ajouter des items (le 3e arg = inItemRef, castée en pointeur pour identifier l'item)
+XPLM.XPLMAppendMenuItem(my_menu, "Follow Me Window", ffi.cast("void*", 0), 0)
+XPLM.XPLMAppendMenuItem(my_menu, "Navigation Window", ffi.cast("void*", 1), 0)
+update_menu_state(0)  -- VER2.13: état initial des menus au chargement
+
+-- ========================
+-- = Other initialization =
+-- ========================
 register_dataref()
 load_probe()
 
 do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
+do_every_draw("Steffi_draw()")
 do_on_exit("exit_plugin()")
+do_every_draw("Steffi_says()")

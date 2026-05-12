@@ -1,0 +1,14 @@
+https://ttsmaker.com/
+2599 - christ-🇺🇸united states male
+
+https://www.text-to-speech.online/
+Christopher - US
+
+arrived : Ground to cockpit, we have arrived
+followme : Ground to cockpit, follow me
+keep_your_speed_20kts : Please keep your speed at 20 knots
+safe_flight_goodbye : Have a safe flight, Goodbye
+slow_down : Slow down, we are almost there
+sound_test : Ground to cockpit, this is a sound test
+welcome_followme : Ground to cockpit, welcome, follow me
+welcome_again_goodbye : Welcome once again, Goodbye

@@ -328,9 +328,9 @@ end
 
 local snd_arrived = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/arrived.wav")
 local snd_followme = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/followme.wav")
-local snd_safeflight_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safeflight_goodbye.wav")
+local snd_safe_flight_goodbye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safe_flight_goodbye.wav")
 local snd_welcome = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_followme.wav")
-local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcomeagain_goodbye.wav")
+local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_again_goodbye.wav")
 -- VER1.6 fix : speed warning sound (played when aircraft exceeds 20 kts and speed_limiter is active)
 local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/KeepYourSpeed20Kts.wav")
 
@@ -1909,7 +1909,7 @@ function initialise_routes()
     if #t_node > 0 then
         if depart_arrive == 1 and t_node[curr_node].hotzone == "1" and curr_node >= #t_node - 2 
                     and flightstart ~= 9999 and not kill_is_manual then
-                play_sound(snd_safeflight_bye)
+                play_sound(snd_safe_flight_goodbye)
         elseif depart_arrive == 2 and curr_node == #t_node then
                  play_sound(snd_welcome_bye)
         end  
@@ -2675,7 +2675,7 @@ end
 function set_sound_vol ()
     set_sound_gain(snd_arrived, vol/10)
     set_sound_gain(snd_followme, vol/10)
-    set_sound_gain(snd_safeflight_bye, vol/10)
+    set_sound_gain(snd_safe_flight_goodbye, vol/10)
     set_sound_gain(snd_welcome, vol/10)
     set_sound_gain(snd_welcome_bye, vol/10)
     set_sound_gain(snd_keep_speed, vol/10)  -- VER1.6 fix : speed warning
@@ -2713,7 +2713,7 @@ function update_msg(in_msg)
       if depart_arrive == 1 then play_sound(snd_followme) else play_sound(snd_welcome) end   
     elseif in_msg == "7" then
       in_msg = "Have a safe flight !"
-      play_sound(snd_safeflight_bye)
+      play_sound(snd_safe_flight_goodbye)
     elseif in_msg == "5" then
       in_msg = "Arrived at destination"        
       play_sound(snd_arrived) 

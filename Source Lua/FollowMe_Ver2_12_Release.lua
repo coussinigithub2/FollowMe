@@ -567,9 +567,9 @@ dataref("fm_plane_head", "sim/flightmodel/position/psi", "readonly")
 
 local snd_arrived = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/arrived.wav")
 local snd_followme = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/followme.wav")
-local snd_safeflight_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safeflight_goodbye.wav")
+local snd_safe_flight_goodbye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safe_flight_goodbye.wav")
 local snd_welcome = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_followme.wav")
-local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcomeagain_goodbye.wav")
+local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_again_goodbye.wav")
 -- VER1.6 fix : speed warning sound (played when aircraft exceeds 20 kts and speed_limiter is active)
 local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/keep_your_speed_20kts.wav")
 -- VER2.0 : Add a sound test file. Much clearer.
@@ -632,8 +632,8 @@ local play_text = ""
 -- VER1.6 fix : cooldown timer to avoid repeating speed warning every frame
 local speed_warn_time = 0
 
-local car_timer = 0
-local car_timer_last = 0
+local fm_car_completed_timer = 0
+local last_fm_car_completed_timer = 0
 
 -- MENUS Variables
 local menu_handler = nil
@@ -3350,8 +3350,8 @@ function handle_plugin_window()
             unload_rampstart()
             rampstart_chg = false
             kill_is_manual = false
-			car_timer = 0
-			car_timer_last = 0
+			fm_car_completed_timer = 0
+			last_fm_car_completed_timer = 0
 			fm_arrived = 0
             -- VER1.9 : say goodbye when user manually cancels
             update_msg("7")
@@ -4136,6 +4136,18 @@ function build_navigation_window(wnd, x, y)
 
     float_wnd_set_title(navigation_wnd, navigation_title)
 
+    -- Timer for the completed ride
+    if fm_arrived ~= 0 then
+	    if fm_car_completed_timer < 7 then
+	        if fm_run_time >= last_fm_car_completed_timer + 1 then
+		        fm_car_completed_timer = fm_car_completed_timer + 1
+		        last_fm_car_completed_timer = fm_run_time
+		    end
+		end
+	end
+
+	local fm_ti = fm_car_completed_timer
+
     if fm_car_active then
 	    -- Dark green (RGBA hex)
 	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
@@ -4213,10 +4225,11 @@ function build_navigation_window(wnd, x, y)
         end
         imgui.SameLine()
         imgui.SetCursorPosX(240+d+40)
+		text_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
         if depart_arrive ~= 0 and fm_arrived == 0 then
         	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
     	else
-        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
+        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
     	end
         imgui.TextUnformatted("Target")
         imgui.PopStyleColor()
@@ -4225,8 +4238,9 @@ function build_navigation_window(wnd, x, y)
         if depart_arrive ~= 0 and fm_arrived == 0 then
         	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
     	else
-        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
+        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
     	end
+
         if l_dist_dest >= 1000 then
             imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
         else
@@ -4241,20 +4255,14 @@ function build_navigation_window(wnd, x, y)
 	if (fm_car_active and car_x ~= 0) or fm_arrived ~= 0 then
 
 	    -- 1. Déterminer la cible et la couleur selon la condition
-	    local target_x, target_z, triangle_color, fm_ti
+	    local target_x, target_z, triangle_color
 
 	    -- Ici on affiche un triangle vert pour le reste de la course pour orienter l'avion
 	    if fm_arrived ~= 0 then
-		    if car_timer > 6 then
+		    if fm_ti > 6 then
 		        unload_object()
-		    else
-			    if fm_run_time >= car_timer_last + 1 then
-			        car_timer = car_timer + 1
-			        car_timer_last = fm_run_time
-			    end
 			end
 
-			fm_ti = car_timer
 			triangle_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
 			if fm_arrived == 1 then
 		        -- Cas "Arrivé" : Cible le dernier noeud et couleur VERTE
@@ -4400,7 +4408,7 @@ end
 function set_sound_vol()
     set_sound_gain(snd_arrived, vol / 10)
     set_sound_gain(snd_followme, vol / 10)
-    set_sound_gain(snd_safeflight_bye, vol / 10)
+    set_sound_gain(snd_safe_flight_goodbye, vol / 10)
     set_sound_gain(snd_welcome, vol / 10)
     set_sound_gain(snd_welcome_bye, vol / 10)
 	-- VER1.6 fix : speed warning
@@ -4473,7 +4481,7 @@ function update_msg(in_msg)
         end
     elseif in_msg == "7" then
     	if depart_arrive == 1 then
-	        play_sound(snd_safeflight_bye)
+	        play_sound(snd_safe_flight_goodbye)
     	else
 	        play_sound(snd_welcome_bye)
 	    end
@@ -6094,11 +6102,9 @@ function Steffi_says()
 
     pos = big_bubble(20, pos,
         "fm_car_active :" .. tostring(fm_car_active),
-        "car_x :"        .. car_x,
-        "car_timer :"    .. car_timer,
-        "fm_run_time :"  .. fm_run_time,
-        "car_timer_last :".. car_timer_last,
-        "navigation_wnd : ".. tostring(navigation_wnd ~= nil)
+        "show_path :"        .. tostring(show_path),
+        "show_rampstart :"        .. tostring(show_rampstart),
+        "#t_node > 0 :"    .. tostring(#t_node > 0)
         )
 
     if t_node ~= nil and #t_node > 0 then

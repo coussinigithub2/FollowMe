@@ -554,9 +554,9 @@ end
 
 local snd_arrived = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/arrived.wav")
 local snd_followme = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/followme.wav")
-local snd_safeflight_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safeflight_goodbye.wav")
+local snd_safe_flight_goodbye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/safe_flight_goodbye.wav")
 local snd_welcome = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_followme.wav")
-local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcomeagain_goodbye.wav")
+local snd_welcome_bye = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/welcome_again_goodbye.wav")
 -- VER1.6 fix : speed warning sound (played when aircraft exceeds 20 kts and speed_limiter is active)
 local snd_keep_speed = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/keep_your_speed_20kts.wav")
 -- VER2.0 : Add a sound test file. Much clearer.
@@ -4335,7 +4335,7 @@ end
 function set_sound_vol()
     set_sound_gain(snd_arrived, vol / 10)
     set_sound_gain(snd_followme, vol / 10)
-    set_sound_gain(snd_safeflight_bye, vol / 10)
+    set_sound_gain(snd_safe_flight_goodbye, vol / 10)
     set_sound_gain(snd_welcome, vol / 10)
     set_sound_gain(snd_welcome_bye, vol / 10)
 	-- VER1.6 fix : speed warning
@@ -4408,7 +4408,7 @@ function update_msg(in_msg)
         end
     elseif in_msg == "7" then
     	if depart_arrive == 1 then
-	        play_sound(snd_safeflight_bye)
+	        play_sound(snd_safe_flight_goodbye)
     	else
 	        play_sound(snd_welcome_bye)
 	    end
