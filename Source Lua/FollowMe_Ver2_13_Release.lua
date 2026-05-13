@@ -3791,7 +3791,7 @@ function build_followme_window(wnd, x, y)
 	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
 
 	    imgui.SetCursorPosY(178)
-	    imgui.SetCursorPosX(10)
+	    imgui.SetCursorPosX(8)
 
 	    if imgui.Button("N", 22, 20) then
 	    	toggle_window = true
@@ -4173,6 +4173,46 @@ function build_navigation_window(wnd, x, y)
 
 	local fm_ti = fm_car_completed_timer
 
+	--=====================================================
+	-- VER 2.10 : TRIANGLES LATERAUX car_sign (gauche / droite)
+	-- Triangle équilatéral pointant vers la gauche  (côté gauche)
+	-- Triangle équilatéral pointant vers la droite  (côté droit)
+	-- car_sign == 0 : gauche NOIR,  droite NOIR
+	-- car_sign == 1 : gauche ROUGE, droite ROUGE
+	-- car_sign == 2 : gauche NOIR,  droite ROUGE
+	-- car_sign == 3 : gauche ROUGE, droite NOIR
+	--=====================================================
+	local nav_color_left, nav_color_right
+	if car_sign == 1 or car_sign == 0 or not fm_car_active then
+		nav_color_left  = DARK_GRAY   -- Rouge
+	    nav_color_right = DARK_GRAY   -- Rouge
+	elseif car_sign == 2 then
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = RED   -- Rouge
+	elseif car_sign == 3 then
+	    nav_color_left  = RED   -- Rouge
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	else
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	end
+
+	if math.floor(fm_run_time) % 2 == 0 then
+	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
+	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
+	end
+
+	-- Dimensions du triangle équilatéral
+	-- side = 20, hauteur h = side * sqrt(3)/2 ≈ 17.3
+	local nav_side = 20
+	local nav_h    = nav_side * math.sqrt(3) / 2
+	local nav_half = nav_side / 2
+	local nav_mid_y = 17
+
+--------------------
+
+   local pos_x_begin_at = 8
+
     if fm_car_active then
 	    -- Dark green (RGBA hex)
 	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
@@ -4182,7 +4222,7 @@ function build_navigation_window(wnd, x, y)
 	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
 
 	    imgui.SetCursorPosY(7)
-	    imgui.SetCursorPosX(8)
+	    imgui.SetCursorPosX(pos_x_begin_at)
 
 	    if imgui.Button("F", 22, 20) then
 	    	toggle_window = true
@@ -4191,11 +4231,23 @@ function build_navigation_window(wnd, x, y)
 	    imgui.PopStyleColor(3)
     end
 
-    -- VER1.6 : Speed display zone - reserved read-only row below button
-    local d = 70
+---------------------
+
+	-- Triangle GAUCHE (pointe vers la gauche)
+	local nav_lc_x   = pos_x_begin_at + 48 + nav_h / 2
+	local nav_lg_tip_x = nav_lc_x - nav_h / 2
+	local nav_lg_top_x = nav_lc_x + nav_h / 2
+	local nav_lg_bot_x = nav_lc_x + nav_h / 2
+	imgui.DrawList_AddTriangleFilled(
+	    nav_lg_tip_x, nav_mid_y,
+	    nav_lg_top_x, nav_mid_y - nav_half,
+	    nav_lg_bot_x, nav_mid_y + nav_half,
+	    nav_color_left)
+
+---------------------
 
     imgui.SetCursorPosY(11)
-    imgui.SetCursorPosX(8+d)
+    imgui.SetCursorPosX(pos_x_begin_at + 78)
     if fm_car_active and depart_arrive ~= 0 and fm_arrived == 0 then
     	imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
 	else
@@ -4203,8 +4255,11 @@ function build_navigation_window(wnd, x, y)
 	end
     imgui.TextUnformatted("GND SPD")
     imgui.PopStyleColor()
+
+---------------------
+
     imgui.SameLine()
-    imgui.SetCursorPosX(68+d)
+    imgui.SetCursorPosX(pos_x_begin_at + 135)
     if fm_car_active and depart_arrive ~= 0 and fm_arrived == 0 then
         local l_plane_kts = fm_gnd_spd * 1.94384
         local l_spd_color = (speed_limiter and l_plane_kts > 20) and RED or GREEN
@@ -4216,8 +4271,11 @@ function build_navigation_window(wnd, x, y)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
+
+---------------------
+
     imgui.SameLine()
-    imgui.SetCursorPosX(131+d)
+    imgui.SetCursorPosX(pos_x_begin_at + 201)
     if fm_car_active and  depart_arrive ~= 0 and fm_arrived == 0 then
     	imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
 	else
@@ -4225,8 +4283,11 @@ function build_navigation_window(wnd, x, y)
 	end
     imgui.TextUnformatted("FM Car")
     imgui.PopStyleColor()
+
+---------------------
+
     imgui.SameLine()
-    imgui.SetCursorPosX(179+d)
+    imgui.SetCursorPosX(pos_x_begin_at + 249)
     if fm_car_active and depart_arrive ~= 0 and fm_arrived == 0 then
         local l_car_kts = car_speed * 1.94384
         imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
@@ -4238,45 +4299,7 @@ function build_navigation_window(wnd, x, y)
         imgui.PopStyleColor()
     end
 
-    -- VER2.5 : Distance to destination (runway threshold for departure, gate for arrival)
-    if #t_node > 0 then
-    	local l_dist_dest = 0
-    	if depart_arrive == 1 then
-        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_node[#t_node].x, t_node[#t_node].z)
-        end
-    	if depart_arrive == 2 then
-        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_gate[arrival_gate].x, t_gate[arrival_gate].z)
-        end
-        imgui.SameLine()
-        imgui.SetCursorPosX(240+d+40)
-		text_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
-        if depart_arrive ~= 0 and fm_arrived == 0 then
-        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
-    	else
-        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
-    	end
-        imgui.TextUnformatted("Target")
-        imgui.PopStyleColor()
-        imgui.SameLine()
-        imgui.SetCursorPosX(289+d+40)
-        if depart_arrive ~= 0 and fm_arrived == 0 then
-        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
-    	else
-        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
-    	end
-
-    	-- In case we are arrived and we want to fly the following message not appears
-		if math.floor(l_dist_dest + 0.5) == 300 and fm_arrived == 0 then
-	        play_sound(snd_slow_down)
-		end
-
-        if l_dist_dest >= 1000 then
-            imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
-        else
-            imgui.TextUnformatted(string.format("%d m", math.floor(l_dist_dest + 0.5)))
-        end
-        imgui.PopStyleColor()
-    end
+---------------------
 
 	--=====================================================
 	-- VER 2.0 & 2.8 : ARROW POINTER (Triangle)
@@ -4316,7 +4339,7 @@ function build_navigation_window(wnd, x, y)
 	    while l_rel_angle >= 360 do l_rel_angle = l_rel_angle - 360 end
 
 	    -- Paramètres de dessin
-	    local cx, cy    = 255+d, 18
+	    local cx, cy    = (pos_x_begin_at + 320), 18
 	    local tip_len   = 13
 	    local wing_len  = 8
 	    local tail_len  = 6
@@ -4340,62 +4363,49 @@ function build_navigation_window(wnd, x, y)
 	    imgui.DrawList_AddTriangleFilled(tip_x, tip_y, lw_x, lw_y, rw_x, rw_y, triangle_color)
 	end
 
-	--=====================================================
-	-- VER2.11 debug : log seulement quand car_sign change (1 ligne par transition)
-	if car_sign ~= last_car_sign then
-	    logMsg(string.format(
-	        "FollowMe NAV_WND car_sign CHANGED  old=%d  new=%d  curr_node=%d  #t_node=%d  fm_arrived=%s  fm_car_active=%s",
-	        last_car_sign, car_sign, curr_node, #t_node,
-	        tostring(fm_arrived), tostring(fm_car_active)))
-	    last_car_sign = car_sign
-	end
+---------------------
 
-	--=====================================================
-	-- VER 2.10 : TRIANGLES LATERAUX car_sign (gauche / droite)
-	-- Triangle équilatéral pointant vers la gauche  (côté gauche)
-	-- Triangle équilatéral pointant vers la droite  (côté droit)
-	-- car_sign == 0 : gauche NOIR,  droite NOIR
-	-- car_sign == 1 : gauche ROUGE, droite ROUGE
-	-- car_sign == 2 : gauche NOIR,  droite ROUGE
-	-- car_sign == 3 : gauche ROUGE, droite NOIR
-	--=====================================================
-	local nav_color_left, nav_color_right
-	if car_sign == 1 or car_sign == 0 or not fm_car_active then
-		nav_color_left  = DARK_GRAY   -- Rouge
-	    nav_color_right = DARK_GRAY   -- Rouge
-	elseif car_sign == 2 then
-	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
-	    nav_color_right = RED   -- Rouge
-	elseif car_sign == 3 then
-	    nav_color_left  = RED   -- Rouge
-	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
-	else
-	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
-	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
-	end
+    -- VER2.5 : Distance to destination (runway threshold for departure, gate for arrival)
+    if #t_node > 0 then
+    	local l_dist_dest = 0
+    	if depart_arrive == 1 then
+        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_node[#t_node].x, t_node[#t_node].z)
+        end
+    	if depart_arrive == 2 then
+        	_, l_dist_dest = heading_n_dist(fm_plane_x, fm_plane_z, t_gate[arrival_gate].x, t_gate[arrival_gate].z)
+        end
+        imgui.SameLine()
+        imgui.SetCursorPosX(pos_x_begin_at + 342)
+		text_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
+        if depart_arrive ~= 0 and fm_arrived == 0 then
+        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
+    	else
+        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
+    	end
+        imgui.TextUnformatted("Target")
+        imgui.PopStyleColor()
+        imgui.SameLine()
+        imgui.SetCursorPosX(pos_x_begin_at + 391)
+        if depart_arrive ~= 0 and fm_arrived == 0 then
+        	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
+    	else
+        	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
+    	end
 
-	if math.floor(fm_run_time) % 2 == 0 then
-	    nav_color_left  = DARK_GRAY   -- Noir (gris foncé visible)
-	    nav_color_right = DARK_GRAY   -- Noir (gris foncé visible)
-	end
+    	-- In case we are arrived and we want to fly the following message not appears
+		if math.floor(l_dist_dest + 0.5) == 300 and fm_arrived == 0 then
+	        play_sound(snd_slow_down)
+		end
 
-	-- Dimensions du triangle équilatéral
-	-- side = 20, hauteur h = side * sqrt(3)/2 ≈ 17.3
-	local nav_side = 20
-	local nav_h    = nav_side * math.sqrt(3) / 2
-	local nav_half = nav_side / 2
-	local nav_mid_y = 17
+        if l_dist_dest >= 1000 then
+            imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
+        else
+            imgui.TextUnformatted(string.format("%d m", math.floor(l_dist_dest + 0.5)))
+        end
+        imgui.PopStyleColor()
+    end
 
-	-- Triangle GAUCHE (pointe vers la gauche)
-	local nav_lc_x   = 48 + nav_h / 2
-	local nav_lg_tip_x = nav_lc_x - nav_h / 2
-	local nav_lg_top_x = nav_lc_x + nav_h / 2
-	local nav_lg_bot_x = nav_lc_x + nav_h / 2
-	imgui.DrawList_AddTriangleFilled(
-	    nav_lg_tip_x, nav_mid_y,
-	    nav_lg_top_x, nav_mid_y - nav_half,
-	    nav_lg_bot_x, nav_mid_y + nav_half,
-	    nav_color_left)
+---------------------
 
 	-- Triangle DROIT (pointe vers la droite)
 	local nav_rc_x   = 495 - 8 - nav_h / 2
