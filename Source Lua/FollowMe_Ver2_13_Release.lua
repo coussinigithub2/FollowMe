@@ -480,7 +480,7 @@ local prepare_kill_objects = false
 local kill_is_manual = false
 
 local init_load = 0
-local window_first_access = false
+local window_first_access = true
 local fm_car_active = false
 
 local depart_arrive = 0
@@ -3264,7 +3264,6 @@ function initialise_routes()
 	-- VER1.8
     backtaxi = false
     fm_arrived = 0  -- VER2.6
-    window_first_access = true
 end
 
 -- ====================================================
@@ -3431,7 +3430,6 @@ function show_followme_window()
 
 	followme_title = "Follow Me Window"
 
-    window_first_access = true
     -- 490 est la hauteur
 
 	local pos_x = (SCREEN_WIDTH - 490) / 2
@@ -3498,31 +3496,14 @@ function build_followme_window(wnd, x, y)
         window_first_access = false
     end
 
+------------------------------
+
     ------------------------------------------------------------------------------------------
     -- Begining : Disable the Departure and Arival to avoid selection when FM car is active --
     ------------------------------------------------------------------------------------------
-    if fm_car_active or #t_runway == 0 then
-		imgui.PushStyleVar(imgui.constant.StyleVar.Alpha, 0.7)
-		imgui.PushStyleVar(imgui.constant.StyleVar.WindowBorderSize, 0)
-		imgui.SetNextWindowPos(0, 68)
-
-		if fm_car_active then
-		    imgui.SetNextWindowSize(405, 108)
-		else
-		    imgui.SetNextWindowSize(405, 170)
-		    imgui.SetNextWindowFocus()
-		end
-
-		if imgui.Begin("##Disabled", nil, l_flags) then
-		    imgui.End()
-		end
-
-		imgui.PopStyleVar()
-		imgui.PopStyleVar()
-    end
-    -----------------------------------------------------------------------------------------
-    -- Endding : Disable the Departure and Arival to avoid selection when FM car is active --
-    -----------------------------------------------------------------------------------------
+	if fm_car_active or #t_runway == 0 then
+	    imgui.BeginDisabled()
+	end
 
 ------------------------------
 
@@ -3792,6 +3773,34 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
+    -----------------------------------------------------------------------------------------
+    -- Endding : Disable the Departure and Arival to avoid selection when FM car is active --
+    -----------------------------------------------------------------------------------------
+
+	if fm_car_active or #t_runway == 0 then
+	    imgui.EndDisabled()
+	end
+------------------------------
+
+    if fm_car_active then
+	    -- Dark green (RGBA hex)
+	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
+	    -- Lighter green on hover
+	    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, RED)
+	    -- Green when clicked
+	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
+
+	    imgui.SetCursorPosY(178)
+	    imgui.SetCursorPosX(10)
+
+	    if imgui.Button("N", 22, 20) then
+	    	toggle_window = true
+	    end
+
+	    imgui.PopStyleColor(3)
+    end
+------------------------------
+
     imgui.SetCursorPosY(176)
     imgui.SetCursorPosX(48)
 
@@ -3958,6 +3967,7 @@ function build_followme_window(wnd, x, y)
 	imgui.SetCursorPosX(220)
 	if imgui.Button("Save Preferences", 130, 25) then
 	    l_err = save_config()
+	    return
 	end
 
 	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
@@ -4174,9 +4184,8 @@ function build_navigation_window(wnd, x, y)
 	    imgui.SetCursorPosY(7)
 	    imgui.SetCursorPosX(8)
 
-	    if imgui.Button("X", 22, 20) then
-	        prepare_kill_objects = true
-	        kill_is_manual = true
+	    if imgui.Button("F", 22, 20) then
+	    	toggle_window = true
 	    end
 
 	    imgui.PopStyleColor(3)
@@ -6123,6 +6132,7 @@ function Steffi_says()
 
     pos = big_bubble(20, pos,
         "fm_car_active :" .. tostring(fm_car_active),
+        "#t_runway == 0 :" .. tostring(#t_runway == 0),
         "followme_window_open :" .. tostring(followme_window_open),
         "followme_wnd ~= nil :" .. tostring(followme_wnd ~= nil),
         "navigation_window_open :" .. tostring(navigation_window_open),
