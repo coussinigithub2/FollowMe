@@ -650,12 +650,14 @@ local speed_warn_time = 0
 
 local fm_car_completed_timer = 0
 local last_fm_car_completed_timer = 0
+local combo_filter_list = false
 
 -- MENUS Variables
 local menu_handler = nil
 local plugins_menu = nil
 local my_menu_item = nil
 local my_menu = nil
+
 
 -- VER1.5 : SimBrief functions
 -- ====================================================
@@ -735,7 +737,7 @@ end
 -- that have a valid taxiway route at the current airport). If found,
 -- sets depart_runway so the pilot does not have to pick it manually.
 -- If not found (e.g. the SimBrief runway has no route in apt.dat),
--- clears depart_runway and posts error -19 to the status bar.
+-- clears depart_runway and posts error -30 to the status bar.
 -- Called automatically after check_SimBrief() and whenever the pilot
 -- toggles between Departure and Arrival mode.
 -- ====================================================
@@ -774,7 +776,7 @@ function apply_simbrief_runway()
     else
         -- SimBrief runway has no defined route
         depart_runway = ""
-        update_msg("-19")
+        update_msg("-30")
     end
 end
 
@@ -3472,7 +3474,7 @@ end
 -- in real time from the current bearing to the car.
 -- ====================================================
 function build_followme_window(wnd, x, y)
-    local l_err = ""
+    local l_err = "0" -- No error
     local l_is_selected = false
     local l_changed = false
     local l_newtext = ""
@@ -3517,8 +3519,6 @@ function build_followme_window(wnd, x, y)
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_origin_icao ~= "" then
         imgui.TextUnformatted(sb_origin_icao .. " " .. string.format("%-3s", sb_runway_takeoff) .. " " .. sb_origin_name)
     else
-        -- Fallback: display current sim airport
-
         imgui.TextUnformatted(curr_ICAO .. " " .. curr_ICAO_name)
     end
 
@@ -3578,10 +3578,6 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    --=====================================================
-    -- Allow selection for Departure & Arrival
-    -- Show "Request Follow Me Car" button or "Cancel Follow Me Car"
-    --=====================================================
     imgui.SetCursorPosY(82)
     imgui.SetCursorPosX(18)
     if imgui.RadioButton(" Departure", depart_arrive == 1, false) then
@@ -3644,8 +3640,6 @@ function build_followme_window(wnd, x, y)
             -- Trigger SimBrief fetch if ID is configured
             if simbrief_id ~= "" then
                 check_SimBrief()
-            else
-                update_msg("-20") -- No SimBrief ID configured
             end
         else
             depart_runway = ""
@@ -3654,6 +3648,37 @@ function build_followme_window(wnd, x, y)
 
     imgui.SameLine()
     imgui.TextUnformatted("Use SimBrief data")
+
+------------------------------
+
+    imgui.SetCursorPosY(315)
+    imgui.SetCursorPosX(18)
+
+    if simbrief_id == "" then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted("No SimBrief ID configured")
+	          imgui.PopStyleColor()
+    elseif sb_fetch_status == "OK" then
+        if get_from_SimBrief then
+            if sb_airport_mismatch then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted("The current airport does not match the Simbrief data")
+	          imgui.PopStyleColor()
+            else
+	          imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+	          imgui.TextUnformatted("SimBrief data fetched successfully")
+	          imgui.PopStyleColor()
+            end
+        end
+    elseif sb_fetch_status == "LOADING" then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted("Fetching SimBrief data...")
+	          imgui.PopStyleColor()
+    elseif sb_fetch_status == "ERROR" then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted("SimBrief fetch error")
+	          imgui.PopStyleColor()
+    end
 
 ------------------------------
 
@@ -3725,7 +3750,7 @@ function build_followme_window(wnd, x, y)
                 end
             end
             if #t_suitable_gates == 0 then
-				l_err = (Err_Msg ~= nil) and "" or "-17"
+                update_msg("-17")
                 for i = 1, #t_gate do
                     t_suitable_gates[#t_suitable_gates + 1] = i
                 end
@@ -3894,13 +3919,13 @@ function build_followme_window(wnd, x, y)
     imgui.SetCursorPosX(126)
 
     if not fm_car_active then
-        if imgui.Button("Request Follow Me Car", 170, 25) then
-            combo_filter_list = false
-			l_err = (Err_Msg ~= nil) and "" or determine_XP_route()
-            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-                prepare_show_objects = true
-            end
-        end
+		if imgui.Button("Request Follow Me Car", 170, 25) then
+		    combo_filter_list = false
+		    l_err = determine_XP_route()
+		    if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
+		        prepare_show_objects = true
+		    end
+		end
     else
         if imgui.Button("Cancel Follow Me Car", 170, 25) then
             prepare_kill_objects = true
@@ -3910,10 +3935,10 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    -- Affichage du message unique Err_Msg à la place du message directionnel
-    if Err_Msg ~= "" and Err_Msg ~= nil then
+    -- Affichage du message Simbrief
+    if Err_Msg ~= "" and Err_Msg ~= nil and sb_fetch_status ~= "OK" and sb_fetch_status ~= "" then
+	    imgui.SetCursorPosY(310)
 	    imgui.SetCursorPosX(18)
-	    imgui.SetCursorPosY(314)
 	    if Err_Msg_color == "RED" then
 	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
 	    else
@@ -3921,16 +3946,18 @@ function build_followme_window(wnd, x, y)
 	    end
 	    imgui.TextUnformatted(Err_Msg)
 	    imgui.PopStyleColor()
+	    Err_Msg = ""
     end
 
 ------------------------------
 
-    imgui.SetCursorPosY(336)
+    local remonte = 0
+    imgui.SetCursorPosY(336+remonte)
     imgui.SetCursorPosX(4)
     imgui.PushStyleColor(0, DARK_GRAY)
     imgui.TextUnformatted("__________________                    __________________")
     imgui.PopStyleColor()
-    imgui.SetCursorPosY(339)
+    imgui.SetCursorPosY(339+remonte)
     imgui.SetCursorPosX(4)
     imgui.PushStyleColor(0, BLUE)
     imgui.TextUnformatted("                  OPTIONS & PREFERENCES")
@@ -3938,7 +3965,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(358)
+    imgui.SetCursorPosY(358+remonte)
     imgui.SetCursorPosX(18)
     l_changed, l_newval = imgui.Checkbox("##Limit Car Speed", speed_limiter)
     if l_changed then
@@ -3955,7 +3982,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(383)
+    imgui.SetCursorPosY(383+remonte)
     imgui.SetCursorPosX(18)
     l_changed, l_newval = imgui.Checkbox(" Show Path", show_path)
     if l_changed then
@@ -3969,7 +3996,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(383)
+    imgui.SetCursorPosY(383+remonte)
     imgui.SetCursorPosX(200)
     l_changed, l_newval = imgui.Checkbox(" Show Ramp Start", show_rampstart)
     if l_changed then
@@ -3983,7 +4010,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-	imgui.SetCursorPosY(418)
+	imgui.SetCursorPosY(418+remonte)
     imgui.SetCursorPosX(18)
     imgui.PushStyleColor(0, BLUE)
     imgui.TextUnformatted("Volume setting")
@@ -3991,7 +4018,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(443)
+    imgui.SetCursorPosY(443+remonte)
     imgui.SetCursorPosX(18)
     imgui.PushItemWidth(150)
     l_changed, l_newval = imgui.SliderFloat("##Vol", vol, 1, 10, "%.0f")
@@ -4000,7 +4027,7 @@ function build_followme_window(wnd, x, y)
         vol = l_newval
         set_sound_vol()
     end
-    imgui.SetCursorPosY(440)
+    imgui.SetCursorPosY(440+remonte)
     imgui.SetCursorPosX(240)
     if imgui.Button("Test Volume", 90, 25) then
         play_sound(snd_test)
@@ -4009,10 +4036,10 @@ function build_followme_window(wnd, x, y)
 ------------------------------
 
     -- VER1.5 : SimBrief ID row
-    imgui.SetCursorPosY(482)
+    imgui.SetCursorPosY(482+remonte)
     imgui.SetCursorPosX(18)
     imgui.TextUnformatted("SimBrief ID")
-    imgui.SetCursorPosY(479)
+    imgui.SetCursorPosY(479+remonte)
     imgui.SetCursorPosX(105)
     imgui.PushItemWidth(90)
     l_changed, l_newtext = imgui.InputText("##simbrief_id", simbrief_id, 11, imgui.constant.InputTextFlags.CharsDecimal)
@@ -4034,10 +4061,13 @@ function build_followme_window(wnd, x, y)
 	-- Green when clicked
 	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
 
-	imgui.SetCursorPosY(478)
+	imgui.SetCursorPosY(478+remonte)
 	imgui.SetCursorPosX(240)
+
 	if imgui.Button("Save Preferences", 130, 25) then
-		l_err = (Err_Msg ~= nil) and "" or save_config()
+        --if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
+			l_err = save_config()
+		--end
 	end
 
 	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
@@ -4045,36 +4075,24 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    -- SimBrief fetch status display
-    imgui.SetCursorPosY(510)
-    imgui.SetCursorPosX(18)
-    if sb_fetch_status == "OK" then
-        if get_from_SimBrief then
-            if sb_airport_mismatch then
-                imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-                imgui.TextUnformatted("The current airport does not match the Simbrief data")
-                imgui.PopStyleColor()
-            else
-                imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
-                imgui.TextUnformatted("SimBrief data fetched successfully")
-                imgui.PopStyleColor()
-            end
-        end
-    elseif sb_fetch_status == "LOADING" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
-        imgui.TextUnformatted("Fetching SimBrief data...")
-        imgui.PopStyleColor()
-    elseif sb_fetch_status == "ERROR" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-        imgui.TextUnformatted("SimBrief fetch error")
-        imgui.PopStyleColor()
+    -- Affichage du message general
+    if Err_Msg ~= "" and Err_Msg ~= nil then
+	    imgui.SetCursorPosY(510+remonte)
+	    imgui.SetCursorPosX(18)
+	    if Err_Msg_color == "RED" then
+	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	    else
+	        imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+	    end
+	    imgui.TextUnformatted(Err_Msg)
+	    imgui.PopStyleColor()
     end
 
 ------------------------------
 
-    if l_err ~= "" then
-        update_msg(l_err)
-    end
+	if l_err ~= "" then
+	    update_msg(l_err)
+	end
 
 end
 
@@ -4466,7 +4484,8 @@ end
 --   "-15" = No taxi network at this airport
 -- ====================================================
 function update_msg(in_msg)
-    if in_msg == nil then
+
+    if in_msg == nil or in_msg == "0" then
         return
     end
 
@@ -4476,7 +4495,17 @@ function update_msg(in_msg)
         Err_Msg_color = "GREEN"
     end
 
-    if in_msg == "-18" then
+    if in_msg == "-30" then
+        if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
+            l_rwy = sb_runway_takeoff
+        elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
+            l_rwy = sb_runway_landing
+        end
+        in_msg = "Routes not defined for Simbrief runway " .. l_rwy
+        if Err_Msg == in_msg then
+            return
+        end
+    elseif in_msg == "-18" then
         in_msg = "No routes have been defined for this airport"
         for i = 1, #t_deleted_runway do
             if i == #t_deleted_runway then
@@ -4488,82 +4517,69 @@ function update_msg(in_msg)
         if Err_Msg == in_msg then
             return
         end
-    end
-
-    if in_msg == "-19" then
-        if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
-            -- Departure: use SimBrief takeoff runway
-            l_rwy = sb_runway_takeoff
-        elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
-            -- Arrival: use SimBrief landing runway
-            l_rwy = sb_runway_landing
+    elseif in_msg == "-17" then
+        in_msg = "No suitable gate for this plane. Lift restriction."
+    elseif in_msg == "-16" then
+        in_msg = "Can't find start pt. Get off runway and request again"
+    elseif in_msg == "-15" then
+        in_msg = "Taxi Routes not defined for this airport"
+    elseif in_msg == "-14" then
+        in_msg = "Unable to find a suitable route"
+    elseif in_msg == "-13" then
+        in_msg = "Unable to find a suitable end pt"
+    elseif in_msg == "-12" then
+        in_msg = "Unable to find a suitable start pt"
+    elseif in_msg == "-11" then
+        in_msg = "Unable to locate scenery_packs.ini"
+    elseif in_msg == "-6" then
+        in_msg = "Select a Gate/Ramp"
+    elseif in_msg == "-5" then
+        if get_from_SimBrief then
+            in_msg = "No runway from SimBrief data"
+        else
+            in_msg = "Select a Departure Runway"
         end
-        in_msg = "Routes not defined for Simbrief runway " .. l_rwy
-        if Err_Msg == in_msg then
-            return
+    elseif in_msg == "-4" then
+        in_msg = "Unable to complete Save operation"
+    elseif in_msg == "-2" then
+        in_msg = "Preference file not found. Apply default values."
+    elseif in_msg == "-1" then
+        in_msg = "Specify the Aircraft Type"
+    elseif in_msg == "2" then
+        in_msg = "Preference Saved"
+    elseif in_msg == "3" then
+        in_msg = ""
+        if depart_arrive == 1 then
+            play_sound(snd_followme)
+        else
+            play_sound(snd_welcome)
         end
-    end
-
-    if in_msg == "6" then
-    	in_msg = nil
+    elseif in_msg == "4" then
+        in_msg = "No route found. Remove taxiway limitation, trying again."
+    elseif in_msg == "5" then
+        in_msg = "We have arrived at destination"
+        play_sound(snd_arrived)
+    elseif in_msg == "6" then
+        in_msg = ""
         if depart_arrive == 1 then
             play_sound(snd_followme)
         else
             play_sound(snd_welcome)
         end
     elseif in_msg == "7" then
-    	if depart_arrive == 1 then
-	        play_sound(snd_safe_flight_goodbye)
-    	else
-	        play_sound(snd_welcome_bye)
-	    end
-    elseif in_msg == "5" then
-    	in_msg = "We have arrived at destination"
-        play_sound(snd_arrived)
-    elseif in_msg == "4" then
-        in_msg = "No route found. Remove taxiway limitation, trying again."
-    elseif in_msg == "3" then
-    	in_msg = nil
+        in_msg = ""
         if depart_arrive == 1 then
-            play_sound(snd_followme)
+            play_sound(snd_safe_flight_goodbye)
         else
-            play_sound(snd_welcome)
+            play_sound(snd_welcome_bye)
         end
-    elseif in_msg == "2" then
-        in_msg = "Preference Saved"
-    elseif in_msg == "-1" then
-        in_msg = "Specify the Aircraft Type"
-    elseif in_msg == "-2" then
-        in_msg = "Preference file not found. Apply default values."
-    elseif in_msg == "-4" then
-        in_msg = "Unable to complete Save operation"
-    elseif in_msg == "-5" then
-        if get_from_SimBrief then
-            in_msg = "No runway from SimBrief data"
-        else
-            in_msg = "Select depart runway"
-        end
-    elseif in_msg == "-6" then
-        in_msg = "Select a gate/ramp"
-    elseif in_msg == "-11" then
-        in_msg = "Unable to locate scenery_packs.ini"
-    elseif in_msg == "-12" then
-        in_msg = "Unable to find a suitable start pt"
-    elseif in_msg == "-13" then
-        in_msg = "Unable to find a suitable end pt"
-    elseif in_msg == "-14" then
-        in_msg = "Unable to find a suitable route"
-    elseif in_msg == "-15" then
-        in_msg = "Taxi Routes not defined for this airport"
-    elseif in_msg == "-16" then
-        in_msg = "Can't find start pt. Get off runway and request again"
-    elseif in_msg == "-17" then
-        -- VER1.5 : New SimBrief error codes
-        in_msg = "No suitable gate for this plane. Lift restriction."
-    elseif in_msg == "-20" then
-        in_msg = "No SimBrief ID configured. Enter your ID below."
-    elseif in_msg == "-21" then
-        in_msg = "SimBrief connection failed. Check network."
+    elseif in_msg == "30" then
+        in_msg = "SimBrief data fetched successfully"
+    elseif in_msg == "31" then
+        in_msg = "Fetching SimBrief data..."
+    else
+        in_msg = "MESSAGE NOT FOUND CHECK YOUR CODE"
+        Err_Msg_color = "GREEN"
     end
 
     Err_Msg = in_msg or ""

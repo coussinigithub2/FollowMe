@@ -531,7 +531,7 @@ local ac_types = {
 -- VER1.6 : fixed position - no longer saved/loaded from preferences
 local Win_Y = 405
 -- VER1.4 : default LIGHT PROP for Cessna
-local aircraft_type = "8"
+local aircraft_Type = "8"
 -- VER1.6 : aircraft types table { ICAO = type } loaded from FollowMeXplane12.prf
 local t_aircraft = {}
 -- VER1.5 : replaces get_from_FMS
@@ -2719,7 +2719,7 @@ end
 -- and gate name. Normalises the raw size-class string (heavy/jets/
 -- turboprops/props/all/helos) into a space-separated list of FollowMe
 -- aircraft-type numbers (0-8) stored in t_gate[i].Types. This list is
--- later compared against the pilot's selected aircraft_type to filter
+-- later compared against the pilot's selected aircraft_Type to filter
 -- suitable gates in the UI and in auto_assign_gate().
 -- ====================================================
 function decipher_ramp(in_str)
@@ -3225,7 +3225,6 @@ function full_reset()
     initialise_airport()
     initialise_routes()
     logMsg("FollowMe : full_reset() completed")
-    update_menu_state()  -- VER2.13: sync menu after full reset
 end
 
 -- ====================================================
@@ -3304,6 +3303,8 @@ function handle_plugin_window()
     prev_plane_x = fm_plane_x
     prev_plane_z = fm_plane_z
 
+    local l_err = ""
+
     -- VER1.6 fix : speed warning when aircraft exceeds 20 kts and speed_limiter is active
     -- 10.288 m/s = 20 kts ; warning repeats every 15 seconds max
     if speed_limiter and fm_car_active and
@@ -3322,7 +3323,6 @@ function handle_plugin_window()
         end
         if fm_run_time > flight_start_cpt and flight_start_cpt ~= 9999 then
         	we_fly = true
-        	update_menu_state()  -- VER2.13: grise les menus pendant le vol
             prepare_kill_objects = true
             -- VER1.6 : close the main window automatically at takeoff
             if followme_wnd ~= nil then
@@ -3338,12 +3338,10 @@ function handle_plugin_window()
     else
     	flight_start_cpt = 0
         we_fly = false
-        update_menu_state()  -- VER2.13: réactive les menus à l'atterrissage
     end
 
     if prepare_show_objects then
         fm_car_active = true
-        update_menu_state()  -- VER2.13: grise FM Window quand voiture active
         load_object()
         load_path()
         start_car()
@@ -3353,7 +3351,6 @@ function handle_plugin_window()
 
     if prepare_kill_objects then
         fm_car_active = false
-        update_menu_state()  -- VER2.13: libère FM Window quand voiture arrêtée
         unload_object()
         unload_path()
         -- VER1.4 : behavior based on cancel type
@@ -3439,7 +3436,6 @@ function show_followme_window()
 	float_wnd_set_position(followme_wnd, pos_x, pos_y)
     float_wnd_set_imgui_builder(followme_wnd, "build_followme_window")
     float_wnd_set_onclose(followme_wnd, "closed_followme_window")
-    update_menu_state()  -- VER2.13: grise FM Window dès ouverture
 end
 
 -- ====================================================
@@ -3490,6 +3486,7 @@ function build_followme_window(wnd, x, y)
     if window_first_access then
     	load_config()
         get_airport_elements()
+        l_err = taxiway_network
         window_first_access = false
     end
 
@@ -3718,14 +3715,14 @@ function build_followme_window(wnd, x, y)
             end
             t_suitable_gates = {}
             for i = 1, #t_gate do
-                if string.match(t_gate[i].Types, aircraft_type) == aircraft_type or
-                        (aircraft_type == "0" and string.match(t_gate[i].Types, "7"))
+                if string.match(t_gate[i].Types, aircraft_Type) == aircraft_Type or
+                        (aircraft_Type == "0" and string.match(t_gate[i].Types, "7"))
                  then
                     t_suitable_gates[#t_suitable_gates + 1] = i
                 end
             end
             if #t_suitable_gates == 0 then
-				l_err = (Err_Msg ~= nil) and "" or "-17"
+                l_err = "-17"
                 for i = 1, #t_gate do
                     t_suitable_gates[#t_suitable_gates + 1] = i
                 end
@@ -3758,6 +3755,12 @@ function build_followme_window(wnd, x, y)
         end
     end
 
+    if l_err == "-17" then
+        if Err_Msg ~= nil and string.find(Err_Msg, "No suitable gate for this plane. Lift") then
+            l_err = ""
+        end
+    end
+
     imgui.SameLine()
     if imgui.Button("X##clear_filter", 15, 15) then
         arrival_gate = 0
@@ -3785,10 +3788,10 @@ function build_followme_window(wnd, x, y)
 
     local l_ac_types = ""
 
-    if aircraft_type == "" then
+    if aircraft_Type == "" then
         l_ac_types = ""
     else
-        l_ac_types = ac_types[tonumber(aircraft_type) + 1]
+        l_ac_types = ac_types[tonumber(aircraft_Type) + 1]
     end
 
     if fm_car_active and depart_arrive == 2 then
@@ -3800,7 +3803,7 @@ function build_followme_window(wnd, x, y)
                 l_is_selected = (l_ac_types == ac_types[i])
                 if imgui.Selectable(ac_types[i], l_is_selected) then
                     l_ac_types = ac_types[i]
-                    aircraft_type = tostring(i - 1)
+                    aircraft_Type = tostring(i - 1)
                     gatetext = ""
                     arrival_gate = 0
                     rampstart_chg = true
@@ -3817,7 +3820,7 @@ function build_followme_window(wnd, x, y)
         imgui.PopItemWidth()
         imgui.SameLine()
         if imgui.Button("X##clear_type", 20, 20) then
-            aircraft_type = ""
+            aircraft_Type = ""
             gatetext = ""
             arrival_gate = 0
             rampstart_chg = true
@@ -3895,10 +3898,13 @@ function build_followme_window(wnd, x, y)
 
     if not fm_car_active then
         if imgui.Button("Request Follow Me Car", 170, 25) then
-            combo_filter_list = false
-			l_err = (Err_Msg ~= nil) and "" or determine_XP_route()
-            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-                prepare_show_objects = true
+	        if not (depart_runway == "" and gatetext == "") then
+	            combo_filter_list = false
+	            toggle_window = true
+	            l_err = determine_XP_route()
+	            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
+	                prepare_show_objects = true
+	            end
             end
         end
     else
@@ -4037,7 +4043,7 @@ function build_followme_window(wnd, x, y)
 	imgui.SetCursorPosY(478)
 	imgui.SetCursorPosX(240)
 	if imgui.Button("Save Preferences", 130, 25) then
-		l_err = (Err_Msg ~= nil) and "" or save_config()
+	    l_err = save_config()
 	end
 
 	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
@@ -4075,7 +4081,6 @@ function build_followme_window(wnd, x, y)
     if l_err ~= "" then
         update_msg(l_err)
     end
-
 end
 
 -- ====================================================
@@ -4091,7 +4096,6 @@ function closed_followme_window(wnd)
         float_wnd_destroy(followme_wnd)
         followme_wnd = nil
         followme_window_open = false
-        update_menu_state()  -- VER2.13: réactive FM Window quand fermée
     end
 end
 
@@ -4425,7 +4429,6 @@ function closed_navigation_window(wnd)
 	    float_wnd_destroy(navigation_wnd)
 	    navigation_wnd = nil
 	    navigation_window_open = false
-        update_menu_state()  -- VER2.13: recalcule état menu après fermeture nav
 	end
 end
 
@@ -4586,7 +4589,7 @@ function determine_XP_route()
     if #t_taxinode == 0 then
         return "-15"
     end
-    if aircraft_type == "" then
+    if aircraft_Type == "" then
         return "-1"
     end
     if depart_arrive == 0 then
@@ -4749,7 +4752,7 @@ end
 -- Maintains an open list and a closed list of taxinodes. At each step,
 -- expands the node with the lowest f_value (g + h) by examining all
 -- connected segments. The inner evaluate_node() helper enforces taxiway
--- size restrictions (codes A-E vs aircraft_type) and filters already-
+-- size restrictions (codes A-E vs aircraft_Type) and filters already-
 -- visited nodes. When the end node is reached, back-traces the parent
 -- chain to build t_possible_route[]. The in_heading parameter optionally
 -- biases the search away from segments that would require an immediate
@@ -4778,17 +4781,17 @@ function transverse(in_startnode, in_endnode, in_heading)
             return true
         else
             if in_size ~= "" then
-                local l_aircraft_type = tonumber(aircraft_type)
+                local l_aircraft_Type = tonumber(aircraft_Type)
                 if in_size == "A" then
-                    if (l_aircraft_type > 0 and l_aircraft_type < 7) then
+                    if (l_aircraft_Type > 0 and l_aircraft_Type < 7) then
                         return false
                     end
                 elseif (in_size == "B" or in_size == "C" or in_size == "D") then
-                    if (l_aircraft_type > 0 and l_aircraft_type < 3) then
+                    if (l_aircraft_Type > 0 and l_aircraft_Type < 3) then
                         return false
                     end
                 elseif in_size == "E" then
-                    if (l_aircraft_type == 1) then
+                    if (l_aircraft_Type == 1) then
                         return false
                     end
                 end
@@ -5475,15 +5478,15 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     local l_min_dist = 25
     local l_max_dist = 300
     local l_max_dist_node = 130
-    local l_aircraft_type = tonumber(aircraft_type)
+    local l_aircraft_Type = tonumber(aircraft_Type)
 
-    if l_aircraft_type == 0 or l_aircraft_type >= 7 then
+    if l_aircraft_Type == 0 or l_aircraft_Type >= 7 then
         l_min_dist = 5
-    elseif l_aircraft_type >= 3 and l_aircraft_type < 7 then
+    elseif l_aircraft_Type >= 3 and l_aircraft_Type < 7 then
         l_min_dist = 15
-    elseif l_aircraft_type == 2 then
+    elseif l_aircraft_Type == 2 then
         l_min_dist = 30
-    elseif l_aircraft_type == 1 then
+    elseif l_aircraft_Type == 1 then
         l_min_dist = 30
     end
 
@@ -5862,7 +5865,7 @@ end
 -- Function: auto_assign_gate
 -- Description:
 -- Randomly selects a gate suitable for the current aircraft type. Builds
--- a list of t_gate[] entries whose Types field contains aircraft_type,
+-- a list of t_gate[] entries whose Types field contains aircraft_Type,
 -- then picks one at random (randomised by os.time()). If no suitable gate
 -- exists (e.g. a GA plane at an airport with only heavy gates), falls
 -- back to a random gate from the full list and posts warning "-17". Also
@@ -5879,8 +5882,8 @@ function auto_assign_gate()
 
     t_suitable_gates = {}
     for l_index = 1, #t_gate do
-        if string.match(t_gate[l_index].Types, aircraft_type) == aircraft_type or
-                (aircraft_type == "0" and string.match(t_gate[l_index].Types, "7"))
+        if string.match(t_gate[l_index].Types, aircraft_Type) == aircraft_Type or
+                (aircraft_Type == "0" and string.match(t_gate[l_index].Types, "7"))
          then
             t_suitable_gates[#t_suitable_gates + 1] = l_index
         end
@@ -5946,7 +5949,7 @@ end
 -- Restores vol, car_type_fmcar, speed_limiter, random_gate, show_path,
 -- show_rampstart, simbrief_id, get_from_SimBrief, and all previously
 -- known aircraft ICAO-to-type mappings from the t_aircraft table.
--- If the current aircraft ICAO is found in the file, aircraft_type is
+-- If the current aircraft ICAO is found in the file, aircraft_Type is
 -- restored immediately. Returns "" on success with a known aircraft,
 -- "-1" if the aircraft type is not yet recorded (prompts the pilot to
 -- set it), or "-2" if the file does not exist yet (first run).
@@ -5958,7 +5961,7 @@ function load_config()
     local l_file
     local l_line = ""
     local l_str1, l_str2 = "", ""
-    local l_aircraft_type = ""
+    local l_aircraft_Type = ""
 
     l_file = io.open(syspath .. "Output/preferences/FollowMeXplane12.prf", "r")
     if l_file == nil then
@@ -6000,15 +6003,15 @@ function load_config()
                 -- VER1.6 : all other keys are aircraft ICAO types - store in t_aircraft table
                 t_aircraft[l_str1] = l_str2
                 if l_str1 == PLANE_ICAO then
-                    l_aircraft_type = l_str2
-                    aircraft_type = l_str2
+                    l_aircraft_Type = l_str2
+                    aircraft_Type = l_str2
                 end
             end
         end
     until not l_line
     l_file:close()
 
-    if l_aircraft_type ~= "" then
+    if l_aircraft_Type ~= "" then
         return ""
     else
         return "-1"
@@ -6046,7 +6049,7 @@ function save_config()
     l_content = l_content .. "get_from_SimBrief" .. "\t" .. (get_from_SimBrief and "1" or "0") .. "\n"
 
     -- VER1.6 : update current aircraft in t_aircraft table then write all known aircraft
-    t_aircraft[PLANE_ICAO] = aircraft_type
+    t_aircraft[PLANE_ICAO] = aircraft_Type
     for l_icao, l_type in pairs(t_aircraft) do
         l_content = l_content .. l_icao .. "\t" .. l_type .. "\n"
     end
@@ -6134,7 +6137,7 @@ function Steffi_says()
 
     pos = big_bubble(20, pos,
         "fm_car_active :" .. tostring(fm_car_active),
-        "arrival_gate :" .. arrival_gate,
+        "#t_runway == 0 :" .. tostring(#t_runway == 0),
         "followme_window_open :" .. tostring(followme_window_open),
         "followme_wnd ~= nil :" .. tostring(followme_wnd ~= nil),
         "navigation_window_open :" .. tostring(navigation_window_open),
@@ -6163,38 +6166,6 @@ function Steffi_says()
         "fm_gnd_spd > 60 :" .. tostring(((fm_gnd_spd * 1.94384) > 60))
         )
 end
-
--- ====================================================
--- Function: update_menu_state
--- Description:
--- Centralises enable/disable state for the two FollowMe menu items.
---   item 0 "Follow Me Window"  : enabled only when at rest
---                                (not we_fly, not fm_car_active,
---                                 no window currently open).
---   item 1 "Navigation Window" : always disabled in the Plugins menu
---                                (opened only from within the FM interface).
--- Called from: show_followme_window(), closed_followme_window(),
--- closed_navigation_window(), full_reset(), and on every
--- we_fly / fm_car_active state change in handle_plugin_window().
--- ====================================================
-function update_menu_state()
-    if my_menu == nil then return end
-
-    -- Follow Me Window : actif uniquement quand tout est au repos
-    local fm_available = (not we_fly)
-                     and (not fm_car_active)
-                     and (followme_wnd == nil)
-                     and (navigation_wnd == nil)
-    XPLM.XPLMEnableMenuItem(my_menu, 0, fm_available and 1 or 0)
-
-    -- Navigation Window : actif uniquement si FM en cours ET fenêtre pas déjà ouverte
-    -- (permet de la rouvrir si l'utilisateur l'a fermée avec le bouton rouge)
-    local nav_available = (not we_fly)
-                      and fm_car_active
-                      and (navigation_wnd == nil)
-    XPLM.XPLMEnableMenuItem(my_menu, 1, nav_available and 1 or 0)
-end
-
 -- =====================================================
 -- = MAIN SECTION (Initialization and flywithlua event =
 -- =====================================================
@@ -6205,7 +6176,6 @@ syspath = ffi.string(char_str)
 -- = Prepare menus =
 -- =================
 -- Callback appelé quand l'utilisateur clique sur un item
-
 menu_handler = ffi.cast("XPLMMenuHandler_f", function(inMenuRef, inItemRef)
     local item = tonumber(ffi.cast("intptr_t", inItemRef))
     if we_fly then
@@ -6234,7 +6204,6 @@ my_menu = XPLM.XPLMCreateMenu("FollowMe", plugins_menu, my_menu_item, menu_handl
 -- Ajouter des items (le 3e arg = inItemRef, castée en pointeur pour identifier l'item)
 XPLM.XPLMAppendMenuItem(my_menu, "Follow Me Window", ffi.cast("void*", 0), 0)
 XPLM.XPLMAppendMenuItem(my_menu, "Navigation Window", ffi.cast("void*", 1), 0)
-update_menu_state(0)  -- VER2.13: état initial des menus au chargement
 
 -- ========================
 -- = Other initialization =

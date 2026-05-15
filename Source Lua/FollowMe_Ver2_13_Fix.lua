@@ -650,6 +650,7 @@ local speed_warn_time = 0
 
 local fm_car_completed_timer = 0
 local last_fm_car_completed_timer = 0
+local combo_filter_list = false
 
 -- MENUS Variables
 local menu_handler = nil
@@ -3487,19 +3488,48 @@ function build_followme_window(wnd, x, y)
         imgui.constant.WindowFlags.NoSavedSettings
     )
 
-    if window_first_access then
-    	load_config()
+    if window_first_access == true then
         get_airport_elements()
+        l_err = taxiway_network
         window_first_access = false
     end
 
+    ------------------------------------------------------------------------------------------
+    -- Begining : Disable the Departure and Arival to avoid selection when FM car is active --
+    ------------------------------------------------------------------------------------------
+    if fm_car_active == true or #t_runway == 0 then
+		imgui.PushStyleVar(imgui.constant.StyleVar.Alpha, 0.7)
+		imgui.PushStyleVar(imgui.constant.StyleVar.WindowBorderSize, 0)
+		imgui.SetNextWindowPos(0, 68)
+
+		if fm_car_active == true then
+		    imgui.SetNextWindowSize(405, 108)
+		else
+		    imgui.SetNextWindowSize(405, 170)
+		    imgui.SetNextWindowFocus()
+		end
+
+		if imgui.Begin("##Disabled", nil, l_flags) then
+		    imgui.End()
+		end
+
+		imgui.PopStyleVar()
+		imgui.PopStyleVar()
+    end
+    -----------------------------------------------------------------------------------------
+    -- Endding : Disable the Departure and Arival to avoid selection when FM car is active --
+    -----------------------------------------------------------------------------------------
+
 ------------------------------
 
+    --=====================================================
+    -- Show Departure and Arrival airport (ICAO + name)
+    --=====================================================
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(5)
     imgui.SetCursorPosX(10)
 	-- light gray
-    imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
+    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
 
     if get_from_SimBrief then
         imgui.TextUnformatted("Simbrief Departure Airport")
@@ -3515,18 +3545,17 @@ function build_followme_window(wnd, x, y)
     imgui.SetWindowFontScale(1.2)
 
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_origin_icao ~= "" then
-        imgui.TextUnformatted(sb_origin_icao .. " " .. string.format("%-3s", sb_runway_takeoff) .. " " .. sb_origin_name)
+        imgui.TextUnformatted(sb_origin_icao .. "   " .. sb_origin_name)
     else
         -- Fallback: display current sim airport
-
-        imgui.TextUnformatted(curr_ICAO .. " " .. curr_ICAO_name)
+        imgui.TextUnformatted(curr_ICAO .. "   " .. curr_ICAO_name)
     end
 
     imgui.SetWindowFontScale(1.1)
     imgui.SetCursorPosY(35)
     imgui.SetCursorPosX(10)
 	-- light gray
-    imgui.PushStyleColor(imgui.constant.Col.Text, LIGHT_GRAY)
+    imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF888888)
 
 ------------------------------
 
@@ -3545,9 +3574,9 @@ function build_followme_window(wnd, x, y)
     imgui.SetWindowFontScale(1.2)
 
     if get_from_SimBrief and sb_fetch_status == "OK" and sb_dest_icao ~= "" then
-        imgui.TextUnformatted(sb_dest_icao .. " " .. string.format("%-3s", sb_runway_landing) .. " " .. sb_dest_name)
+        imgui.TextUnformatted(sb_dest_icao .. "   " .. sb_dest_name)
     else
-        imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF666666)
         imgui.TextUnformatted("---")
         imgui.PopStyleColor()
     end
@@ -3556,25 +3585,8 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    -----------------------------------------------------------------------------
-    -- Begining : Disable the SETTING to avoid selection when FM car is active --
-    -----------------------------------------------------------------------------
-	if fm_car_active or #t_runway == 0 then
-	    imgui.BeginDisabled()
-	end
-
-------------------------------
-
     imgui.SetCursorPosY(65)
-    imgui.SetCursorPosX(4)
-    imgui.PushStyleColor(0, DARK_GRAY)
-    imgui.TextUnformatted("_________________________       ________________________")
-    imgui.PopStyleColor()
-    imgui.SetCursorPosY(68)
-    imgui.SetCursorPosX(4)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("                         SETTING")
-    imgui.PopStyleColor()
+    imgui.Separator()
 
 ------------------------------
 
@@ -3582,12 +3594,11 @@ function build_followme_window(wnd, x, y)
     -- Allow selection for Departure & Arrival
     -- Show "Request Follow Me Car" button or "Cancel Follow Me Car"
     --=====================================================
-    imgui.SetCursorPosY(82)
+    imgui.SetCursorPosY(68)
     imgui.SetCursorPosX(18)
     if imgui.RadioButton(" Departure", depart_arrive == 1, false) then
         depart_arrive = 1
-        flight_start_cpt = 0
-        we_fly = false
+        flightstart = 0
         rampstart_chg = true
         if get_from_SimBrief then
             apply_simbrief_runway()
@@ -3602,7 +3613,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(104)
+    imgui.SetCursorPosY(93)
     imgui.SetCursorPosX(48)
     imgui.TextUnformatted("To Runway : ")
 
@@ -3621,8 +3632,7 @@ function build_followme_window(wnd, x, y)
                 if imgui.Selectable(t_runway[i].ID, l_is_selected) then
                     depart_runway = t_runway[i].ID
                     depart_arrive = 1
-                    flight_start_cpt = 0
-	                we_fly = false
+                    flightstart = 0
                 end
                 if l_is_selected then
                     imgui.SetItemDefaultFocus()
@@ -3657,7 +3667,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(131)
+    imgui.SetCursorPosY(120)
     imgui.SetCursorPosX(18)
 
     if imgui.RadioButton(" Arrival", depart_arrive == 2, false) then
@@ -3668,7 +3678,7 @@ function build_followme_window(wnd, x, y)
         end
     end
 
-    if depart_arrive == 2 and random_gate and arrival_gate == 0 then
+    if depart_arrive == 2 and random_gate == true and arrival_gate == 0 then
         auto_assign_gate()
     end
 
@@ -3678,7 +3688,7 @@ function build_followme_window(wnd, x, y)
     l_changed, l_newval = imgui.Checkbox("##Auto Assign", random_gate)
     if l_changed then
         random_gate = l_newval
-        if random_gate and arrival_gate == 0 then
+        if random_gate == true and arrival_gate == 0 then
             auto_assign_gate()
         end
     end
@@ -3688,11 +3698,11 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(156)
+    imgui.SetCursorPosY(145)
     imgui.SetCursorPosX(48)
     imgui.TextUnformatted("To Gate/Ramp : ")
 
-    imgui.SetCursorPosY(156)
+    imgui.SameLine()
     imgui.SetCursorPosX(160)
     imgui.PushItemWidth(150)
 
@@ -3707,7 +3717,7 @@ function build_followme_window(wnd, x, y)
         combo_filter_list = true
     end
 
-    if combo_filter_list then
+    if combo_filter_list == true then
         imgui.SetNextWindowFocus()
         imgui.SetNextWindowPos(160, 180)
         imgui.SetNextWindowSize(150, 80)
@@ -3725,7 +3735,7 @@ function build_followme_window(wnd, x, y)
                 end
             end
             if #t_suitable_gates == 0 then
-				l_err = (Err_Msg ~= nil) and "" or "-17"
+                l_err = "-17"
                 for i = 1, #t_gate do
                     t_suitable_gates[#t_suitable_gates + 1] = i
                 end
@@ -3739,7 +3749,7 @@ function build_followme_window(wnd, x, y)
                         l_into_list = false
                     end
                 end
-                if l_into_list then
+                if l_into_list == true then
                     l_is_selected = (l_gate == t_gate[t_suitable_gates[i]].ID)
                     if imgui.Selectable(t_gate[t_suitable_gates[i]].ID, l_is_selected) then
                         depart_arrive = 2
@@ -3758,6 +3768,12 @@ function build_followme_window(wnd, x, y)
         end
     end
 
+    if l_err == "-17" then
+        if Err_Msg ~= nil and string.find(Err_Msg, "No suitable gate for this plane. Lift") then
+            l_err = ""
+        end
+    end
+
     imgui.SameLine()
     if imgui.Button("X##clear_filter", 15, 15) then
         arrival_gate = 0
@@ -3769,19 +3785,83 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(182)
-    imgui.SetCursorPosX(18)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("Aircraft Type")
-    imgui.PopStyleColor()
+    imgui.SetCursorPosY(176)
+    imgui.SetCursorPosX(48)
+
+    if fm_car_active == false then
+        if imgui.Button("Request Follow Me Car", 170, 25) then
+            combo_filter_list = false
+            l_err = determine_XP_route()
+            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
+                prepare_show_objects = true
+            end
+        end
+    else
+        if imgui.Button("Cancel Follow Me Car", 170, 25) then
+            prepare_kill_objects = true
+            kill_is_manual = true
+        end
+    end
+
+    imgui.SetCursorPosY(178)
+    imgui.SetCursorPosX(230)
+    l_changed, l_newval = imgui.Checkbox("##Limit Car Speed", speed_limiter)
+    if l_changed then
+        speed_limiter = l_newval
+        if speed_limiter == true then
+			-- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
+            speed_max = 10.288
+        else
+            speed_max = car_default_speed
+        end
+    end
+    imgui.SameLine()
+    imgui.TextUnformatted("Limit speed to 20kts")
+
+    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
+    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
+    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
+
+
+    imgui.PopStyleColor(3)
+
+------------------------------
+    -- Affichage du message unique Err_Msg à la place du message directionnel
+    if Err_Msg ~= "" and Err_Msg ~= nil then
+	    imgui.SetCursorPosX(18)
+	    imgui.SetCursorPosY(210)
+	    if Err_Msg_color == "RED" then
+	        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
+	    else
+	        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
+	    end
+	    imgui.TextUnformatted(Err_Msg)
+	    imgui.PopStyleColor()
+    end
+------------------------------
+
+    imgui.SetCursorPosY(230)
+    imgui.Separator()
 
 ------------------------------
 
-	imgui.SetCursorPosY(205)
-	imgui.SetCursorPosX(18)
-	imgui.TextUnformatted(PLANE_ICAO)
-	imgui.SetCursorPosY(203)
-	imgui.SetCursorPosX(90)
+    imgui.SetCursorPosY(235)
+    imgui.SetCursorPosX(20)
+    imgui.TextUnformatted("Model")
+    imgui.SameLine()
+    imgui.SetCursorPosX(90)
+    imgui.TextUnformatted("Type")
+    imgui.SameLine()
+    imgui.SetCursorPosX(160)
+    imgui.TextUnformatted("* Helps find suitable gate/ramp")
+
+    imgui.SetCursorPosY(255)
+    imgui.SetCursorPosX(20)
+    imgui.TextUnformatted(PLANE_ICAO)
+    imgui.SameLine()
+    imgui.SetCursorPosX(85)
+    imgui.TextUnformatted("*")
+    imgui.SameLine()
 
     local l_ac_types = ""
 
@@ -3791,7 +3871,7 @@ function build_followme_window(wnd, x, y)
         l_ac_types = ac_types[tonumber(aircraft_type) + 1]
     end
 
-    if fm_car_active and depart_arrive == 2 then
+    if fm_car_active == true and depart_arrive == 2 then
         imgui.InputText("##text_actype", l_ac_types, 250, imgui.constant.InputTextFlags.ReadOnly)
     else
         imgui.PushItemWidth(250)
@@ -3829,134 +3909,8 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-	imgui.SetCursorPosY(235)
-    imgui.SetCursorPosX(18)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("Follow Me car model")
-    imgui.PopStyleColor()
-
-------------------------------
-
-    -- Vehicle selection
-    imgui.SetCursorPosX(18)
-    imgui.SetCursorPosY(252)
-    if imgui.RadioButton(" Ferrari", car_type_fmcar == "Ferrari", false) then
-        car_type_fmcar = "Ferrari"
-    end
-    imgui.SetCursorPosX(110)
-    imgui.SetCursorPosY(252)
-    if imgui.RadioButton(" FM Van", car_type_fmcar == "Van", false) then
-        car_type_fmcar = "Van"
-    end
-    imgui.SetCursorPosX(195)
-    imgui.SetCursorPosY(252)
-    if imgui.RadioButton(" FM Truck", car_type_fmcar == "Truck", false) then
-        car_type_fmcar = "Truck"
-    end
-    imgui.SetCursorPosX(290)
-    imgui.SetCursorPosY(252)
-    if imgui.RadioButton(" Auto Select", car_type_fmcar == "Auto", false) then
-        car_type_fmcar = "Auto"
-    end
-
-------------------------------
-
-    ---------------------------------------------------------------------------
-    -- Ending : Disable the SETTING to avoid selection when FM car is active --
-    ---------------------------------------------------------------------------
-	if fm_car_active or #t_runway == 0 then
-	    imgui.EndDisabled()
-	end
-
-------------------------------
-
-    if fm_car_active then
-	    -- Dark green (RGBA hex)
-	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
-	    -- Lighter green on hover
-	    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, RED)
-	    -- Green when clicked
-	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
-
-	    imgui.SetCursorPosY(280)
-	    imgui.SetCursorPosX(96)
-
-	    if imgui.Button("N", 22, 25) then
-	    	toggle_window = true
-	    end
-
-	    imgui.PopStyleColor(3)
-    end
-
-------------------------------
-
-    imgui.SetCursorPosY(280)
-    imgui.SetCursorPosX(126)
-
-    if not fm_car_active then
-        if imgui.Button("Request Follow Me Car", 170, 25) then
-            combo_filter_list = false
-			l_err = (Err_Msg ~= nil) and "" or determine_XP_route()
-            if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-                prepare_show_objects = true
-            end
-        end
-    else
-        if imgui.Button("Cancel Follow Me Car", 170, 25) then
-            prepare_kill_objects = true
-            kill_is_manual = true
-        end
-    end
-
-------------------------------
-
-    -- Affichage du message unique Err_Msg à la place du message directionnel
-    if Err_Msg ~= "" and Err_Msg ~= nil then
-	    imgui.SetCursorPosX(18)
-	    imgui.SetCursorPosY(314)
-	    if Err_Msg_color == "RED" then
-	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-	    else
-	        imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
-	    end
-	    imgui.TextUnformatted(Err_Msg)
-	    imgui.PopStyleColor()
-    end
-
-------------------------------
-
-    imgui.SetCursorPosY(336)
-    imgui.SetCursorPosX(4)
-    imgui.PushStyleColor(0, DARK_GRAY)
-    imgui.TextUnformatted("__________________                    __________________")
-    imgui.PopStyleColor()
-    imgui.SetCursorPosY(339)
-    imgui.SetCursorPosX(4)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("                  OPTIONS & PREFERENCES")
-    imgui.PopStyleColor()
-
-------------------------------
-
-    imgui.SetCursorPosY(358)
-    imgui.SetCursorPosX(18)
-    l_changed, l_newval = imgui.Checkbox("##Limit Car Speed", speed_limiter)
-    if l_changed then
-        speed_limiter = l_newval
-        if speed_limiter then
-			-- VER1.6 fix : 20 kts = 10.288 m/s (previously was 20 m/s = ~39 kts)
-            speed_max = 10.288
-        else
-            speed_max = car_default_speed
-        end
-    end
-    imgui.SameLine()
-    imgui.TextUnformatted("Limit speed to 20kts")
-
-------------------------------
-
-    imgui.SetCursorPosY(383)
-    imgui.SetCursorPosX(18)
+    imgui.SetCursorPosY(285)
+    imgui.SetCursorPosX(20)
     l_changed, l_newval = imgui.Checkbox(" Show Path", show_path)
     if l_changed then
         show_path = l_newval
@@ -3969,8 +3923,8 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(383)
-    imgui.SetCursorPosX(200)
+    imgui.SetCursorPosY(310)
+    imgui.SetCursorPosX(20)
     l_changed, l_newval = imgui.Checkbox(" Show Ramp Start", show_rampstart)
     if l_changed then
         show_rampstart = l_newval
@@ -3983,16 +3937,29 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-	imgui.SetCursorPosY(418)
-    imgui.SetCursorPosX(18)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("Volume setting")
-    imgui.PopStyleColor()
+	-- Dark green (RGBA hex)
+	imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
+	-- Lighter green on hover
+	imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
+	-- Green when clicked
+	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
+
+	imgui.SetCursorPosY(293)
+	imgui.SetCursorPosX(220)
+	if imgui.Button("Save Preferences", 130, 25) then
+	    l_err = save_config()
+	end
+
+	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
+	imgui.PopStyleColor(3)
 
 ------------------------------
 
-    imgui.SetCursorPosY(443)
-    imgui.SetCursorPosX(18)
+    imgui.SetCursorPosY(340)
+    imgui.SetCursorPosX(20)
+    imgui.TextUnformatted("Vol ")
+    imgui.SameLine()
+    imgui.SetCursorPosX(60)
     imgui.PushItemWidth(150)
     l_changed, l_newval = imgui.SliderFloat("##Vol", vol, 1, 10, "%.0f")
     imgui.PopItemWidth()
@@ -4000,20 +3967,49 @@ function build_followme_window(wnd, x, y)
         vol = l_newval
         set_sound_vol()
     end
-    imgui.SetCursorPosY(440)
-    imgui.SetCursorPosX(240)
+    imgui.SetCursorPosY(337)
+    imgui.SetCursorPosX(220)
     if imgui.Button("Test Volume", 90, 25) then
         play_sound(snd_test)
     end
 
 ------------------------------
 
+    -- Vehicle selection
+    imgui.SetCursorPosX(20)
+    imgui.SetCursorPosY(370)
+    if imgui.RadioButton(" Ferrari", car_type_fmcar == "Ferrari", false) then
+        car_type_fmcar = "Ferrari"
+    end
+    imgui.SetCursorPosX(110)
+    imgui.SetCursorPosY(370)
+    if imgui.RadioButton(" FM Van", car_type_fmcar == "Van", false) then
+        car_type_fmcar = "Van"
+    end
+    imgui.SetCursorPosX(195)
+    imgui.SetCursorPosY(370)
+    if imgui.RadioButton(" FM Truck", car_type_fmcar == "Truck", false) then
+        car_type_fmcar = "Truck"
+    end
+    imgui.SetCursorPosX(290)
+    imgui.SetCursorPosY(370)
+    if imgui.RadioButton(" Auto Select", car_type_fmcar == "Auto", false) then
+        car_type_fmcar = "Auto"
+    end
+
+------------------------------
+    imgui.SetCursorPosY(400)
+    imgui.Separator()
+
+------------------------------
+
     -- VER1.5 : SimBrief ID row
-    imgui.SetCursorPosY(482)
-    imgui.SetCursorPosX(18)
+    imgui.SetCursorPosY(410)
+    imgui.SetCursorPosX(10)
     imgui.TextUnformatted("SimBrief ID")
-    imgui.SetCursorPosY(479)
-    imgui.SetCursorPosX(105)
+
+    imgui.SetCursorPosY(408)
+    imgui.SetCursorPosX(95)
     imgui.PushItemWidth(90)
     l_changed, l_newtext = imgui.InputText("##simbrief_id", simbrief_id, 11, imgui.constant.InputTextFlags.CharsDecimal)
     if l_changed then
@@ -4025,47 +4021,40 @@ function build_followme_window(wnd, x, y)
     end
     imgui.PopItemWidth()
 
-------------------------------
-
-	-- Dark green (RGBA hex)
-	imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF2D5A27)
-	-- Lighter green on hover
-	imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, 0xFF3D7A35)
-	-- Green when clicked
-	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
-
-	imgui.SetCursorPosY(478)
-	imgui.SetCursorPosX(240)
-	if imgui.Button("Save Preferences", 130, 25) then
-		l_err = (Err_Msg ~= nil) and "" or save_config()
-	end
-
-	-- VERY IMPORTANT: Pop styles to avoid affecting other buttons
-	imgui.PopStyleColor(3)
+    imgui.SameLine()
+    imgui.SetCursorPosY(406)
+    imgui.SetCursorPosX(195)
+    if imgui.Button("Fetch SimBrief", 120, 25) then
+        if simbrief_id ~= "" then
+            check_SimBrief()
+        else
+            update_msg("-20")
+        end
+    end
 
 ------------------------------
 
     -- SimBrief fetch status display
-    imgui.SetCursorPosY(510)
-    imgui.SetCursorPosX(18)
+    imgui.SetCursorPosY(436)
+    imgui.SetCursorPosX(10)
     if sb_fetch_status == "OK" then
         if get_from_SimBrief then
             if sb_airport_mismatch then
-                imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
                 imgui.TextUnformatted("The current airport does not match the Simbrief data")
                 imgui.PopStyleColor()
             else
-                imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
-                imgui.TextUnformatted("SimBrief data fetched successfully")
+                imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FF00)
+                imgui.TextUnformatted("SimBrief Runways  Dep:" .. sb_runway_takeoff .. "  Arr:" .. sb_runway_landing)
                 imgui.PopStyleColor()
             end
         end
     elseif sb_fetch_status == "LOADING" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, YELLOW)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF00FFFF)
         imgui.TextUnformatted("Fetching SimBrief data...")
         imgui.PopStyleColor()
     elseif sb_fetch_status == "ERROR" then
-        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+        imgui.PushStyleColor(imgui.constant.Col.Text, 0xFF0000FF)
         imgui.TextUnformatted("SimBrief fetch error")
         imgui.PopStyleColor()
     end
@@ -4075,7 +4064,6 @@ function build_followme_window(wnd, x, y)
     if l_err ~= "" then
         update_msg(l_err)
     end
-
 end
 
 -- ====================================================
