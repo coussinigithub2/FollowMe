@@ -560,8 +560,10 @@ local sb_dest_name = ""
 local sb_runway_takeoff = ""
 -- SimBrief landing runway
 local sb_runway_landing = ""
--- Last fetch status: "", "OK", "ERROR", "LOADING"
-local sb_fetch_status = ""
+-- Last fetch error message: "", "OK", "ERROR"
+local sb_fetch_error_msg = ""
+-- Last fetch status from Simbrief request
+local sb_fetch_status = nil
 -- true if SimBrief departure airport != current sim airport
 local sb_airport_mismatch = false
 
@@ -666,7 +668,7 @@ local my_menu = nil
 -- Fetches the active flight plan from the SimBrief API using the pilot's
 -- numeric SimBrief user ID. Sends an HTTP GET to the SimBrief XML endpoint,
 -- parses the response to extract departure ICAO, arrival ICAO, departure
--- runway, and landing runway. Sets sb_fetch_status to "OK", "ERROR",
+-- runway, and landing runway. Sets sb_fetch_error_msg to "OK", "ERROR",
 -- "NO_ID", or "NO_DATA" accordingly. If the fetched origin ICAO does not
 -- match the current X-Plane airport, sets sb_airport_mismatch = true so
 -- the UI can warn the pilot. If auto-SimBrief mode (get_from_SimBrief) is
@@ -675,19 +677,18 @@ local my_menu = nil
 -- ====================================================
 function check_SimBrief()
     -- Reset minimal state
-    sb_fetch_status = ""
+    sb_fetch_error_msg = ""
     sb_airport_mismatch = false
 
     if simbrief_id == "" then
-        sb_fetch_status = "NO_ID"
+        sb_fetch_error_msg = "NO_ID"
         return
     end
 
-    sb_fetch_status = "LOADING"
+    sb_fetch_error_msg = ""
 
     local response_body = {}
     local url = "https://www.simbrief.com/api/xml.fetcher.php?userid=" .. simbrief_id .. "&v=xml"
-
     local res, code =
         http.request {
         url = url,
@@ -697,13 +698,18 @@ function check_SimBrief()
 
     -- If the request fails -> do not block anything
     if code ~= 200 or not response_body or #response_body == 0 then
-        sb_fetch_status = "ERROR"
-        return
+        sb_fetch_error_msg = "ERROR"
     end
 
     local xml_body = table.concat(response_body)
 
-    -- Secure extraction
+    -- Catch the original status
+    sb_fetch_status = string.match(xml_body, "<fetch>.-<status>(.-)</status>") or ""
+
+	if sb_fetch_error_msg == "ERROR" then
+		return
+    end
+
     sb_origin_icao = string.match(xml_body, "<origin>.-<icao_code>(.-)</icao_code>") or ""
     sb_dest_icao = string.match(xml_body, "<destination>.-<icao_code>(.-)</icao_code>") or ""
     sb_origin_name = string.match(xml_body, "<origin>.-<name>(.-)</name>") or ""
@@ -713,11 +719,11 @@ function check_SimBrief()
 
     -- Minimal verification
     if sb_origin_icao == "" or sb_dest_icao == "" then
-        sb_fetch_status = "NO_DATA"
+        sb_fetch_error_msg = "NO_DATA"
         return
     end
 
-    sb_fetch_status = "OK"
+    sb_fetch_error_msg = "OK"
 
     -- Airport check is not equal to X-Plane
     sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
@@ -747,7 +753,7 @@ function apply_simbrief_runway()
 
     depart_runway = ""
 
-    if sb_fetch_status ~= "OK" then
+    if sb_fetch_error_msg ~= "OK" then
         return
     end
 
@@ -2415,7 +2421,7 @@ function get_airport_elements()
             XPLMSpeakString("Follow Me Service is not available at this airport")
             return
         end
-        if sb_fetch_status == "OK" then
+        if sb_fetch_error_msg == "OK" then
             sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
         end
         -- skip the XPLMFindNavAid block entirely
@@ -2438,7 +2444,7 @@ function get_airport_elements()
         end
 
         -- VER1.5 : Check if SimBrief departure airport matches the new sim airport
-        if sb_fetch_status == "OK" then
+        if sb_fetch_error_msg == "OK" then
             sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
         end
     end
@@ -3419,7 +3425,7 @@ end
 -- ====================================================
 -- Function: show_followme_window
 -- Description:
--- Creates the main FollowMe control panel (420 x 550 px) and attaches
+-- Creates the main FollowMe control panel (420 x 510 px) and attaches
 -- the build_followme_window() imgui builder callback to it. Sets window_first_access
 -- = true so build_followme_window() triggers a fresh get_airport_elements() call
 -- on the first rendered frame. The window is positioned to the left of
@@ -3436,7 +3442,7 @@ function show_followme_window()
 	local pos_y = SCREEN_HIGHT / 2  -- tout en haut
 
 
-    followme_wnd = float_wnd_create(420, 550, 1, true)
+    followme_wnd = float_wnd_create(420, 510, 1, true)
     float_wnd_set_title(followme_wnd, followme_title)
 	float_wnd_set_position(followme_wnd, pos_x, pos_y)
     float_wnd_set_imgui_builder(followme_wnd, "build_followme_window")
@@ -3516,7 +3522,7 @@ function build_followme_window(wnd, x, y)
     imgui.SetCursorPosX(10)
     imgui.SetWindowFontScale(1.2)
 
-    if get_from_SimBrief and sb_fetch_status == "OK" and sb_origin_icao ~= "" then
+    if get_from_SimBrief and sb_fetch_error_msg == "OK" and sb_origin_icao ~= "" then
         imgui.TextUnformatted(sb_origin_icao .. " " .. string.format("%-3s", sb_runway_takeoff) .. " " .. sb_origin_name)
     else
         imgui.TextUnformatted(curr_ICAO .. " " .. curr_ICAO_name)
@@ -3544,7 +3550,7 @@ function build_followme_window(wnd, x, y)
     imgui.SetCursorPosX(10)
     imgui.SetWindowFontScale(1.2)
 
-    if get_from_SimBrief and sb_fetch_status == "OK" and sb_dest_icao ~= "" then
+    if get_from_SimBrief and sb_fetch_error_msg == "OK" and sb_dest_icao ~= "" then
         imgui.TextUnformatted(sb_dest_icao .. " " .. string.format("%-3s", sb_runway_landing) .. " " .. sb_dest_name)
     else
         imgui.PushStyleColor(imgui.constant.Col.Text, GRAY)
@@ -3648,37 +3654,6 @@ function build_followme_window(wnd, x, y)
 
     imgui.SameLine()
     imgui.TextUnformatted("Use SimBrief data")
-
-------------------------------
-
-    imgui.SetCursorPosY(315)
-    imgui.SetCursorPosX(18)
-
-    if simbrief_id == "" then
-	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-	          imgui.TextUnformatted("No SimBrief ID configured")
-	          imgui.PopStyleColor()
-    elseif sb_fetch_status == "OK" then
-        if get_from_SimBrief then
-            if sb_airport_mismatch then
-	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-	          imgui.TextUnformatted("The current airport does not match the Simbrief data")
-	          imgui.PopStyleColor()
-            else
-	          imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
-	          imgui.TextUnformatted("SimBrief data fetched successfully")
-	          imgui.PopStyleColor()
-            end
-        end
-    elseif sb_fetch_status == "LOADING" then
-	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-	          imgui.TextUnformatted("Fetching SimBrief data...")
-	          imgui.PopStyleColor()
-    elseif sb_fetch_status == "ERROR" then
-	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-	          imgui.TextUnformatted("SimBrief fetch error")
-	          imgui.PopStyleColor()
-    end
 
 ------------------------------
 
@@ -3794,7 +3769,70 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-    imgui.SetCursorPosY(182)
+    ---------------------------------------------------------------------------
+    -- Ending : Disable the SETTING to avoid selection when FM car is active --
+    ---------------------------------------------------------------------------
+	if fm_car_active or #t_runway == 0 then
+	    imgui.EndDisabled()
+	end
+
+------------------------------
+
+    if fm_car_active then
+	    -- Dark green (RGBA hex)
+	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
+	    -- Lighter green on hover
+	    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, RED)
+	    -- Green when clicked
+	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
+
+	    imgui.SetCursorPosY(187)
+	    imgui.SetCursorPosX(96)
+
+	    if imgui.Button("N", 22, 25) then
+	    	toggle_window = true
+	    end
+
+	    imgui.PopStyleColor(3)
+    end
+
+------------------------------
+
+    imgui.SetCursorPosY(187)
+    imgui.SetCursorPosX(126)
+
+    if not fm_car_active then
+		if imgui.Button("Request Follow Me Car", 170, 25) then
+		    combo_filter_list = false
+		    l_err = determine_XP_route() -- Do some validation here
+		    if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
+		        prepare_show_objects = true
+				toggle_window = true
+		    end
+		end
+    else
+        if imgui.Button("Cancel Follow Me Car", 170, 25) then
+            prepare_kill_objects = true
+            kill_is_manual = true
+        end
+    end
+
+------------------------------
+
+    imgui.SetCursorPosY(221)
+    imgui.SetCursorPosX(4)
+    imgui.PushStyleColor(0, DARK_GRAY)
+    imgui.TextUnformatted("__________________                    __________________")
+    imgui.PopStyleColor()
+    imgui.SetCursorPosY(224)
+    imgui.SetCursorPosX(4)
+    imgui.PushStyleColor(0, BLUE)
+    imgui.TextUnformatted("                  OPTIONS & PREFERENCES")
+    imgui.PopStyleColor()
+
+------------------------------
+
+    imgui.SetCursorPosY(244)
     imgui.SetCursorPosX(18)
     imgui.PushStyleColor(0, BLUE)
     imgui.TextUnformatted("Aircraft Type")
@@ -3802,10 +3840,10 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-	imgui.SetCursorPosY(205)
+	imgui.SetCursorPosY(268)
 	imgui.SetCursorPosX(18)
 	imgui.TextUnformatted(PLANE_ICAO)
-	imgui.SetCursorPosY(203)
+	imgui.SetCursorPosY(266)
 	imgui.SetCursorPosX(90)
 
     local l_ac_types = ""
@@ -3854,7 +3892,7 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
-	imgui.SetCursorPosY(235)
+	imgui.SetCursorPosY(298)
     imgui.SetCursorPosX(18)
     imgui.PushStyleColor(0, BLUE)
     imgui.TextUnformatted("Follow Me car model")
@@ -3863,109 +3901,66 @@ function build_followme_window(wnd, x, y)
 ------------------------------
 
     -- Vehicle selection
+    imgui.SetCursorPosY(315)
     imgui.SetCursorPosX(18)
-    imgui.SetCursorPosY(252)
     if imgui.RadioButton(" Ferrari", car_type_fmcar == "Ferrari", false) then
         car_type_fmcar = "Ferrari"
     end
+    imgui.SetCursorPosY(315)
     imgui.SetCursorPosX(110)
-    imgui.SetCursorPosY(252)
     if imgui.RadioButton(" FM Van", car_type_fmcar == "Van", false) then
         car_type_fmcar = "Van"
     end
+    imgui.SetCursorPosY(315)
     imgui.SetCursorPosX(195)
-    imgui.SetCursorPosY(252)
     if imgui.RadioButton(" FM Truck", car_type_fmcar == "Truck", false) then
         car_type_fmcar = "Truck"
     end
+    imgui.SetCursorPosY(315)
     imgui.SetCursorPosX(290)
-    imgui.SetCursorPosY(252)
     if imgui.RadioButton(" Auto Select", car_type_fmcar == "Auto", false) then
         car_type_fmcar = "Auto"
     end
 
 ------------------------------
 
-    ---------------------------------------------------------------------------
-    -- Ending : Disable the SETTING to avoid selection when FM car is active --
-    ---------------------------------------------------------------------------
-	if fm_car_active or #t_runway == 0 then
-	    imgui.EndDisabled()
-	end
+	imgui.SetCursorPosY(341)
+    imgui.SetCursorPosX(18)
+    imgui.PushStyleColor(0, BLUE)
+    imgui.TextUnformatted("Follow Me requirements")
+    imgui.PopStyleColor()
 
 ------------------------------
 
-    if fm_car_active then
-	    -- Dark green (RGBA hex)
-	    imgui.PushStyleColor(imgui.constant.Col.Button, 0xFF27275A)
-	    -- Lighter green on hover
-	    imgui.PushStyleColor(imgui.constant.Col.ButtonHovered, RED)
-	    -- Green when clicked
-	    imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF43439A)
-
-	    imgui.SetCursorPosY(280)
-	    imgui.SetCursorPosX(96)
-
-	    if imgui.Button("N", 22, 25) then
-	    	toggle_window = true
-	    end
-
-	    imgui.PopStyleColor(3)
-    end
-
-------------------------------
-
-    imgui.SetCursorPosY(280)
-    imgui.SetCursorPosX(126)
-
-    if not fm_car_active then
-		if imgui.Button("Request Follow Me Car", 170, 25) then
-		    combo_filter_list = false
-		    l_err = determine_XP_route()
-		    if l_err == "" or (l_err ~= "" and tonumber(l_err) > 0) then
-		        prepare_show_objects = true
-		    end
-		end
-    else
-        if imgui.Button("Cancel Follow Me Car", 170, 25) then
-            prepare_kill_objects = true
-            kill_is_manual = true
+    imgui.SetCursorPosY(362)
+    imgui.SetCursorPosX(18)
+    l_changed, l_newval = imgui.Checkbox(" Show Path", show_path)
+    if l_changed then
+        show_path = l_newval
+        if show_path then
+            load_path()
+        else
+            unload_path()
         end
     end
 
 ------------------------------
 
-    -- Affichage du message Simbrief
-    if Err_Msg ~= "" and Err_Msg ~= nil and sb_fetch_status ~= "OK" and sb_fetch_status ~= "" then
-	    imgui.SetCursorPosY(310)
-	    imgui.SetCursorPosX(18)
-	    if Err_Msg_color == "RED" then
-	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
-	    else
-	        imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
-	    end
-	    imgui.TextUnformatted(Err_Msg)
-	    imgui.PopStyleColor()
-	    Err_Msg = ""
+    imgui.SetCursorPosY(362)
+    imgui.SetCursorPosX(200)
+    l_changed, l_newval = imgui.Checkbox(" Show Ramp Start", show_rampstart)
+    if l_changed then
+        show_rampstart = l_newval
+        if show_rampstart then
+            rampstart_chg = true
+        else
+            unload_rampstart()
+        end
     end
 
 ------------------------------
 
-    local remonte = 0
-    imgui.SetCursorPosY(336+remonte)
-    imgui.SetCursorPosX(4)
-    imgui.PushStyleColor(0, DARK_GRAY)
-    imgui.TextUnformatted("__________________                    __________________")
-    imgui.PopStyleColor()
-    imgui.SetCursorPosY(339+remonte)
-    imgui.SetCursorPosX(4)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("                  OPTIONS & PREFERENCES")
-    imgui.PopStyleColor()
-
-------------------------------
-
-    imgui.SetCursorPosY(358+remonte)
+    imgui.SetCursorPosY(387)
     imgui.SetCursorPosX(18)
     l_changed, l_newval = imgui.Checkbox("##Limit Car Speed", speed_limiter)
     if l_changed then
@@ -3981,45 +3976,8 @@ function build_followme_window(wnd, x, y)
     imgui.TextUnformatted("Limit speed to 20kts")
 
 ------------------------------
-
-    imgui.SetCursorPosY(383+remonte)
-    imgui.SetCursorPosX(18)
-    l_changed, l_newval = imgui.Checkbox(" Show Path", show_path)
-    if l_changed then
-        show_path = l_newval
-        if show_path then
-            load_path()
-        else
-            unload_path()
-        end
-    end
-
-------------------------------
-
-    imgui.SetCursorPosY(383+remonte)
+    imgui.SetCursorPosY(387)
     imgui.SetCursorPosX(200)
-    l_changed, l_newval = imgui.Checkbox(" Show Ramp Start", show_rampstart)
-    if l_changed then
-        show_rampstart = l_newval
-        if show_rampstart then
-            rampstart_chg = true
-        else
-            unload_rampstart()
-        end
-    end
-
-------------------------------
-
-	imgui.SetCursorPosY(418+remonte)
-    imgui.SetCursorPosX(18)
-    imgui.PushStyleColor(0, BLUE)
-    imgui.TextUnformatted("Volume setting")
-    imgui.PopStyleColor()
-
-------------------------------
-
-    imgui.SetCursorPosY(443+remonte)
-    imgui.SetCursorPosX(18)
     imgui.PushItemWidth(150)
     l_changed, l_newval = imgui.SliderFloat("##Vol", vol, 1, 10, "%.0f")
     imgui.PopItemWidth()
@@ -4027,19 +3985,27 @@ function build_followme_window(wnd, x, y)
         vol = l_newval
         set_sound_vol()
     end
-    imgui.SetCursorPosY(440+remonte)
-    imgui.SetCursorPosX(240)
-    if imgui.Button("Test Volume", 90, 25) then
+    imgui.SetCursorPosY(385)
+    imgui.SetCursorPosX(357)
+    if imgui.Button("Volume", 50, 25) then
         play_sound(snd_test)
     end
 
 ------------------------------
 
+	imgui.SetCursorPosY(416)
+    imgui.SetCursorPosX(18)
+    imgui.PushStyleColor(0, BLUE)
+    imgui.TextUnformatted("Simbrief")
+    imgui.PopStyleColor()
+
+------------------------------
+
     -- VER1.5 : SimBrief ID row
-    imgui.SetCursorPosY(482+remonte)
+    imgui.SetCursorPosY(436)
     imgui.SetCursorPosX(18)
     imgui.TextUnformatted("SimBrief ID")
-    imgui.SetCursorPosY(479+remonte)
+    imgui.SetCursorPosY(433)
     imgui.SetCursorPosX(105)
     imgui.PushItemWidth(90)
     l_changed, l_newtext = imgui.InputText("##simbrief_id", simbrief_id, 11, imgui.constant.InputTextFlags.CharsDecimal)
@@ -4061,7 +4027,7 @@ function build_followme_window(wnd, x, y)
 	-- Green when clicked
 	imgui.PushStyleColor(imgui.constant.Col.ButtonActive, 0xFF4D9A43)
 
-	imgui.SetCursorPosY(478+remonte)
+	imgui.SetCursorPosY(429)
 	imgui.SetCursorPosX(240)
 
 	if imgui.Button("Save Preferences", 130, 25) then
@@ -4075,9 +4041,42 @@ function build_followme_window(wnd, x, y)
 
 ------------------------------
 
+  imgui.SetCursorPosY(460)
+  imgui.Separator()
+
+------------------------------
+
+    -- Affichage du message Simbrief
+    imgui.SetCursorPosY(468)
+    imgui.SetCursorPosX(18)
+
+    if simbrief_id == "" then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted("Enter your SimBrief ID and click Save Preferences")
+	          imgui.PopStyleColor()
+    elseif sb_fetch_error_msg == "OK" then
+        if get_from_SimBrief then
+            if sb_airport_mismatch then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted("The current airport does not match the Simbrief data")
+	          imgui.PopStyleColor()
+            else
+	          imgui.PushStyleColor(imgui.constant.Col.Text, GREEN)
+	          imgui.TextUnformatted("SimBrief data fetched successfully")
+	          imgui.PopStyleColor()
+            end
+        end
+    elseif sb_fetch_error_msg == "ERROR" then
+	          imgui.PushStyleColor(imgui.constant.Col.Text, RED)
+	          imgui.TextUnformatted(sb_fetch_status)
+	          imgui.PopStyleColor()
+    end
+
+------------------------------
+
     -- Affichage du message general
     if Err_Msg ~= "" and Err_Msg ~= nil then
-	    imgui.SetCursorPosY(510+remonte)
+	    imgui.SetCursorPosY(488)
 	    imgui.SetCursorPosX(18)
 	    if Err_Msg_color == "RED" then
 	        imgui.PushStyleColor(imgui.constant.Col.Text, RED)
@@ -4532,19 +4531,19 @@ function update_msg(in_msg)
     elseif in_msg == "-11" then
         in_msg = "Unable to locate scenery_packs.ini"
     elseif in_msg == "-6" then
-        in_msg = "Select a Gate/Ramp"
+        in_msg = "Choose a Gate/Ramp"
     elseif in_msg == "-5" then
         if get_from_SimBrief then
             in_msg = "No runway from SimBrief data"
         else
-            in_msg = "Select a Departure Runway"
+            in_msg = "Choose a Departure Runway"
         end
     elseif in_msg == "-4" then
         in_msg = "Unable to complete Save operation"
     elseif in_msg == "-2" then
         in_msg = "Preference file not found. Apply default values."
     elseif in_msg == "-1" then
-        in_msg = "Specify the Aircraft Type"
+        in_msg = "Choose an Aircraft Type"
     elseif in_msg == "2" then
         in_msg = "Preference Saved"
     elseif in_msg == "3" then
@@ -4602,9 +4601,6 @@ function determine_XP_route()
     if #t_taxinode == 0 then
         return "-15"
     end
-    if aircraft_type == "" then
-        return "-1"
-    end
     if depart_arrive == 0 then
         return "-5"
     end
@@ -4628,6 +4624,10 @@ function determine_XP_route()
         if not l_found then
             return "-18"
         end
+    end
+
+    if aircraft_type == "" then
+        return "-1"
     end
 
     depart_gate = check_gate()
@@ -5960,7 +5960,7 @@ end
 -- Description:
 -- Reads user preferences from Output/preferences/FollowMeXplane12.prf.
 -- Restores vol, car_type_fmcar, speed_limiter, random_gate, show_path,
--- show_rampstart, simbrief_id, get_from_SimBrief, and all previously
+-- show_rampstart, simbrief_id, and all previously
 -- known aircraft ICAO-to-type mappings from the t_aircraft table.
 -- If the current aircraft ICAO is found in the file, aircraft_type is
 -- restored immediately. Returns "" on success with a known aircraft,
@@ -5996,8 +5996,6 @@ function load_config()
                 elseif l_str2 == "Auto" then
                     car_type_fmcar = "Auto"
                 end
-            elseif l_str1 == "get_from_SimBrief" then
-                get_from_SimBrief = (l_str2 == "1")
             elseif l_str1 == "random_gate" then
                 random_gate = (l_str2 == "1")
             elseif l_str1 == "show_path" then
@@ -6059,7 +6057,6 @@ function save_config()
 
     -- SimBrief
     l_content = l_content .. "simbrief_id" .. "\t" .. simbrief_id .. "\n"
-    l_content = l_content .. "get_from_SimBrief" .. "\t" .. (get_from_SimBrief and "1" or "0") .. "\n"
 
     -- VER1.6 : update current aircraft in t_aircraft table then write all known aircraft
     t_aircraft[PLANE_ICAO] = aircraft_type
@@ -6129,57 +6126,6 @@ function exit_plugin()
     end
 end
 
-function Steffi_draw()
-
-	local pos_x = SCREEN_WIDTH / 2
-	local pos_y = SCREEN_HIGHT - 60
-
-	XPLMSetGraphicsState(0,0,0,1,1,0,0)
-
-
-	if we_fly then
-		draw_string_Helvetica_18(pos_x, pos_y, "NOUS SOMMES EN VOL")
-	else
-		draw_string_Helvetica_18(pos_x, pos_y, "NOUS SOMMES AU SOL")
-	end
-end
-
-function Steffi_says()
-    local pos = 250
-    local l_dist_to_target = 99999999
-
-    pos = big_bubble(20, pos,
-        "fm_car_active :" .. tostring(fm_car_active),
-        "arrival_gate :" .. arrival_gate,
-        "followme_window_open :" .. tostring(followme_window_open),
-        "followme_wnd ~= nil :" .. tostring(followme_wnd ~= nil),
-        "navigation_window_open :" .. tostring(navigation_window_open),
-        "navigation_wnd ~= nil :" .. tostring(navigation_wnd ~= nil)
-        )
-
-    if t_node ~= nil and #t_node > 0 then
-        -- PAS de "local" ici : on écrit dans la variable déclarée au-dessus
-        _, l_dist_to_target = heading_n_dist(car_x, car_z, t_node[#t_node].x, t_node[#t_node].z)
-    end
-
-    pos = 150
-    pos = big_bubble(20, pos,
-        "depart_arrive :"    .. depart_arrive,
-        "fm_arrived :"       .. fm_arrived,
-        "l_dist_to_target :" .. string.format("%.1f", l_dist_to_target),
-        "prepare_show_objects :" .. tostring(prepare_show_objects)
-        )
-
-    pos = 0
-    pos = big_bubble(20, pos,
-        "we_fly :"       .. tostring(we_fly),
-        "fm_gear1_gnd :"    .. fm_gear1_gnd,
-        "fm_gear2_gnd :"       .. fm_gear2_gnd,
-        "fm_new_flight :"       .. fm_new_flight,
-        "fm_gnd_spd > 60 :" .. tostring(((fm_gnd_spd * 1.94384) > 60))
-        )
-end
-
 -- ====================================================
 -- Function: update_menu_state
 -- Description:
@@ -6211,17 +6157,16 @@ function update_menu_state()
     XPLM.XPLMEnableMenuItem(my_menu, 1, nav_available and 1 or 0)
 end
 
--- =====================================================
--- = MAIN SECTION (Initialization and flywithlua event =
--- =====================================================
+--                  ======================================================
+--                  = MAIN SECTION (Initialization and flywithlua event) =
+--                  ======================================================
+
 XPLM.XPLMGetSystemPath(char_str)
 syspath = ffi.string(char_str)
 
 -- =================
 -- = Prepare menus =
 -- =================
--- Callback appelé quand l'utilisateur clique sur un item
-
 menu_handler = ffi.cast("XPLMMenuHandler_f", function(inMenuRef, inItemRef)
     local item = tonumber(ffi.cast("intptr_t", inItemRef))
     if we_fly then
@@ -6240,14 +6185,9 @@ menu_handler = ffi.cast("XPLMMenuHandler_f", function(inMenuRef, inItemRef)
     end
 end)
 
--- Trouver le menu Plugins (parent)
 plugins_menu = XPLM.XPLMFindPluginsMenu()
-
--- Créer ton sous-menu sous "Plugins"
 my_menu_item = XPLM.XPLMAppendMenuItem(plugins_menu, "FollowMe", nil, 0)
 my_menu = XPLM.XPLMCreateMenu("FollowMe", plugins_menu, my_menu_item, menu_handler, nil)
-
--- Ajouter des items (le 3e arg = inItemRef, castée en pointeur pour identifier l'item)
 XPLM.XPLMAppendMenuItem(my_menu, "Follow Me Window", ffi.cast("void*", 0), 0)
 XPLM.XPLMAppendMenuItem(my_menu, "Navigation Window", ffi.cast("void*", 1), 0)
 update_menu_state(0)  -- VER2.13: état initial des menus au chargement
@@ -6260,6 +6200,4 @@ load_probe()
 
 do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
-do_every_draw("Steffi_draw()")
 do_on_exit("exit_plugin()")
-do_every_draw("Steffi_says()")
