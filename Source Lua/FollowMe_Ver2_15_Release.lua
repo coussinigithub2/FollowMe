@@ -154,7 +154,7 @@
 --    VER2.3 Coussini 2026:  Fix wrong-airport detection after manual Cancel at a runway
 --                           threshold located near an adjacent airport (e.g. CYHU RWY 24R
 --                           threshold sits physically close to heliport CTG2).
---                           Root cause: on manual cancel, VER1.12 cleared curr_ICAO = ""
+--                           Root cause: on manual cancel, VER1.12 cleared curr_icao = ""
 --                           to force an apt.dat reload on the next frame. get_airport_elements()
 --                           then called XPLMFindNavAid from the aircraft's current GPS position
 --                           (the runway threshold) and received CTG2 instead of CYHU because
@@ -162,8 +162,8 @@
 --                           "Follow Me Service is not available at this airport" audio/message.
 --                           Fix: a new boolean flag force_apt_reload is introduced.
 --                           On manual cancel, force_apt_reload = true is set instead of
---                           curr_ICAO = "". In get_airport_elements(), when force_apt_reload
---                           is true the function re-reads apt.dat for the KNOWN curr_ICAO
+--                           curr_icao = "". In get_airport_elements(), when force_apt_reload
+--                           is true the function re-reads apt.dat for the KNOWN curr_icao
 --                           (bypassing XPLMFindNavAid entirely) and clears the flag.
 --                           XPLMFindNavAid is only called when the aircraft genuinely moves
 --                           to a different airport, not on an in-place cancel.
@@ -495,7 +495,6 @@ local prepare_kill_objects = false
 -- VER1.4 : true=manual cancel, false=auto (takeoff)
 local kill_is_manual = false
 
-local init_load = 0
 local window_first_access = false
 local fm_car_active = false
 
@@ -509,8 +508,8 @@ local backtaxi = false
 local fm_arrived = 0
 local ARRIVE_DIST = 60  -- metres (only for runway as target)
 
-local curr_ICAO, curr_ICAO_Name = "", ""
--- VER2.3 : set true on manual cancel to reload apt.dat for the KNOWN curr_ICAO
+local curr_icao, curr_icao_name = "", ""
+-- VER2.3 : set true on manual cancel to reload apt.dat for the KNOWN curr_icao
 --          without calling XPLMFindNavAid (avoids wrong-airport snap at thresholds)
 local force_apt_reload = false
 local t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
@@ -541,8 +540,6 @@ local ac_types = {
 }
 
 -- Preference / Config Values
--- VER1.6 : fixed position - no longer saved/loaded from preferences
-local Win_Y = 405
 -- VER1.4 : default LIGHT PROP for Cessna
 local aircraft_type = "8"
 -- VER1.6 : aircraft types table { ICAO = type } loaded from FollowMeXplane12.prf
@@ -620,7 +617,6 @@ local deccel_max = -8.9
 local deccel_avg = -4
 local accel_avg = 2
 
-local car_weight = 1445
 local tire_diameter = 0.79
 local min_turn_radius = 10.8
 local width_btw_midtire = 1.86
@@ -645,7 +641,6 @@ local curr_node = 1
 local tire_rotate = 0
 local steering = 0
 local car_sign = 0
-local last_car_sign = -1   -- VER2.11 debug : détecte les changements de car_sign
 
 local elapsed_time = 0
 local car_speed = 0
@@ -653,9 +648,6 @@ local car_accel = 0
 local car_x, car_y, car_z = 0, 0, 0
 local remaining_dist_leg = 0
 local turning_is_active = 0
-local prev_taxi_light = 0
-local prev_beacon_light = 0
-local ground_time = 0
 -- VER1.12 : detect new flight when fm_new_flight resets
 local prev_new_flight = 0
 -- VER1.12 : detect teleport (delta pos > 100m in 1 frame)
@@ -706,7 +698,7 @@ function check_SimBrief()
 
     local response_body = {}
     local url = "https://www.simbrief.com/api/xml.fetcher.php?userid=" .. simbrief_id .. "&v=xml"
-    local res, code =
+    local _, code =
         http.request {
         url = url,
         sink = ltn12.sink.table(response_body),
@@ -743,7 +735,7 @@ function check_SimBrief()
     sb_fetch_error_msg = "OK"
 
     -- Airport check is not equal to X-Plane
-    sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
+    sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
 
     -- Automatic application if enabled
     if get_from_SimBrief then
@@ -776,7 +768,7 @@ function apply_simbrief_runway()
 
     local l_rwy = ""
 
-    if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
+    if depart_arrive == 1 and sb_origin_icao == curr_icao then
         -- Departure: use SimBrief takeoff runway
         l_rwy = sb_runway_takeoff
     end
@@ -887,10 +879,8 @@ function start_car()
     end
 
     local l_car_is_in_front = false
-    local l_plane_is_in_front = false
 
     l_car_is_in_front = chk_line_of_sight(fm_plane_head, 120, 120, fm_plane_x, fm_plane_z, car_x, car_z)
-    l_plane_is_in_front = chk_line_of_sight(car_body_heading, 120, 120, car_x, car_z, fm_plane_x, fm_plane_z)
 
     -- VER1.25 : align car_body_heading toward the aircraft at spawn when the car
     -- is NOT already visible in front of the plane.  Without this, if the pilot
@@ -1204,7 +1194,7 @@ function plot_position(in_act_dist)
     local l_head1 = 0
     local l_head2 = 0
     local l_dist = 0
-    local l_heading_from_center, l_heading_to_center = 0, 0
+    local l_heading_from_center = 0
     local l_goto_nextnode = false
     local l_AoR = 0
     local l_act_dist = 0
@@ -1831,7 +1821,7 @@ end
 -- ====================================================
 function get_local_coordinates(in_lat, in_lon, in_alt)
     local l_x, l_y, l_z = 0, 0, 0
-    if l_alt == 0 then
+    if in_alt == 0 then
         l_x, l_y, l_z = latlon_to_local(in_lat, in_lon, in_alt)
         x1_value[0] = l_x
         y1_value[0] = l_y
@@ -1994,9 +1984,8 @@ function object_physics()
         local l_dist = 0
         local l_car_in_sight, l_car_is_behind = false, false
         l_car_in_sight, _, l_dist = chk_line_of_sight(fm_plane_head, 80, 80, fm_plane_x, fm_plane_z, car_x, car_z)
-        local l_car_to_plane_head, l_car_to_plane_dist = 0, 0
         if not l_car_in_sight and l_dist <= 200 then
-            l_car_is_behind, l_car_to_plane_head, l_car_to_plane_dist =
+            l_car_is_behind, _, _ =
                 chk_line_of_sight(car_body_heading, 45, 45, car_x, car_z, fm_plane_x, fm_plane_z)
         end
         move_car(l_dist, l_car_in_sight, l_car_is_behind)
@@ -2066,7 +2055,6 @@ function load_object()
             end,
             inRefcon
         )
-        car_weight = 1445
         tire_diameter = 0.79
         min_turn_radius = 10.8
         width_btw_midtire = 1.86
@@ -2085,7 +2073,6 @@ function load_object()
             end,
             inRefcon
         )
-        car_weight = 1700
         tire_diameter = 0.65
         min_turn_radius = 10.8
         width_btw_midtire = 1.39
@@ -2104,7 +2091,6 @@ function load_object()
             end,
             inRefcon
         )
-        car_weight = 2000
         tire_diameter = 0.730
         min_turn_radius = 10.8
         width_btw_midtire = 1.578
@@ -2429,7 +2415,7 @@ end
 -- Detects the current X-Plane airport via XPLMFindNavAid / XPLMGetNavAidInfo
 -- and, if the ICAO has changed since the last call, triggers a full parse
 -- of the apt.dat file for that airport via read_apt_file(). Stores the
--- new ICAO and airport name in curr_ICAO / curr_ICAO_name. If the airport
+-- new ICAO and airport name in curr_icao / curr_icao_name. If the airport
 -- has no taxiway network (taxiway_network != ""), speaks an audio warning
 -- to the pilot. Called once when the main window opens for the first time
 -- (window_first_access) and again on auto-trigger events (taxi/beacon
@@ -2437,20 +2423,20 @@ end
 -- ====================================================
 function get_airport_elements()
     -- VER2.3 : if a manual cancel set force_apt_reload, reload apt.dat for the
-    --          already-known curr_ICAO without calling XPLMFindNavAid.
+    --          already-known curr_icao without calling XPLMFindNavAid.
     --          This prevents XPLMFindNavAid from snapping to a neighbouring
     --          airport (e.g. heliport CTG2) when the aircraft is parked at a
     --          runway threshold that is physically close to that other airport.
     if force_apt_reload then
         force_apt_reload = false
         world_alt = 0
-        taxiway_network = read_apt_file(curr_ICAO)
+        taxiway_network = read_apt_file(curr_icao)
         if taxiway_network ~= "" then
             XPLMSpeakString("Follow Me Service is not available at this airport")
             return
         end
         if sb_fetch_error_msg == "OK" then
-            sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
+            sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
         end
         -- skip the XPLMFindNavAid block entirely
     else
@@ -2460,11 +2446,11 @@ function get_airport_elements()
 
     _, _, _, _, _, _, l_new_ICAO, l_new_ICAO_name = XPLMGetNavAidInfo(l_airport_index)
 
-    if curr_ICAO ~= l_new_ICAO then
+    if curr_icao ~= l_new_ICAO then
         world_alt = 0
         taxiway_network = read_apt_file(l_new_ICAO)
-        curr_ICAO = l_new_ICAO
-        curr_ICAO_name = l_new_ICAO_name
+        curr_icao = l_new_ICAO
+        curr_icao_name = l_new_ICAO_name
 
         if taxiway_network ~= "" then
             XPLMSpeakString("Follow Me Service is not available at this airport")
@@ -2473,7 +2459,7 @@ function get_airport_elements()
 
         -- VER1.5 : Check if SimBrief departure airport matches the new sim airport
         if sb_fetch_error_msg == "OK" then
-            sb_airport_mismatch = (sb_origin_icao ~= curr_ICAO)
+            sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
         end
     end
 
@@ -3021,16 +3007,6 @@ function apply_1206_filter()
         end
     end
 
-    -- Step 3: count vehicle-only nodes (do NOT nil them - nilling creates holes in t_taxinode
-    --          that crash every loop using  for i=1,#t_taxinode do  without a nil-guard).
-    --          Nodes with no 1202 segment will get Segment="" in Step 5, so A* ignores them.
-    local l_count = 0
-    for l_id, _ in pairs(l_remove) do
-        if t_taxinode[l_id + 1] ~= nil then
-            l_count = l_count + 1
-        end
-    end
-
     -- Step 4: remove segments that reference a removed node
     -- (These are ADD_NEWSEGMENT stubs that may have been built from vehicle nodes;
     --  regular 1202 segments already survived Step 1.)
@@ -3230,7 +3206,7 @@ end
 -- Unloads all 3-D objects (car, signboard, path pins, ramp marker) if
 -- the FM car is currently active, then resets all motion, routing, and
 -- airport state variables. Forces a fresh apt.dat reload on the next
--- get_airport_elements() call by clearing curr_ICAO. Called by
+-- get_airport_elements() call by clearing curr_icao. Called by
 -- handle_plugin_window() when X-Plane starts a new flight (fm_new_flight
 -- resets) or when the aircraft teleports more than 1000 m, and from
 -- exit_plugin() on shutdown. Fixes the double-car bug that occurred after
@@ -3247,7 +3223,6 @@ function full_reset()
     prepare_kill_objects = false
     prepare_show_objects = false
     kill_is_manual = false
-    ground_time = 0
     flight_start_cpt = 0
     we_fly = false
     -- VER2.15 : force config reload on next window open after a genuine reset
@@ -3259,7 +3234,7 @@ function full_reset()
 	-- new airport = fresh runway list
     t_deleted_runway = {}
 	-- VER1.12 : force apt.dat reload on next get_airport_elements()
-    curr_ICAO = ""
+    curr_icao = ""
     -- VER2.3 : clear force_apt_reload flag (full reset implies genuine airport change,
     --          XPLMFindNavAid should run normally)
     force_apt_reload = false
@@ -3385,7 +3360,6 @@ function handle_plugin_window()
             if followme_wnd ~= nil then
 	            arrival_gate = 0
 	            flight_start_cpt = 9999
-	            ground_time = 0
                 hide_followme_window()
             end
             if navigation_wnd ~= nil then
@@ -3423,8 +3397,8 @@ function handle_plugin_window()
 			fm_arrived = 0
             -- VER1.9 : say goodbye when user manually cancels
             update_msg("7")
-            -- VER2.3 : force apt.dat reload for the KNOWN curr_ICAO instead of
-            --          clearing curr_ICAO, which caused XPLMFindNavAid to snap
+            -- VER2.3 : force apt.dat reload for the KNOWN curr_icao instead of
+            --          clearing curr_icao, which caused XPLMFindNavAid to snap
             --          to a neighbouring airport (e.g. CTG2 at CYHU RWY 24R threshold)
             force_apt_reload = true
             -- Preserve all routing state so the user can immediately re-request
@@ -3482,7 +3456,7 @@ end
 -- ====================================================
 function show_followme_window()
 
-	followme_title = "Follow Me Window"
+	local followme_title = "Follow Me Window"
 
     window_first_access = true
     -- 490 est la hauteur
@@ -3581,7 +3555,7 @@ function build_followme_window(wnd, x, y)
     if get_from_SimBrief and sb_fetch_error_msg == "OK" and sb_origin_icao ~= "" then
         imgui.TextUnformatted(sb_origin_icao .. " " .. string.format("%-3s", sb_runway_takeoff) .. " " .. sb_origin_name)
     else
-        imgui.TextUnformatted(curr_ICAO .. " " .. curr_ICAO_name)
+        imgui.TextUnformatted(curr_icao .. " " .. curr_icao_name)
     end
 
     imgui.SetWindowFontScale(1.1)
@@ -4254,6 +4228,8 @@ end
 -- ====================================================
 function build_navigation_window(wnd, x, y)
 
+	local navigation_title= "Navigation Window"
+
 	if fm_car_active then
 		if depart_arrive == 1 then
 	        navigation_title = "Depart Rwy : "..depart_runway
@@ -4263,8 +4239,6 @@ function build_navigation_window(wnd, x, y)
 	        	navigation_title = "Gate : "..gatetext
 	        end
 		end
-	else
-		navigation_title = "Navigation Window"
 	end
 
     float_wnd_set_title(navigation_wnd, navigation_title)
@@ -4484,7 +4458,7 @@ function build_navigation_window(wnd, x, y)
         end
         imgui.SameLine()
         imgui.SetCursorPosX(pos_x_begin_at + 342)
-		text_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
+		local text_color = (fm_ti == 0 or fm_ti == 2 or fm_ti == 4 or fm_ti == 6) and BLACK or BLUE
         if depart_arrive ~= 0 and fm_arrived == 0 then
         	imgui.PushStyleColor(imgui.constant.Col.Text, BLUE)
     	else
@@ -4578,6 +4552,8 @@ end
 -- ====================================================
 function update_msg(in_msg)
 
+    local l_rwy = ""
+
     if in_msg == nil or in_msg == "0" then
         return
     end
@@ -4589,9 +4565,9 @@ function update_msg(in_msg)
     end
 
     if in_msg == "-30" then
-        if depart_arrive == 1 and sb_origin_icao == curr_ICAO then
+        if depart_arrive == 1 and sb_origin_icao == curr_icao then
             l_rwy = sb_runway_takeoff
-        elseif depart_arrive == 2 and sb_dest_icao == curr_ICAO then
+        elseif depart_arrive == 2 and sb_dest_icao == curr_icao then
             l_rwy = sb_runway_landing
         end
         in_msg = "Routes not defined for Simbrief runway " .. l_rwy
@@ -5068,7 +5044,7 @@ function transverse(in_startnode, in_endnode, in_heading)
         end
         logMsg(
             "FollowMe : RAW A* ROUTE" ..
-                " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_label .. " TO=" .. l_to_label
+                " AIRPORT=" .. curr_icao .. " FROM=" .. l_from_label .. " TO=" .. l_to_label
         )
         logMsg("FollowMe : RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
         local l_raw_count = 0
@@ -5522,7 +5498,7 @@ function process_possible_routes()
                                                                         "m) "
         end
         logMsg(
-            "FollowMe : DRIVE ROUTE" .. " AIRPORT=" .. curr_ICAO .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
+            "FollowMe : DRIVE ROUTE" .. " AIRPORT=" .. curr_icao .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
         )
         logMsg("FollowMe : DRIVE NODES : " .. l_node_list)
         logMsg("FollowMe : DRIVE NODES TOTAL=" .. #t_node)
@@ -5579,7 +5555,7 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
     local l_ret_segment_index, l_ret_x, l_ret_z = 0, 0, 0
     local l_deadnode, l_dist_to_deadnode
     local l_ret_node_dist = 9999
-    local l_ret_nodesegment_index, l_ret_deadnode = 0, 0
+    local l_ret_deadnode = 0
     local l_in_rev_heading = 0
     local l_goto_node = 0
     local l_min_dist = 25
@@ -5613,7 +5589,6 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
             if l_within_sight then
                 if l_dist_to_deadnode >= l_min_dist and l_dist_to_deadnode <= l_ret_node_dist then
                     l_ret_deadnode = l_deadnode
-                    l_ret_nodesegment_index = i
                     l_ret_node_dist = l_dist_to_deadnode
                 end
             end
@@ -5624,7 +5599,6 @@ function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
             if l_within_sight then
                 if l_dist_to_deadnode <= l_max_dist_node and l_dist_to_deadnode <= l_ret_node_dist then
                     l_ret_deadnode = l_deadnode
-                    l_ret_nodesegment_index = i
                     l_ret_node_dist = l_dist_to_deadnode
                 end
             end
