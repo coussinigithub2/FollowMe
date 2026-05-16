@@ -240,6 +240,19 @@
 --                           Ensures the user must cancel an active FM session before
 --                           reopening the main window. The X button on the FM window
 --                           or the Cancel button both restore menu access.
+--    VER2.15 Coussini 2026: Preserve Follow Me requirements across window toggles.
+--                           When toggling between followme_wnd and navigation_wnd,
+--                           show_path, show_rampstart, vol, and speed_limiter are now
+--                           kept in memory without requiring Save Preferences.
+--                           Root cause: show_followme_window() set window_first_access=true,
+--                           causing build_followme_window() to call load_config() on every
+--                           toggle, overwriting in-memory values with the last saved file.
+--                           Fix: new boolean config_loaded prevents load_config() from being
+--                           called more than once per session. full_reset() resets it so a
+--                           genuine new flight still reloads from disk.
+--                           Show Path toggle now uses a path_chg flag processed in
+--                           object_physics(), mirroring the existing rampstart_chg pattern,
+--                           for consistent load/unload behaviour.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -596,7 +609,9 @@ local snd_test = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/sound_test.
 local snd_slow_down = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/slow_down.wav")
 
 local path_is_shown = false
+local path_chg = false       -- VER2.15 : true = load or unload path on next object_physics frame
 local rampstart_chg = false
+local config_loaded = false  -- VER2.15 : true after first load_config(); suppresses reload on window toggle
 local world_alt = 0
 
 local gravity = 9.81
@@ -649,6 +664,8 @@ local prev_plane_z = 0
 local taxiway_network = ""
 -- VER1.6 fix : cooldown timer to avoid repeating speed warning every frame
 local speed_warn_time = 0
+-- VER2.15 : one-shot flag - snd_slow_down played once per active FM run at ~300 m from target
+local slow_down_played = false
 
 local fm_car_completed_timer = 0
 local last_fm_car_completed_timer = 0
@@ -810,6 +827,7 @@ function start_car()
     turning_is_active = 0
     curr_node = 1
     fm_arrived = 0  -- VER2.6 : reset distance-stop flag
+    slow_down_played = false  -- VER2.15 : reset for each new FM run
 
     -- Clear any previous messages to avoid collision (e.g. "Arrived" + "Follow Me")
     Err_Msg = ""
@@ -1949,6 +1967,16 @@ function object_physics()
 
     if path_instance[0] ~= nil and not path_is_shown then
         draw_path()
+    end
+
+    -- VER2.15 : reactive path load/unload via path_chg flag (mirrors rampstart_chg)
+    if path_chg then
+        if show_path then
+            load_path()
+        else
+            unload_path()
+        end
+        path_chg = false
     end
 
     if rampstart_chg then
@@ -3222,6 +3250,11 @@ function full_reset()
     ground_time = 0
     flight_start_cpt = 0
     we_fly = false
+    -- VER2.15 : force config reload on next window open after a genuine reset
+    --           (new flight / teleport). Window toggles during a session do NOT
+    --           call full_reset(), so config_loaded stays true and in-memory
+    --           values are preserved.
+    config_loaded = false
 
 	-- new airport = fresh runway list
     t_deleted_runway = {}
@@ -3321,6 +3354,22 @@ function handle_plugin_window()
         play_sound(snd_keep_speed)
 		-- repeat at most every 15 seconds
         speed_warn_time = fm_run_time + 15
+    end
+
+    -- VER2.15 : snd_slow_down - played once when distance to target crosses below 300 m.
+    -- Runs every frame in handle_plugin_window() so it fires regardless of which window
+    -- is open (followme_wnd, navigation_wnd, or none). Reset by start_car() on each new run.
+    if fm_car_active and fm_arrived == 0 and not slow_down_played and #t_node > 0 then
+        local l_dist_slow = 0
+        if depart_arrive == 1 then
+            _, l_dist_slow = heading_n_dist(fm_plane_x, fm_plane_z, t_node[#t_node].x, t_node[#t_node].z)
+        elseif depart_arrive == 2 and arrival_gate > 0 then
+            _, l_dist_slow = heading_n_dist(fm_plane_x, fm_plane_z, t_gate[arrival_gate].x, t_gate[arrival_gate].z)
+        end
+        if l_dist_slow > 0 and l_dist_slow <= 300 then
+            play_sound(snd_slow_down)
+            slow_down_played = true
+        end
     end
 
     if (fm_gear1_gnd == 0 and fm_gear2_gnd == 0) and fm_new_flight > 1 then
@@ -3496,7 +3545,14 @@ function build_followme_window(wnd, x, y)
     )
 
     if window_first_access then
-    	load_config()
+        -- VER2.15 : load_config() only on true first access (plugin load or new flight).
+        --           On a navigation_wnd → followme_wnd toggle, config_loaded is already
+        --           true so we skip the file read and keep the in-memory values of
+        --           show_path, show_rampstart, vol, speed_limiter unchanged.
+        if not config_loaded then
+            load_config()
+            config_loaded = true
+        end
         get_airport_elements()
         window_first_access = false
     end
@@ -3958,11 +4014,9 @@ function build_followme_window(wnd, x, y)
     l_changed, l_newval = imgui.Checkbox(" Show Path", show_path)
     if l_changed then
         show_path = l_newval
-        if show_path then
-            load_path()
-        else
-            unload_path()
-        end
+        -- VER2.15 : use path_chg flag (processed in object_physics) to load/unload,
+        --           mirroring the rampstart_chg pattern
+        path_chg = true
     end
 
 ------------------------------
@@ -4445,11 +4499,6 @@ function build_navigation_window(wnd, x, y)
     	else
         	imgui.PushStyleColor(imgui.constant.Col.Text, text_color)
     	end
-
-    	-- In case we are arrived and we want to fly the following message not appears
-		if math.floor(l_dist_dest + 0.5) == 300 and fm_arrived == 0 then
-	        play_sound(snd_slow_down)
-		end
 
         if l_dist_dest >= 1000 then
             imgui.TextUnformatted(string.format("%.2f km", l_dist_dest / 1000))
