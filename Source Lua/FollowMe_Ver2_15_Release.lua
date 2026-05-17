@@ -895,11 +895,26 @@ function start_car()
         car_body_heading = l_head_to_plane
     end
 
+	-- VER2.16 : Si l'avion est déjà sur la piste cible au démarrage (ex: X-Plane
+    -- positionné directement sur 24R), ne pas jouer "follow me" + "arrived" en
+    -- chevauchement. Détecter la condition ici et aller directement à "arrived".
+    if depart_arrive == 1 and #t_node > 0 then
+        local _, l_dist_already = heading_n_dist(fm_plane_x, fm_plane_z,
+                                                  t_node[#t_node].x, t_node[#t_node].z)
+        if l_dist_already <= ARRIVE_DIST then
+            fm_arrived = 1
+            curr_node  = #t_node
+            update_msg("5")  -- "We have arrived at destination" + snd_arrived uniquement
+            return
+        end
+    end
+
     if not l_car_is_in_front and depart_gate == 0 then
         update_msg("6")
     else
         update_msg("3")
     end
+
 end
 
 -- ====================================================
@@ -3459,11 +3474,12 @@ function show_followme_window()
 	local followme_title = "Follow Me Window"
 
     window_first_access = true
-    -- 490 est la hauteur
 
-	local pos_x = (SCREEN_WIDTH - 490) / 2
-	local pos_y = SCREEN_HIGHT / 2  -- tout en haut
+    local wnd_width  = 420
+    local wnd_height = 515
 
+    local pos_x = (SCREEN_WIDTH  - wnd_width)  / 2
+    local pos_y = (SCREEN_HIGHT - wnd_height) / 2
 
     followme_wnd = float_wnd_create(420, 515, 1, true)
     float_wnd_set_title(followme_wnd, followme_title)
