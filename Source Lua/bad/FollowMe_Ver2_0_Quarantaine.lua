@@ -43,13 +43,6 @@ end
 require("bit")
 require("graphics")
 
-local socket_ok, socket = pcall(require, "socket")
-local http_ok, http = pcall(require, "socket.http")
-
-if not socket_ok or not http_ok then
-    logMsg("FollowMe : ERROR - socket.lua or socket.http not found")
-end
-
 local ffi = require("ffi")
 local XPLMlib = ""
 
@@ -188,6 +181,21 @@ typedef struct {
 			]]
 ffi.cdef(cdefs)
 
+-- Datarefs
+dataref("viewext", "sim/graphics/view/view_is_external")
+dataref("camera_z_position", "sim/graphics/view/pilots_head_z")
+dataref("fm_gear1_gnd", "sim/flightmodel2/gear/on_ground", "readonly", 0)
+dataref("fm_gear2_gnd", "sim/flightmodel2/gear/on_ground", "readonly", 1)
+dataref("fm_new_flight", "sim/time/total_flight_time_sec")
+dataref("fm_run_time", "sim/time/total_running_time_sec")
+dataref("fm_sim_time", "sim/operation/misc/frame_rate_period")
+dataref("fm_replay", "sim/time/is_in_replay")
+dataref("fm_plane_x", "sim/flightmodel/position/local_x")
+dataref("fm_plane_y", "sim/flightmodel/position/local_y")
+dataref("fm_plane_z", "sim/flightmodel/position/local_z")
+dataref("fm_gnd_spd", "sim/flightmodel/position/groundspeed", "readonly")
+dataref("fm_plane_head", "sim/flightmodel/position/psi", "readonly")
+
 -- List of color codes used in the program
 YELLOW      = 0xFF00BFFF
 RED         = 0xFF0000FF
@@ -264,7 +272,6 @@ local t_node = {}
 local t_suitable_gates = {}
 local Err_Msg = ""
 local Err_Msg_color = "GREEN"
-
 local ac_types = {
     "0 - Fighter",
     "1 - SUPER HEAVY JET - A-380, C-5, 747",
@@ -276,7 +283,6 @@ local ac_types = {
     "7 - LIGHT JET - Learjet, Gulfstream, Fighter",
     "8 - LIGHT PROP - GA prop planes"
 }
-
 local aircraft_type = "8"
 local t_aircraft = {}
 local get_from_SimBrief = false
@@ -297,21 +303,6 @@ local sb_runway_landing = ""
 local sb_fetch_error_msg = ""
 local sb_fetch_status = nil
 local sb_airport_mismatch = false
-
--- Datarefs
-dataref("viewext", "sim/graphics/view/view_is_external")
-dataref("camera_z_position", "sim/graphics/view/pilots_head_z")
-dataref("fm_gear1_gnd", "sim/flightmodel2/gear/on_ground", "readonly", 0)
-dataref("fm_gear2_gnd", "sim/flightmodel2/gear/on_ground", "readonly", 1)
-dataref("fm_new_flight", "sim/time/total_flight_time_sec")
-dataref("fm_run_time", "sim/time/total_running_time_sec")
-dataref("fm_sim_time", "sim/operation/misc/frame_rate_period")
-dataref("fm_replay", "sim/time/is_in_replay")
-dataref("fm_plane_x", "sim/flightmodel/position/local_x")
-dataref("fm_plane_y", "sim/flightmodel/position/local_y")
-dataref("fm_plane_z", "sim/flightmodel/position/local_z")
-dataref("fm_gnd_spd", "sim/flightmodel/position/groundspeed", "readonly")
-dataref("fm_plane_head", "sim/flightmodel/position/psi", "readonly")
 
 -- Sounds
 local snd_arrived = load_WAV_file(SCRIPT_DIRECTORY .. "follow_me/sounds/arrived.wav")
@@ -384,7 +375,6 @@ local my_menu = nil
 -- If get_from_SimBrief is active, automatically applies the fetched runway.
 -- ====================================================
 function check_SimBrief()
-
     sb_fetch_error_msg = ""
     sb_airport_mismatch = false
 
@@ -392,9 +382,7 @@ function check_SimBrief()
         sb_fetch_error_msg = "NO_ID"
         return
     end
-    
     sb_fetch_error_msg = ""
-    
     local response_body = {}
     local url = "https://www.simbrief.com/api/xml.fetcher.php?userid=" .. simbrief_id .. "&v=xml"
     local _, code =
@@ -407,15 +395,11 @@ function check_SimBrief()
     if code ~= 200 or not response_body or #response_body == 0 then
         sb_fetch_error_msg = "ERROR"
     end
-    
     local xml_body = table.concat(response_body)
-    
     sb_fetch_status = string.match(xml_body, "<fetch>.-<status>(.-)</status>") or ""
-	
 	if sb_fetch_error_msg == "ERROR" then
 		return
     end
-    
     sb_origin_icao = string.match(xml_body, "<origin>.-<icao_code>(.-)</icao_code>") or ""
     sb_dest_icao = string.match(xml_body, "<destination>.-<icao_code>(.-)</icao_code>") or ""
     sb_origin_name = string.match(xml_body, "<origin>.-<name>(.-)</name>") or ""
@@ -427,7 +411,6 @@ function check_SimBrief()
         sb_fetch_error_msg = "NO_DATA"
         return
     end
-    
     sb_fetch_error_msg = "OK"
     sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
 
@@ -446,13 +429,11 @@ end
 -- Sets depart_runway or clears it and shows an error message if not found.
 -- ====================================================
 function apply_simbrief_runway()
-
     depart_runway = ""
 
     if sb_fetch_error_msg ~= "OK" then
         return
     end
-
     local l_rwy = ""
 
     if depart_arrive == 1 and sb_origin_icao == curr_icao then
@@ -462,9 +443,7 @@ function apply_simbrief_runway()
     if l_rwy == "" then
         return
     end
-
     local l_found = false
-
     for i = 1, #t_runway do
         if t_runway[i].ID == l_rwy then
             l_found = true
@@ -491,7 +470,6 @@ end
 -- Plays the appropriate audio cue and displays the starting status message.
 -- ====================================================
 function start_car()
-
     car_speed = 0
     car_accel = 0
     tire_rotate = 0
@@ -508,9 +486,7 @@ function start_car()
     car_x = t_node[1].x
     car_y = t_node[1].y
     car_z = t_node[1].z
-
     local _, l_dist_to_plane = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
-
     logMsg(string.format(
         "FollowMe : start_car  spawnNode=t_node[1]  x=%.1f  z=%.1f  dist_to_plane=%.1fm  gate=%d",
         car_x, car_z, l_dist_to_plane, depart_gate))
@@ -543,9 +519,7 @@ function start_car()
                 l_gate_x, l_gate_z, l_hdg_gate_to_n1))
         end
     end
-
     local l_car_is_in_front = false
-
     l_car_is_in_front = chk_line_of_sight(fm_plane_head, 120, 120, fm_plane_x, fm_plane_z, car_x, car_z)
 
     if not l_car_is_in_front then
@@ -553,22 +527,9 @@ function start_car()
         car_body_heading = l_head_to_plane
     end
 
-    -- Aircraft already on the requested runway
     if depart_arrive == 1 and #t_node > 0 then
         local _, l_dist_already = heading_n_dist(fm_plane_x, fm_plane_z,
                                                   t_node[#t_node].x, t_node[#t_node].z)
-        if l_dist_already <= ARRIVE_DIST then
-            fm_arrived = 1
-            curr_node  = #t_node
-            update_msg("5")
-            return
-        end
-    end
-
-	-- Aircraft already on the requested gate
-    if depart_arrive == 2 and #t_node > 0 then
-        local _, l_dist_already = heading_n_dist(fm_plane_x, fm_plane_z,
-                                                  t_gate[arrival_gate].x, t_gate[arrival_gate].z)
         if l_dist_already <= ARRIVE_DIST then
             fm_arrived = 1
             curr_node  = #t_node
@@ -593,7 +554,6 @@ end
 -- Returns the exit heading that minimizes deviation, used to smooth sharp turns.
 -- ====================================================
 function determine_exit_angle(lever_angle)
-
     local l_prev_deviation, l_curr_deviation = 8888, 0
     local l_angle_btw_circle = 0
     local l_circle_radius = 0
@@ -603,10 +563,8 @@ function determine_exit_angle(lever_angle)
     local l_delta_angle_rad = 0
     local l_delta_angle_deg = 0
     local l_total_angle = 0
-
     l_circle_radius = min_rot_radius
     l_dist_btw_circles = 2 * l_circle_radius
-
     for l_delta_angle_deg = lever_angle, lever_angle + 90, 0.1 do
         l_delta_angle_rad = math.rad(l_delta_angle_deg)
         l_x = l_dist_btw_circles * math.sin(l_delta_angle_rad)
@@ -624,7 +582,6 @@ function determine_exit_angle(lever_angle)
             l_angle_btw_circle = l_delta_angle_deg
         end
     end
-
     return 90 + l_angle_btw_circle
 end
 
@@ -644,11 +601,9 @@ function chk_line_of_sight(
     shooter_z,
     target_x,
     target_z)
-
     local l_heading_to_target, l_dist_to_target = 0, 0
     local l_left_arc, l_right_arc = 0, 0
     local l_within_sight = false
-
     l_heading_to_target, l_dist_to_target = heading_n_dist(shooter_x, shooter_z, target_x, target_z)
     l_left_arc = add_delta_clockwise(shooter_heading, shooter_left_angle, -1)
     l_right_arc = math.fmod(shooter_heading + shooter_right_angle, 360)
@@ -662,7 +617,6 @@ function chk_line_of_sight(
      then
         l_within_sight = true
     end
-
     return l_within_sight, l_heading_to_target, l_dist_to_target
 end
 
@@ -676,7 +630,6 @@ end
 -- Delegates actual motion physics to manage_car_motion() after computing acceleration.
 -- ====================================================
 function move_car(in_dist, in_car_in_sight, in_car_is_behind)
-
     local l_ref_spd = fm_gnd_spd
 
     if speed_limiter and l_ref_spd > speed_max then
@@ -723,7 +676,6 @@ function move_car(in_dist, in_car_in_sight, in_car_is_behind)
             car_accel = 0
         end
     end
-
     manage_car_motion()
 end
 
@@ -738,11 +690,9 @@ end
 -- at the destination, setting fm_arrived and playing the arrival sound.
 -- ====================================================
 function manage_car_motion()
-
     local l_dist = 0
     local l_dist_stop = 0
     local l_dist_turn = 0
-
     car_speed = car_speed + (car_accel * elapsed_time)
 
     if car_speed > speed_max then
@@ -762,7 +712,6 @@ function manage_car_motion()
             end
         end
     end
-
     l_dist = (car_speed * elapsed_time) + (0.5 * math.abs(car_accel) * math.pow(elapsed_time, 2))
 
     if remaining_dist_leg > 0 then
@@ -786,7 +735,6 @@ function manage_car_motion()
             end
         end
     end
-
     plot_position(l_dist)
 
     if fm_arrived == 0 and depart_arrive == 1 and #t_node > 0 then
@@ -838,7 +786,6 @@ end
 -- Sets the signboard state (straight, left turn, right turn, arrived) based on context.
 -- ====================================================
 function plot_position(in_act_dist)
-
     local l_remaining_turn_dist = 0
     local l_remaining_act_dist = 0
     local l_remaining_leg_dist = 0
@@ -1086,13 +1033,11 @@ end
 -- Accounts for the offset between the car's reference point and the rear axle.
 -- ====================================================
 function CoR_coordinates_using_car_ref(in_x, in_z, in_heading, in_radius, in_dir)
-
     local l_angle_rear_to_ref = math.deg(math.atan(car_rear_wheel_to_ref / in_radius))
     local l_ref_to_center_rot = math.sqrt((car_rear_wheel_to_ref ^ 2) + (in_radius ^ 2))
     local l_heading_to_center = add_delta_clockwise(in_heading, 90 + l_angle_rear_to_ref, in_dir)
     local l_rot_x = in_x + math.sin(math.rad(l_heading_to_center)) * l_ref_to_center_rot
     local l_rot_z = in_z + math.cos(math.rad(l_heading_to_center)) * l_ref_to_center_rot * -1
-
     return l_rot_x, l_rot_z
 end
 
@@ -1106,7 +1051,6 @@ end
 -- compound S-curves, and adjusts the pre-turn distance to fit within the leg length.
 -- ====================================================
 function determine_dir_of_turn(in_head1, in_head2, in_dist)
-
     local l_AoC = 0
     local l_AoR = 0
     local l_speed_skid = math.sqrt(cof * gravity * min_rot_radius)
@@ -1180,17 +1124,15 @@ end
 -- and time, ensuring the wheels return to neutral before the straight segment.
 -- ====================================================
 function determine_steering(in_AoR, in_remaining_turn_dist, in_dir, in_steer_limit)
-
     local l_prev_steer_angle = math.abs(steering)
     local l_time_in_turn = (in_AoR / 360) * (2 * math.pi * t_node[curr_node + 1].radius)
     local l_steering_delta = l_time_in_turn * max_steering / 0.5
+    local time_to_exit_turn = in_remaining_turn_dist / car_speed
+    local time_to_steer_neutral = l_prev_steer_angle * 0.5 / max_steering
 
     if l_steering_delta > in_steer_limit then
         l_steering_delta = in_steer_limit
     end
-
-    local time_to_exit_turn = in_remaining_turn_dist / car_speed
-    local time_to_steer_neutral = l_prev_steer_angle * 0.5 / max_steering
 
     if time_to_exit_turn < time_to_steer_neutral then
         if in_dir == 1 then
@@ -1228,12 +1170,10 @@ end
 -- position the signboard above the car.
 -- ====================================================
 function coordinates_of_adjusted_ref(in_ref_x, in_ref_z, in_delta_x, in_delta_z, in_heading)
-
     local l_dist = math.sqrt((in_delta_x ^ 2) + (in_delta_z ^ 2))
     local l_heading = math.fmod((math.deg(math.atan2(in_delta_x, in_delta_z)) + 360), 360)
     local l_shifted_x = in_ref_x - math.sin(math.rad(in_heading - l_heading)) * l_dist * -1
     local l_shifted_z = in_ref_z - math.cos(math.rad(in_heading - l_heading)) * l_dist
-
     return l_shifted_x, l_shifted_z
 end
 
@@ -1245,10 +1185,8 @@ end
 -- Returns heading in degrees (0-360) and distance in meters.
 -- ====================================================
 function heading_n_dist(in_from_x1, in_from_z1, in_to_x2, in_to_z2)
-
     local l_heading = math.fmod((math.deg(math.atan2(in_to_x2 - in_from_x1, -(in_to_z2 - in_from_z1))) + 360), 360)
     local l_dist = math.sqrt(((in_to_x2 - in_from_x1) ^ 2) + ((in_to_z2 - in_from_z1) ^ 2))
-
     return l_heading, l_dist
 end
 
@@ -1260,7 +1198,6 @@ end
 -- Wraps the result within the 0-360 degree range.
 -- ====================================================
 function minus_delta_clockwise(in_heading, in_delta, in_direction)
-
     local l_heading
 
     if in_direction == 1 then
@@ -1284,7 +1221,6 @@ end
 -- Wraps the result within the 0-360 degree range.
 -- ====================================================
 function add_delta_clockwise(in_heading, in_delta, in_direction)
-
     local l_heading = 0
 
     if in_direction == 1 then
@@ -1360,13 +1296,10 @@ end
 -- Returns the converted values overwriting the input buffers.
 -- ====================================================
 function local_to_latlon(l_x, l_y, l_z)
-
     x1_value[0] = l_x
     y1_value[0] = l_y
     z1_value[0] = l_z
-
     XPLM.XPLMLocalToWorld(x1_value[0], y1_value[0], z1_value[0], x1_value, y1_value, z1_value)
-
     return x1_value[0], y1_value[0], z1_value[0]
 end
 
@@ -1378,13 +1311,10 @@ end
 -- Returns the resulting local X, Y, Z values.
 -- ====================================================
 function latlon_to_local(in_lat, in_lon, in_alt)
-
     x1_value[0] = in_lat
     y1_value[0] = in_lon
     z1_value[0] = in_alt
-
     XPLM.XPLMWorldToLocal(x1_value[0], y1_value[0], z1_value[0], x1_value, y1_value, z1_value)
-
     return x1_value[0], y1_value[0], z1_value[0]
 end
 
@@ -1398,7 +1328,6 @@ end
 -- Caches the world altitude to speed up subsequent conversions.
 -- ====================================================
 function get_local_coordinates(in_lat, in_lon, in_alt)
-
     local l_x, l_y, l_z = 0, 0, 0
 
     if in_alt == 0 then
@@ -1406,9 +1335,7 @@ function get_local_coordinates(in_lat, in_lon, in_alt)
         x1_value[0] = l_x
         y1_value[0] = l_y
         z1_value[0] = l_z
-
         XPLM.XPLMProbeTerrainXYZ(proberef, x1_value[0], y1_value[0], z1_value[0], probeinfo_addr)
-
         probeinfo_value = probeinfo_addr
         in_lat, in_lon, in_alt =
             local_to_latlon(probeinfo_value[0].locationX, probeinfo_value[0].locationY, probeinfo_value[0].locationZ)
@@ -1418,14 +1345,11 @@ function get_local_coordinates(in_lat, in_lon, in_alt)
     x1_value[0] = l_x
     y1_value[0] = l_y
     z1_value[0] = l_z
-
     XPLM.XPLMProbeTerrainXYZ(proberef, x1_value[0], y1_value[0], z1_value[0], probeinfo_addr)
-
     probeinfo_value = probeinfo_addr
     in_lat, in_lon, in_alt =
         local_to_latlon(probeinfo_value[0].locationX, probeinfo_value[0].locationY, probeinfo_value[0].locationZ)
     l_x, l_y, l_z = latlon_to_local(in_lat, in_lon, in_alt)
-
     return l_x, l_y, l_z, in_alt
 end
 
@@ -1437,20 +1361,15 @@ end
 -- Used each frame to keep the Follow Me car flush with the ground surface.
 -- ====================================================
 function probe_y(in_x, in_y, in_z)
-
     local l_lat, l_lon, l_alt = 0, 0, 0
-
     x1_value[0] = in_x
     y1_value[0] = in_y
     z1_value[0] = in_z
-
     XPLM.XPLMProbeTerrainXYZ(proberef, x1_value[0], y1_value[0], z1_value[0], probeinfo_addr)
-
     probeinfo_value = probeinfo_addr
     l_lat, l_lon, l_alt =
         local_to_latlon(probeinfo_value[0].locationX, probeinfo_value[0].locationY, probeinfo_value[0].locationZ)
     in_x, in_y, in_z = latlon_to_local(l_lat, l_lon, l_alt)
-
     return in_y
 end
 
@@ -1464,7 +1383,6 @@ end
 -- Also positions and updates the signboard instance above the car.
 -- ====================================================
 function draw_object(in_x, in_y, in_z, in_heading)
-
     dataref_float_value[0] = steering
     dataref_float_value[1] = steering
     dataref_float_value[2] = tire_rotate
@@ -1518,13 +1436,11 @@ end
 -- Renders the car 3D model each frame via draw_object().
 -- ====================================================
 function object_physics()
-
     local l_now = fm_run_time
 
     if elapsed_time == 0 then
         elapsed_time = l_now
     end
-
     local l_dt = l_now - elapsed_time
 
     if l_dt <= 0 or l_dt > 1 then
@@ -1581,7 +1497,6 @@ end
 -- Must be called once at plugin startup before any probe_y or get_local_coordinates calls.
 -- ====================================================
 function load_probe()
-
     probeinfo_value[0].structSize = ffi.sizeof(probeinfo_value[0])
     probeinfo_addr = probeinfo_value
     probetype[1] = 0
@@ -1598,6 +1513,7 @@ end
 -- registering the fm/anim/sign custom dataref for animation state.
 -- ====================================================
 function load_object()
+    local l_auto_sel = 0
 
     ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
     dataref_array[0] = dataref_name
@@ -1614,8 +1530,6 @@ function load_object()
     dataref_array[6] = NULL
     datarefs_addr = dataref_array
 
-    local l_auto_sel = 0
-
     if car_type_fmcar == "Auto" then
         math.randomseed(os.time())
         l_auto_sel = math.random(1, 3)
@@ -1628,8 +1542,7 @@ function load_object()
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject
             end,
-            inRefcon
-        )
+            inRefcon)
         tire_diameter = 0.79
         min_turn_radius = 10.8
         width_btw_midtire = 1.86
@@ -1646,8 +1559,7 @@ function load_object()
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject
             end,
-            inRefcon
-        )
+            inRefcon)
         tire_diameter = 0.65
         min_turn_radius = 10.8
         width_btw_midtire = 1.39
@@ -1664,8 +1576,7 @@ function load_object()
                 obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject
             end,
-            inRefcon
-        )
+            inRefcon)
         tire_diameter = 0.730
         min_turn_radius = 10.8
         width_btw_midtire = 1.578
@@ -1676,7 +1587,6 @@ function load_object()
         place_above_the_car = 1.86
         place_Z_of_car = -0.4347
     end
-
     ffi.copy(dataref_name, "fm/anim/sign")
     dataref_array2[0] = dataref_name
     dataref_array2[1] = NULL
@@ -1687,8 +1597,7 @@ function load_object()
             signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
             signboardref = inObject
         end,
-        inRefcon
-    )
+        inRefcon)
 end
 
 -- ====================================================
@@ -1709,8 +1618,7 @@ function load_path()
                 end
                 pathref = inObject
             end,
-            inRefcon
-        )
+            inRefcon)
     end
 
 end
@@ -1731,8 +1639,7 @@ function load_rampstart()
                 rampstart_instance[0] = XPLM.XPLMCreateInstance(inObject, NULL)
                 rampstartref = inObject
             end,
-            inRefcon
-        )
+            inRefcon)
     end
 
 end
@@ -1745,7 +1652,6 @@ end
 -- Sets path_is_shown to true to avoid redundant repositioning.
 -- ====================================================
 function draw_path()
-
     local l_index = 0
 
     float_value[0] = 0
@@ -1771,9 +1677,7 @@ end
 -- Resets rampstart_chg to false after placement.
 -- ====================================================
 function draw_rampstart()
-
     local l_index = 0
-
     float_value[0] = 0
     float_addr = float_value
 
@@ -1797,9 +1701,7 @@ function draw_rampstart()
     end
 
     objpos_addr = objpos_value
-
     XPLM.XPLMInstanceSetPosition(rampstart_instance[0], objpos_addr, float_addr)
-
     rampstart_chg = false
 end
 
@@ -1857,7 +1759,6 @@ end
 -- Resets path_instance[0], pathref, and path_is_shown.
 -- ====================================================
 function unload_path()
-
     local l_index = 0
 
     if path_instance[0] ~= nil then
@@ -1937,8 +1838,7 @@ function register_dataref()
         NULL,
         NULL,
         NULL,
-        NULL
-    )
+        NULL)
 end
 
 -- ====================================================
@@ -1981,63 +1881,61 @@ end
 -- ====================================================
 function get_airport_elements()
 
-	if force_apt_reload then
-		force_apt_reload = false
-		world_alt = 0
-		taxiway_network = read_apt_file(curr_icao)
-		if taxiway_network ~= "" then
-			XPLMSpeakString("Follow Me Service is not available at this airport")
-			return
-		end
-		if sb_fetch_error_msg == "OK" then
-			sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
-		end
-	else
+    if force_apt_reload then
+        force_apt_reload = false
+        world_alt = 0
+        taxiway_network = read_apt_file(curr_icao)
+        if taxiway_network ~= "" then
+            XPLMSpeakString("Follow Me Service is not available at this airport")
+            return
+        end
+        if sb_fetch_error_msg == "OK" then
+            sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
+        end
+    else
 
-		local l_airport_index = XPLMFindNavAid(nil, nil, LATITUDE, LONGITUDE, nil, xplm_Nav_Airport)
-		local l_new_ICAO, l_new_ICAO_name = "", ""
+    local l_airport_index = XPLMFindNavAid(nil, nil, LATITUDE, LONGITUDE, nil, xplm_Nav_Airport)
+    local l_new_ICAO, l_new_ICAO_name = "", ""
 
-		_, _, _, _, _, _, l_new_ICAO, l_new_ICAO_name = XPLMGetNavAidInfo(l_airport_index)
+    _, _, _, _, _, _, l_new_ICAO, l_new_ICAO_name = XPLMGetNavAidInfo(l_airport_index)
 
-		if curr_icao ~= l_new_ICAO then
-			world_alt = 0
-			taxiway_network = read_apt_file(l_new_ICAO)
-			curr_icao = l_new_ICAO
-			curr_icao_name = l_new_ICAO_name
-			if taxiway_network ~= "" then
-				XPLMSpeakString("Follow Me Service is not available at this airport")
-				return
-			end
-			if sb_fetch_error_msg == "OK" then
-				sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
-			end
-		end
-	end -- VER2.3 : end of else (normal XPLMFindNavAid path)
+    if curr_icao ~= l_new_ICAO then
+        world_alt = 0
+        taxiway_network = read_apt_file(l_new_ICAO)
+        curr_icao = l_new_ICAO
+        curr_icao_name = l_new_ICAO_name
+        if taxiway_network ~= "" then
+            XPLMSpeakString("Follow Me Service is not available at this airport")
+            return
+        end
+        if sb_fetch_error_msg == "OK" then
+            sb_airport_mismatch = (sb_origin_icao ~= curr_icao)
+        end
+    end
 
-	if #t_deleted_runway > 0 then
-		update_msg("-18")
-	end
+    if #t_deleted_runway > 0 then
+        update_msg("-18")
+    end
 
-	depart_gate = check_gate()
+    depart_gate = check_gate()
 
-	if depart_arrive == 0 then
-		if flight_start_cpt == 9999 then
-			if depart_gate == 0 then
-				depart_arrive = 2
-			else
-				flight_start_cpt = 0
-				we_fly = false
-				depart_arrive = 1
-			end
-		else
-			depart_arrive = 1
-		end
-	end
+    if depart_arrive == 0 then
+        if flight_start_cpt == 9999 then
+            if depart_gate == 0 then
+                depart_arrive = 2
+            else
+                flight_start_cpt = 0
+                we_fly = false
+                depart_arrive = 1
+            end
+        else
+            depart_arrive = 1
+        end
+    end
 
-	if get_from_SimBrief then
-		apply_simbrief_runway()
-	end
-
+    if get_from_SimBrief then
+        apply_simbrief_runway()
+    end
 end
 
 -- ====================================================
@@ -2052,7 +1950,6 @@ end
 -- Returns an error code string if data is missing, or empty string on success.
 -- ====================================================
 function read_apt_file(in_ICAO)
-
     local l_filename1, l_filename2 = "", ""
     local l_file1, l_file2
     local l_line1, l_line2, l_rest = "", "", ""
@@ -2245,7 +2142,6 @@ end
 -- Links each runway end to its paired opposite end via the Pair index.
 -- ====================================================
 function decipher_runway(in_str)
-
     local l_str1, l_str2, l_str3, l_str4 = "", "", "", ""
 
     i = #t_runway + 1
@@ -2257,8 +2153,7 @@ function decipher_runway(in_str)
         "100 %s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*" ..
             "([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*" ..
                 "[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*[^%s]+%s*" ..
-                    "([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*" .. "(.*)"
-    )
+                    "([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*" .. "(.*)")
     t_runway[i].Lat = tonumber(l_str1)
     t_runway[i].Lon = tonumber(l_str2)
     t_runway[i].Node = -1
@@ -2282,7 +2177,6 @@ end
 -- ====================================================
 function decipher_ramp(in_str)
     local l_str1, l_str2, l_str3, l_str4, l_str5, l_str6 = "", "", "", "", "", ""
-
 
     l_str1, l_str2, l_str3, l_str4, l_str5, l_str6 =
         string.match(in_str, "1300 %s*([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*(.*)")
@@ -2339,7 +2233,6 @@ end
 -- Adds military type (0) to gates flagged as military operations.
 -- ====================================================
 function decipher_ramp_operation(in_str)
-
     local l_str1, l_str2 = "", ""
     local l_types = ""
 
@@ -2374,7 +2267,6 @@ end
 -- and initializes all pathfinding fields (f_value, g_value, parent, etc.) to nil.
 -- ====================================================
 function decipher_taxinode(in_str)
-
     local l_str1, l_str2 = "", ""
 
     i = #t_taxinode + 1
@@ -2406,7 +2298,6 @@ end
 -- and registers the segment index in the Segment field of both endpoint nodes.
 -- ====================================================
 function decipher_taxisegment(in_str)
-
     local l_str1, l_str2, l_str3, l_str4, l_str5 = "", "", "", "", ""
     local l_idx = 0
 
@@ -2441,8 +2332,8 @@ function decipher_taxisegment(in_str)
         t_taxinode[t_segment[i].Node1 + 1].x,
         t_taxinode[t_segment[i].Node1 + 1].z,
         t_taxinode[t_segment[i].Node2 + 1].x,
-        t_taxinode[t_segment[i].Node2 + 1].z
-    )
+        t_taxinode[t_segment[i].Node2 + 1].z)
+
     if t_taxinode[t_segment[i].Node1 + 1].Segment == "" then
         t_taxinode[t_segment[i].Node1 + 1].Segment = tostring(i)
     else
@@ -2464,7 +2355,6 @@ end
 -- Also marks the endpoint taxi nodes as type 'hotzone' unless they are runway nodes.
 -- ====================================================
 function decipher_taxisegment_hotzone(in_str)
-
     i = #t_segment
     t_segment[i].Hotzone = string.match(in_str, "1204 %s*[^%s]+%s*([^%s]+)%s*")
 
@@ -2487,7 +2377,6 @@ end
 -- taxiway edges from the routing network.
 -- ====================================================
 function decipher_vehicle_edge(in_str)
-
     local l_str1, l_str2 = string.match(in_str, "1206 %s*([^%s]+)%s*([^%s]+)%s*")
 
     if l_str1 and l_str2 then
@@ -2509,7 +2398,6 @@ end
 -- affected taxi nodes to keep the pathfinding graph consistent.
 -- ====================================================
 function apply_1206_filter()
-
     if #t_filter_1206 == 0 then
         return
     end
@@ -2588,7 +2476,6 @@ end
 -- logging them in t_deleted_runway for the user-facing warning message.
 -- ====================================================
 function determine_runway_node()
-
     local l_idx = 0
 
     for l_idx = 1, #t_runway do
@@ -2619,7 +2506,6 @@ end
 -- the runway ID for back-reference.
 -- ====================================================
 function match_runway(in_runway_idx)
-
     local l_idx = 0
     local l_curr_dist = 0
     local l_min_dist_twy = 99999
@@ -2737,7 +2623,6 @@ end
 -- Called when a new airport is detected or a forced reload is triggered.
 -- ====================================================
 function initialise_airport()
-
     t_runway, t_runway_node, t_gate, t_taxinode, t_segment = {}, {}, {}, {}, {}
     t_filter_1206 = {}
     depart_arrive = 0
@@ -2752,7 +2637,6 @@ end
 -- and marks the window as needing a first-access refresh.
 -- ====================================================
 function initialise_routes()
-
     t_node = {}
     Err_Msg = ""
     Err_Msg_color = "GREEN"
@@ -2909,14 +2793,13 @@ end
 -- Updates the plugin menu state to disable the menu item while the window is open.
 -- ====================================================
 function show_followme_window()
-
 	local followme_title = "Follow Me Window"
-    window_first_access = true
     local wnd_width  = 420
     local wnd_height = 515
     local pos_x = (SCREEN_WIDTH  - wnd_width)  / 2
     local pos_y = (SCREEN_HIGHT - wnd_height) / 2
 
+    window_first_access = true
     followme_wnd = float_wnd_create(420, 515, 1, true)
     float_wnd_set_title(followme_wnd, followme_title)
 	float_wnd_set_position(followme_wnd, pos_x, pos_y)
@@ -2932,7 +2815,6 @@ end
 -- by delegating to closed_followme_window().
 -- ====================================================
 function hide_followme_window()
-
     if followme_wnd ~= nil then
         closed_followme_window()
     end
@@ -2951,7 +2833,6 @@ end
 -- On first access, loads the config file and refreshes airport elements.
 -- ====================================================
 function build_followme_window(wnd, x, y)
-
     local l_err = "0" -- No error
     local l_is_selected = false
     local l_changed = false
@@ -2963,8 +2844,7 @@ function build_followme_window(wnd, x, y)
         imgui.constant.WindowFlags.NoResize,
         imgui.constant.WindowFlags.NoMove,
         imgui.constant.WindowFlags.HorizontalScrollbar,
-        imgui.constant.WindowFlags.NoSavedSettings
-    )
+        imgui.constant.WindowFlags.NoSavedSettings)
 
     if window_first_access then
         if not config_loaded then
@@ -3623,7 +3503,6 @@ end
 -- followme_window_open, then updates the plugin menu state.
 -- ====================================================
 function closed_followme_window(wnd)
-
     if followme_wnd ~= nil then
         float_wnd_destroy(followme_wnd)
         followme_wnd = nil
@@ -3641,10 +3520,8 @@ end
 -- to closed_navigation_window.
 -- ====================================================
 function show_navigation_window()
-
 	local pos_x = (SCREEN_WIDTH - 495) / 2
 	local pos_y = SCREEN_HIGHT / 2
-
     navigation_wnd = float_wnd_create(495, 35, 1, true)
 	float_wnd_set_position(navigation_wnd, pos_x, pos_y)
     float_wnd_set_imgui_builder(navigation_wnd, "build_navigation_window")
@@ -3658,7 +3535,6 @@ end
 -- by delegating to closed_navigation_window().
 -- ====================================================
 function hide_navigation_window()
-
     if navigation_wnd ~= nil then
     	closed_navigation_window()
     end
@@ -3676,7 +3552,6 @@ end
 -- After arrival, flashes the destination indicator and removes the car after 7 seconds.
 -- ====================================================
 function build_navigation_window(wnd, x, y)
-
 	local navigation_title= "Navigation Window"
 
 	if fm_car_active then
@@ -3920,7 +3795,6 @@ end
 -- navigation_window_open, then updates the plugin menu state.
 -- ====================================================
 function closed_navigation_window(wnd)
-
     if navigation_wnd ~= nil then
 	    float_wnd_destroy(navigation_wnd)
 	    navigation_wnd = nil
@@ -3937,7 +3811,6 @@ end
 -- Called whenever the volume slider value changes.
 -- ====================================================
 function set_sound_vol()
-
     set_sound_gain(snd_arrived, vol / 10)
     set_sound_gain(snd_followme, vol / 10)
     set_sound_gain(snd_safe_flight_goodbye, vol / 10)
@@ -3957,7 +3830,6 @@ end
 -- No-ops on code '0' or nil.
 -- ====================================================
 function update_msg(in_msg)
-
     local l_rwy = ""
 
     if in_msg == nil or in_msg == "0" then
@@ -4119,7 +3991,6 @@ end
 -- On success, calls process_possible_routes() to build the final waypoint list.
 -- ====================================================
 function determine_possible_routes()
-
     local l_startpt_node, l_startpt_x, l_startpt_z = 0, 0, 0, 0
     local l_endpt_node, l_endpt_x, l_endpt_z = 0, 0, 0
     local l_index = 0
@@ -4238,7 +4109,6 @@ end
 -- stored in t_possible_route.
 -- ====================================================
 function transverse(in_startnode, in_endnode, in_heading)
-
     function evaluate_node(in_node, in_size, t_open, t_close)
         local l_in_open, l_in_close = false, false
 
@@ -4531,15 +4401,14 @@ function apply_runway_axis_filter()
     if #l_on_axis < 2 then
         logMsg(
             "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
-            " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → no filter (total ≤ 2)"
-        )
+            " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → no filter (total ≤ 2)")
         return
     end
 
     logMsg(
         "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
-        " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → applying monotone filter"
-    )
+        " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → applying monotone filter")
+
     local l_to_remove = {}
     local l_prev_dTN = math.huge
 
@@ -4581,11 +4450,10 @@ function apply_runway_axis_filter()
     end
 
     t_node = l_new_node
-    logMsg(
-        "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+
+    logMsg("FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
         " - removed " .. l_removed_count .. " node(s)," ..
-        " t_node now has " .. #t_node .. " entries"
-    )
+        " t_node now has " .. #t_node .. " entries")
 end
 
 -- ====================================================
@@ -4610,10 +4478,12 @@ function process_possible_routes()
     local l_new_head, l_new_dist = 0, 0
     local l_index = 1
     local l_node = 0
-    t_node = {}
     local l_min_dist_btw_nodes = min_rot_radius * 2 + car_rear_wheel_to_ref
     local t_route_nodes = {}
     local routenode_cnt = 1
+
+    t_node = {}
+
     for l_node in t_possible_route[1].Route:gmatch("[^%s]+") do
         t_route_nodes[routenode_cnt] = l_node
         routenode_cnt = routenode_cnt + 1
@@ -4845,7 +4715,6 @@ end
 -- add_new_taxinode_segment().
 -- ====================================================
 function determine_pos_on_segment(in_heading, in_x, in_z, in_type)
-
     local l_within_sight, l_intersect_x, l_intersect_z, l_dist_to_intersect = false, 0, 0, 0
     local l_ret_intersect_dist = 9999
     local l_ret_segment_index, l_ret_x, l_ret_z = 0, 0, 0
@@ -4969,7 +4838,6 @@ end
 -- Returns visibility flag, tangent distance, tangent coordinates, and the target node.
 -- ====================================================
 function compute_tangent_dist(in_heading, in_x, in_z, in_idx)
-
     local l_angle, l_dir, l_tangent_heading = 0, 0, 0
     local l_head, l_dist = 0, 0
     local l_tangent_dist, l_tangent_x, l_tangent_z, l_goto_node = 0, 0, 0, 0
@@ -5021,19 +4889,17 @@ end
 -- Validates the intersection is within the line-of-sight arc before accepting it.
 -- ====================================================
 function compute_intersection(in_type, in_heading, in_x, in_z, in_idx)
-
     local l_node1_x = t_taxinode[t_segment[in_idx].Node1 + 1].x
     local l_node1_z = t_taxinode[t_segment[in_idx].Node1 + 1].z
     local l_node2_x = t_taxinode[t_segment[in_idx].Node2 + 1].x
     local l_node2_z = t_taxinode[t_segment[in_idx].Node2 + 1].z
     local l_seg_heading = t_segment[in_idx].Heading
+    local l_intersect_x, l_intersect_z = 0, 0
 
     if l_seg_heading == in_heading or l_seg_heading == add_delta_clockwise(in_heading, 180, 1) then
         return false, 0, 0, 0
     end
-    
-    local l_intersect_x, l_intersect_z = 0, 0
-    
+
     if in_heading == 0 or in_heading == 180 then
         l_intersect_z = math.tan(math.rad(90 - l_seg_heading)) * (in_x - l_node1_x) + (l_node1_z * -1)
         l_intersect_z = -1 * l_intersect_z
@@ -5094,7 +4960,6 @@ end
 -- Used during start-point search to connect the car directly to isolated stub taxiways.
 -- ====================================================
 function check_deadend_node(in_type, in_heading, in_x, in_z, in_idx)
-
     local l_deadnode = -1
 
     if not string.find(t_taxinode[t_segment[in_idx].Node1 + 1].Segment, ",") then
@@ -5131,7 +4996,6 @@ end
 -- Returns the new node index and the last created segment index.
 -- ====================================================
 function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dist)
-
     local l_new_node, l_new_segment = 0, 0
     local l_idx = #t_taxinode + 1
 
@@ -5235,7 +5099,6 @@ end
 -- Updates arrival_gate, gatetext, and triggers rampstart_chg.
 -- ====================================================
 function auto_assign_gate()
-
     local l_index = 0
 
     if #t_gate == 0 then
@@ -5280,7 +5143,6 @@ end
 -- Sets rampstart_chg to true when a gate match is found.
 -- ====================================================
 function check_gate()
-
     local l_dist = 0
     local l_dist_min = 9999
     local l_navid_index = 9999
@@ -5318,7 +5180,6 @@ end
 -- Returns error codes if the file is missing or the current aircraft type is not found.
 -- ====================================================
 function load_config()
-
     local l_file
     local l_line = ""
     local l_str1, l_str2 = "", ""
@@ -5387,7 +5248,6 @@ end
 -- Returns error code -4 if the file cannot be opened, or '2' on success.
 -- ====================================================
 function save_config()
-
     local l_file
     local l_content = ""
 
@@ -5423,7 +5283,6 @@ end
 -- Returns an empty string if the input is nil or contains only whitespace.
 -- ====================================================
 function trim_str(in_str)
-
     local out_str = ""
 
     if in_str == nil then
@@ -5450,12 +5309,9 @@ end
 -- and removes the FollowMe entry from the X-Plane Plugins menu.
 -- ====================================================
 function exit_plugin()
-
     full_reset()
     unload_probe()
-
     XPLM.XPLMUnregisterDataAccessor(dr_sign)
-
     dr_sign = nil
 
     if my_menu then
@@ -5481,7 +5337,6 @@ end
 -- the navigation window is not already open.
 -- ====================================================
 function update_menu_state()
-
     if my_menu == nil then return end
 
     local fm_available = (not we_fly)
