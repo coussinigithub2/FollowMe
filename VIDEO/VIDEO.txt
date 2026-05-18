@@ -1,0 +1,19 @@
+FollowMe Car X-Plane 12 - To Runway
+
+https://youtu.be/umnaC-dXFRM
+
+This video demonstrates how the “follow me car” behaves when a specific airport runway is requested.
+
+
+FollowMe Car X-Plane 12 - To Terminal (Gate)
+
+https://youtu.be/TFPUPRduAqk
+
+This video demonstrates how the “follow me car” behaves when a specific gate is requested.
+
+X-Plane 12
+FollowMe
+FlyWithLua
+Addon
+Follow me
+Follow me car
