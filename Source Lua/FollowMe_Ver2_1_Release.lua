@@ -33,12 +33,6 @@
 --                           - Simplified error message system: Err_Msg is now a single string
 --                             with an associated color (Err_Msg_color) instead of a table
 --                           - Aircraft type combo now filters available gates by type in real time
---    VER2.1 Coussini 2026 : - Bug fix: Separate character buffers for each car dataref to prevent
---                             overwriting the shared buffer during asynchronous loading (XPLMLoadObjectAsync).
---                           - Each entry in dataref_array now points to its own persistent memory area.
--- 							 - Bug fix: Async callbacks directly use dataref_array and dataref_array2 instead of
---                             datarefs_addr (which was being reassigned before the callbacks were executed).
---                           - The wheels (tire_rotation_angle_deg) now animate correctly in X-Plane.
 --    ---------------------------------------------------------------------------------
 
 if not SUPPORTS_FLOATING_WINDOWS then
@@ -210,15 +204,9 @@ BLACK       = 0xFF000000
 
 local char_str = ffi.new("char[256]")
 local datarefs_addr = ffi.new("const char**")
+local dataref_name = ffi.new("char[150]")
 local dataref_array = ffi.new("const char*[7]")
 local dataref_array2 = ffi.new("const char*[2]")
-local dr_name_0 = ffi.new("char[150]")   -- tire_steer_deg[0]
-local dr_name_1 = ffi.new("char[150]")   -- tire_steer_deg[1]
-local dr_name_2 = ffi.new("char[150]")   -- tire_rotation_angle_deg[0]
-local dr_name_3 = ffi.new("char[150]")   -- tire_rotation_angle_deg[1]
-local dr_name_4 = ffi.new("char[150]")   -- tire_rotation_angle_deg[2]
-local dr_name_5 = ffi.new("char[150]")   -- tire_rotation_angle_deg[3]
-local dr_name_sign = ffi.new("char[150]") -- fm/anim/sign
 local dr_tire_steer = nil
 local dr_tire_rotate = nil
 local dr_sign = nil
@@ -1471,34 +1459,6 @@ function probe_y(in_x, in_y, in_z)
 end
 
 -- ====================================================
--- Function: calculate_wheel_rotation_optimized
--- Description:
--- Calculates the wheel rotation (0-360°) based on the vehicle's actual speed and the tire
--- diameter specific to each model. Updates dataref_float_value[2..5] which is read by
--- XPLMInstanceSetPosition to animate the wheels in the .obj file.
--- ====================================================
-function calculate_wheel_rotation_optimized()
-
-    if not fm_car_active then return end
-    if depart_arrive == 0 or fm_arrived ~= 0 then return end
-
-    local dt = elapsed_time
-    if dt <= 0 or dt > 1 then return end
-
-    local circumference = math.pi * tire_diameter
-    local deg_per_meter = 360.0 / circumference
-
-    local delta_deg = car_speed * deg_per_meter * dt
-
-    wheel_rotation_deg = math.floor((wheel_rotation_deg + delta_deg) % 360.0)
-
-    dataref_float_value[2] = wheel_rotation_deg
-    dataref_float_value[3] = wheel_rotation_deg
-    dataref_float_value[4] = wheel_rotation_deg
-    dataref_float_value[5] = wheel_rotation_deg
-end
-
--- ====================================================
 -- Function: draw_object
 -- Description:
 -- Updates the 3D position, heading, and pitch of the Follow Me car instance
@@ -1641,19 +1601,20 @@ end
 -- ====================================================
 function load_object()
 
-    ffi.copy(dr_name_0, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
-    dataref_array[0] = dr_name_0
-    ffi.copy(dr_name_1, "sim/graphics/animation/ground_traffic/tire_steer_deg[1]")
-    dataref_array[1] = dr_name_1
-    ffi.copy(dr_name_2, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[0]")
-    dataref_array[2] = dr_name_2
-    ffi.copy(dr_name_3, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[1]")
-    dataref_array[3] = dr_name_3
-    ffi.copy(dr_name_4, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[2]")
-    dataref_array[4] = dr_name_4
-    ffi.copy(dr_name_5, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[3]")
-    dataref_array[5] = dr_name_5
+    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
+    dataref_array[0] = dataref_name
+    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[1]")
+    dataref_array[1] = dataref_name
+    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[0]")
+    dataref_array[2] = dataref_name
+    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[1]")
+    dataref_array[3] = dataref_name
+    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[2]")
+    dataref_array[4] = dataref_name
+    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[3]")
+    dataref_array[5] = dataref_name
     dataref_array[6] = NULL
+    datarefs_addr = dataref_array
 
     local l_auto_sel = 0
 
@@ -1666,7 +1627,7 @@ function load_object()
         XPLM.XPLMLoadObjectAsync(
             syspath .. "Resources/default scenery/airport scenery/Dynamic_Vehicles/crew_car_ferrari.obj",
             function(inObject, inRefcon)
-                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array)
+                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject
             end,
             inRefcon
@@ -1684,7 +1645,7 @@ function load_object()
         XPLM.XPLMLoadObjectAsync(
             SCRIPT_DIRECTORY .. "follow_me/objects/fm_van.obj",
             function(inObject, inRefcon)
-                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array)
+                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject
             end,
             inRefcon
@@ -1702,7 +1663,7 @@ function load_object()
         XPLM.XPLMLoadObjectAsync(
             SCRIPT_DIRECTORY .. "follow_me/objects/fm_truck.obj",
             function(inObject, inRefcon)
-                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array)
+                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
                 objref = inObject
             end,
             inRefcon
@@ -1718,13 +1679,14 @@ function load_object()
         place_Z_of_car = -0.4347
     end
 
-    ffi.copy(dr_name_sign, "fm/anim/sign")
-    dataref_array2[0] = dr_name_sign
+    ffi.copy(dataref_name, "fm/anim/sign")
+    dataref_array2[0] = dataref_name
     dataref_array2[1] = NULL
+    datarefs_addr = dataref_array2
     XPLM.XPLMLoadObjectAsync(
         SCRIPT_DIRECTORY .. "follow_me/objects/signboard.obj",
         function(inObject, inRefcon)
-            signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array2)
+            signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
             signboardref = inObject
         end,
         inRefcon
@@ -5479,6 +5441,42 @@ function trim_str(in_str)
     end
 
     return out_str
+end
+
+-- ====================================================
+-- Function: calculate_wheel_rotation_optimized
+-- Description:
+-- Calcule la rotation des roues (0-360°) en fonction de la vitesse
+-- réelle du véhicule et du diamètre de pneu propre à chaque modèle.
+-- Met à jour dataref_float_value[2..5] qui sont lus par
+-- XPLMInstanceSetPosition pour animer les roues dans le .obj.
+-- ====================================================
+function calculate_wheel_rotation_optimized()
+
+    if not fm_car_active then return end
+    if depart_arrive == 0 or fm_arrived ~= 0 then return end
+
+    -- elapsed_time est le vrai dt frame (calculé dans object_physics)
+    local dt = elapsed_time
+    if dt <= 0 or dt > 1 then return end
+
+    -- car_speed est en m/s, tire_diameter est mis à jour par load_object()
+    -- selon le véhicule (Ferrari=0.79, Van=0.65, Truck=0.73)
+    local circumference = math.pi * tire_diameter
+    local deg_per_meter = 360.0 / circumference
+
+    -- Incrément en degrés pour cette frame
+    local delta_deg = car_speed * deg_per_meter * dt
+
+    -- Accumulation et wrap 0-360
+    wheel_rotation_deg = math.floor((wheel_rotation_deg + delta_deg) % 360.0)
+
+    -- Injecter dans le buffer float envoyé à XPLMInstanceSetPosition
+    -- indices 2,3,4,5 = tire_rotation_angle_deg[0..3]
+    dataref_float_value[2] = wheel_rotation_deg
+    dataref_float_value[3] = wheel_rotation_deg
+    dataref_float_value[4] = wheel_rotation_deg
+    dataref_float_value[5] = wheel_rotation_deg
 end
 
 function Steffi_says()
