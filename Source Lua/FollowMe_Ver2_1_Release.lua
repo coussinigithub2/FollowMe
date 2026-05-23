@@ -33,21 +33,32 @@
 --                           - Simplified error message system: Err_Msg is now a single string
 --                             with an associated color (Err_Msg_color) instead of a table
 --                           - Aircraft type combo now filters available gates by type in real time
+--    VER2.1 Coussini 2026 : - Bug fix: Separate character buffers for each car dataref to prevent
+--                             overwriting the shared buffer during asynchronous loading (XPLMLoadObjectAsync).
+--                           - Each entry in dataref_array now points to its own persistent memory area.
+-- 							 - Bug fix: Async callbacks directly use dataref_array and dataref_array2 instead of
+--                             datarefs_addr (which was being reassigned before the callbacks were executed).
+--                           - The wheels (tire_rotation_angle_deg) now animate correctly in X-Plane.
 --    ---------------------------------------------------------------------------------
-
-if not SUPPORTS_FLOATING_WINDOWS then
-    logMsg("FollowMe : imgui not supported by your FlyWithLua version")
-    return
-end
 
 require("bit")
 require("graphics")
 
+local DEBUG = false
+function debugLog(msg) if DEBUG then logMsg("FollowMe [DEBUG] : "..msg) end end
+function errorLog(msg) logMsg("FollowMe [ERROR] : "..msg) end
+
 local socket_ok, socket = pcall(require, "socket")
 local http_ok, http = pcall(require, "socket.http")
 
+if not SUPPORTS_FLOATING_WINDOWS then
+    errorLog("imgui not supported by your FlyWithLua version")
+    return
+end
+
 if not socket_ok or not http_ok then
-    logMsg("FollowMe : ERROR - socket.lua or socket.http not found")
+    errorLog("socket.lua or socket.http not found")
+    return
 end
 
 local ffi = require("ffi")
@@ -204,9 +215,15 @@ BLACK       = 0xFF000000
 
 local char_str = ffi.new("char[256]")
 local datarefs_addr = ffi.new("const char**")
-local dataref_name = ffi.new("char[150]")
 local dataref_array = ffi.new("const char*[7]")
 local dataref_array2 = ffi.new("const char*[2]")
+local dr_name_0 = ffi.new("char[150]")   -- tire_steer_deg[0]
+local dr_name_1 = ffi.new("char[150]")   -- tire_steer_deg[1]
+local dr_name_2 = ffi.new("char[150]")   -- tire_rotation_angle_deg[0]
+local dr_name_3 = ffi.new("char[150]")   -- tire_rotation_angle_deg[1]
+local dr_name_4 = ffi.new("char[150]")   -- tire_rotation_angle_deg[2]
+local dr_name_5 = ffi.new("char[150]")   -- tire_rotation_angle_deg[3]
+local dr_name_sign = ffi.new("char[150]") -- fm/anim/sign
 local dr_tire_steer = nil
 local dr_tire_rotate = nil
 local dr_sign = nil
@@ -515,8 +532,8 @@ function start_car()
 
     local _, l_dist_to_plane = heading_n_dist(car_x, car_z, fm_plane_x, fm_plane_z)
 
-    logMsg(string.format(
-        "FollowMe : start_car  spawnNode=t_node[1]  x=%.1f  z=%.1f  dist_to_plane=%.1fm  gate=%d",
+    debugLog(string.format(
+        "start_car  spawnNode=t_node[1]  x=%.1f  z=%.1f  dist_to_plane=%.1fm  gate=%d",
         car_x, car_z, l_dist_to_plane, depart_gate))
 
     if depart_arrive == 1 and depart_gate > 0 and l_dist_to_plane > 50 then
@@ -526,8 +543,8 @@ function start_car()
         local l_hdg_gate_to_n1, l_dist_gate_to_n1 = heading_n_dist(l_gate_x, l_gate_z, t_node[1].x, t_node[1].z)
         local l_angle_diff = math.abs(l_hdg_gate_to_n1 - t_node[1].heading)
         if l_angle_diff > 180 then l_angle_diff = 360 - l_angle_diff end
-        logMsg(string.format(
-            "FollowMe : start_car  gate_to_node1_hdg=%.1f°  node1_leg_hdg=%.1f°  angle_diff=%.1f°",
+        debugLog(string.format(
+            "start_car  gate_to_node1_hdg=%.1f°  node1_leg_hdg=%.1f°  angle_diff=%.1f°",
             l_hdg_gate_to_n1, t_node[1].heading or 0, l_angle_diff))
         if l_angle_diff > 45 then
             local l_pre = {}
@@ -542,8 +559,8 @@ function start_car()
             car_y = l_gate_y
             car_z = l_gate_z
             car_body_heading = l_hdg_gate_to_n1
-            logMsg(string.format(
-                "FollowMe : start_car  FIX-C/2 gate pre-waypoint inserted  gate_x=%.1f  gate_z=%.1f  hdg=%.1f°",
+            debugLog(string.format(
+                "start_car  FIX-C/2 gate pre-waypoint inserted  gate_x=%.1f  gate_z=%.1f  hdg=%.1f°",
                 l_gate_x, l_gate_z, l_hdg_gate_to_n1))
         end
     end
@@ -805,8 +822,8 @@ function manage_car_motion()
                     update_msg("5")
                 end
             end
-            logMsg(string.format(
-                "FollowMe VER2.6 : fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
+            debugLog(string.format(
+                "fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
                 l_dist_to_target, curr_node, #t_node, car_sign))
         end
     end
@@ -823,8 +840,8 @@ function manage_car_motion()
                     update_msg("5")
                 end
             end
-            logMsg(string.format(
-                "FollowMe VER2.6 : fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
+            debugLog(string.format(
+                "fm_arrived triggered  dist_to_target=%.1fm  curr_node=%d  #t_node=%d  car_sign=%d",
                 l_dist_to_target, curr_node, #t_node, car_sign))
         end
     end
@@ -1459,6 +1476,34 @@ function probe_y(in_x, in_y, in_z)
 end
 
 -- ====================================================
+-- Function: calculate_wheel_rotation_optimized
+-- Description:
+-- Calculates the wheel rotation (0-360°) based on the vehicle's actual speed and the tire
+-- diameter specific to each model. Updates dataref_float_value[2..5] which is read by
+-- XPLMInstanceSetPosition to animate the wheels in the .obj file.
+-- ====================================================
+function calculate_wheel_rotation_optimized()
+
+    if not fm_car_active then return end
+    if depart_arrive == 0 or fm_arrived ~= 0 then return end
+
+    local dt = elapsed_time
+    if dt <= 0 or dt > 1 then return end
+
+    local circumference = math.pi * tire_diameter
+    local deg_per_meter = 360.0 / circumference
+
+    local delta_deg = car_speed * deg_per_meter * dt
+
+    wheel_rotation_deg = math.floor((wheel_rotation_deg + delta_deg) % 360.0)
+
+    dataref_float_value[2] = wheel_rotation_deg
+    dataref_float_value[3] = wheel_rotation_deg
+    dataref_float_value[4] = wheel_rotation_deg
+    dataref_float_value[5] = wheel_rotation_deg
+end
+
+-- ====================================================
 -- Function: draw_object
 -- Description:
 -- Updates the 3D position, heading, and pitch of the Follow Me car instance
@@ -1601,20 +1646,19 @@ end
 -- ====================================================
 function load_object()
 
-    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
-    dataref_array[0] = dataref_name
-    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_steer_deg[1]")
-    dataref_array[1] = dataref_name
-    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[0]")
-    dataref_array[2] = dataref_name
-    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[1]")
-    dataref_array[3] = dataref_name
-    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[2]")
-    dataref_array[4] = dataref_name
-    ffi.copy(dataref_name, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[3]")
-    dataref_array[5] = dataref_name
+    ffi.copy(dr_name_0, "sim/graphics/animation/ground_traffic/tire_steer_deg[0]")
+    dataref_array[0] = dr_name_0
+    ffi.copy(dr_name_1, "sim/graphics/animation/ground_traffic/tire_steer_deg[1]")
+    dataref_array[1] = dr_name_1
+    ffi.copy(dr_name_2, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[0]")
+    dataref_array[2] = dr_name_2
+    ffi.copy(dr_name_3, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[1]")
+    dataref_array[3] = dr_name_3
+    ffi.copy(dr_name_4, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[2]")
+    dataref_array[4] = dr_name_4
+    ffi.copy(dr_name_5, "sim/graphics/animation/ground_traffic/tire_rotation_angle_deg[3]")
+    dataref_array[5] = dr_name_5
     dataref_array[6] = NULL
-    datarefs_addr = dataref_array
 
     local l_auto_sel = 0
 
@@ -1627,7 +1671,7 @@ function load_object()
         XPLM.XPLMLoadObjectAsync(
             syspath .. "Resources/default scenery/airport scenery/Dynamic_Vehicles/crew_car_ferrari.obj",
             function(inObject, inRefcon)
-                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
+                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array)
                 objref = inObject
             end,
             inRefcon
@@ -1643,27 +1687,28 @@ function load_object()
         place_Z_of_car = 0
     elseif car_type_fmcar == "Van" or (car_type_fmcar == "Auto" and l_auto_sel == 2) then
         XPLM.XPLMLoadObjectAsync(
-            SCRIPT_DIRECTORY .. "follow_me/objects/fm_van.obj",
+            --SCRIPT_DIRECTORY .. "follow_me/objects/fm_van.obj",
+            SCRIPT_DIRECTORY .. "follow_me/objects/fm_bmw.obj",
             function(inObject, inRefcon)
-                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
+                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array)
                 objref = inObject
             end,
             inRefcon
         )
-        tire_diameter = 0.65
+        tire_diameter = 0.81
         min_turn_radius = 10.8
         width_btw_midtire = 1.39
         car_front_to_back_wheel = 2.64
         car_rear_wheel_to_ref = 1.32
-        time_to_100 = 10
-        speed_max = 70
-        place_above_the_car = 1.95
-        place_Z_of_car = -1.625
+        time_to_100 = 4.2
+        speed_max = 72
+        place_above_the_car = 1.82
+        place_Z_of_car = -0.10
     elseif car_type_fmcar == "Truck" or (car_type_fmcar == "Auto" and l_auto_sel == 3) then
         XPLM.XPLMLoadObjectAsync(
             SCRIPT_DIRECTORY .. "follow_me/objects/fm_truck.obj",
             function(inObject, inRefcon)
-                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
+                obj_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array)
                 objref = inObject
             end,
             inRefcon
@@ -1679,14 +1724,13 @@ function load_object()
         place_Z_of_car = -0.4347
     end
 
-    ffi.copy(dataref_name, "fm/anim/sign")
-    dataref_array2[0] = dataref_name
+    ffi.copy(dr_name_sign, "fm/anim/sign")
+    dataref_array2[0] = dr_name_sign
     dataref_array2[1] = NULL
-    datarefs_addr = dataref_array2
     XPLM.XPLMLoadObjectAsync(
         SCRIPT_DIRECTORY .. "follow_me/objects/signboard.obj",
         function(inObject, inRefcon)
-            signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, datarefs_addr)
+            signboard_instance[0] = XPLM.XPLMCreateInstance(inObject, dataref_array2)
             signboardref = inObject
         end,
         inRefcon
@@ -2727,7 +2771,7 @@ function full_reset()
     force_apt_reload = false
     initialise_airport()
     initialise_routes()
-    logMsg("FollowMe : full_reset() completed")
+    debugLog("full_reset() completed")
     update_menu_state()
 end
 
@@ -4129,8 +4173,8 @@ function determine_possible_routes()
     local l_rev_heading = add_delta_clockwise(fm_plane_head, 180, 1)
 
     if depart_gate ~= 0 then
-        logMsg(string.format(
-            "FollowMe : determine_possible_routes  GATE=%s  heading=%.1f  x=%.1f  z=%.1f  type=%s",
+        debugLog(string.format(
+            "determine_possible_routes  GATE=%s  heading=%.1f  x=%.1f  z=%.1f  type=%s",
             t_gate[depart_gate].ID or "?",
             t_gate[depart_gate].Heading,
             t_gate[depart_gate].x, t_gate[depart_gate].z,
@@ -4146,12 +4190,12 @@ function determine_possible_routes()
             local _, l_dgs = heading_n_dist(
                 t_gate[depart_gate].x, t_gate[depart_gate].z,
                 t_taxinode[l_startpt_node + 1].x, t_taxinode[l_startpt_node + 1].z)
-            logMsg(string.format(
-                "FollowMe : determine_possible_routes  startNode=%d  dist_gate_to_start=%.1fm  startSeg='%s'",
+            debugLog(string.format(
+                "determine_possible_routes  startNode=%d  dist_gate_to_start=%.1fm  startSeg='%s'",
                 l_startpt_node, l_dgs,
                 t_taxinode[l_startpt_node + 1].Segment or "(empty)"))
         else
-            logMsg("FollowMe : determine_possible_routes  FAILED - no start node found from gate")
+            debugLog("determine_possible_routes  FAILED - no start node found from gate")
         end
     else
         local l_adj_fm_plane_x = 0
@@ -4369,8 +4413,8 @@ function transverse(in_startnode, in_endnode, in_heading)
                     t_taxinode[l_node + 1].heading = l_curr_heading
                     t_open[l_idx].f_value = l_f_value
                     t_open[l_idx].cost = t_taxinode[l_node + 1].cost
-                    logMsg(string.format(
-                        "FollowMe : A* expand  curr=%d → cand=%d  seg=%d  g=%.1f  h=%.1f  f=%.1f  cost=%d  AoC=%.0f  hdg=%.0f",
+                    debugLog(string.format(
+                        "A* expand  curr=%d → cand=%d  seg=%d  g=%.1f  h=%.1f  f=%.1f  cost=%d  AoC=%.0f  hdg=%.0f",
                         l_curr_node, l_node, l_segment_idx,
                         l_g_value, t_taxinode[l_node + 1].h_value, l_f_value,
                         t_taxinode[l_node + 1].cost or 0,
@@ -4413,8 +4457,8 @@ function transverse(in_startnode, in_endnode, in_heading)
         )
         if #t_open > 0 then
             l_curr_node = t_open[#t_open].Node
-            logMsg(string.format(
-                "FollowMe : A* select   next=%d  f=%.1f  cost=%d  open=%d",
+            debugLog(string.format(
+                "A* select   next=%d  f=%.1f  cost=%d  open=%d",
                 l_curr_node,
                 t_open[#t_open].f_value or 0,
                 t_open[#t_open].cost or 0,
@@ -4442,16 +4486,16 @@ function transverse(in_startnode, in_endnode, in_heading)
             l_from_label = "RWY " .. depart_runway
             l_to_label = (arrival_gate > 0) and t_gate[arrival_gate].ID or "gate"
         end
-        logMsg(
-            "FollowMe : RAW A* ROUTE" ..
+        debugLog(
+            "RAW A* ROUTE" ..
                 " AIRPORT=" .. curr_icao .. " FROM=" .. l_from_label .. " TO=" .. l_to_label
         )
-        logMsg("FollowMe : RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
+        debugLog("RAW A* NODES=[ " .. t_possible_route[1].Route .. " ]")
         local l_raw_count = 0
         for _ in t_possible_route[1].Route:gmatch("[^%s]+") do
             l_raw_count = l_raw_count + 1
         end
-        logMsg("FollowMe : RAW A* NODES TOTAL=" .. l_raw_count)
+        debugLog("RAW A* NODES TOTAL=" .. l_raw_count)
     end
 end
 
@@ -4498,7 +4542,7 @@ function apply_runway_axis_filter()
                 break
             end
         end
-        logMsg("FollowMe : apply_runway_axis_filter - Pair fallback used for RWY " .. depart_runway)
+        debugLog("apply_runway_axis_filter - Pair fallback used for RWY " .. depart_runway)
     end
 
     local l_ax = l_T_x - l_O_x
@@ -4531,15 +4575,15 @@ function apply_runway_axis_filter()
     end
 
     if #l_on_axis < 2 then
-        logMsg(
-            "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+        debugLog(
+            "apply_runway_axis_filter RWY " .. depart_runway ..
             " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → no filter (total ≤ 2)"
         )
         return
     end
 
-    logMsg(
-        "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+    debugLog(
+        "apply_runway_axis_filter RWY " .. depart_runway ..
         " - on-axis A* nodes=" .. #l_on_axis .. " (+ threshold=1) → applying monotone filter"
     )
     local l_to_remove = {}
@@ -4553,8 +4597,8 @@ function apply_runway_axis_filter()
             l_prev_dTN = l_dTN
         elseif l_dTN > l_prev_dTN then
             l_to_remove[l_idx] = true
-            logMsg(
-                "FollowMe : apply_runway_axis_filter  remove t_node[" .. l_idx .. "]" ..
+            debugLog(
+                "apply_runway_axis_filter  remove t_node[" .. l_idx .. "]" ..
                 " dTN=" .. string.format("%.1f", l_dTN) ..
                 "m  prev_dTN=" .. string.format("%.1f", l_prev_dTN) .. "m (regression)"
             )
@@ -4570,7 +4614,7 @@ function apply_runway_axis_filter()
     end
 
     if l_removed_count == 0 then
-        logMsg("FollowMe : apply_runway_axis_filter RWY " .. depart_runway .. " - all nodes monotone, nothing removed")
+        debugLog("apply_runway_axis_filter RWY " .. depart_runway .. " - all nodes monotone, nothing removed")
         return
     end
 
@@ -4583,8 +4627,8 @@ function apply_runway_axis_filter()
     end
 
     t_node = l_new_node
-    logMsg(
-        "FollowMe : apply_runway_axis_filter RWY " .. depart_runway ..
+    debugLog(
+        "apply_runway_axis_filter RWY " .. depart_runway ..
         " - removed " .. l_removed_count .. " node(s)," ..
         " t_node now has " .. #t_node .. " entries"
     )
@@ -4701,8 +4745,8 @@ function process_possible_routes()
             if t_runway[l_pair_idx] ~= nil then
                 l_far_x = t_runway[l_pair_idx].x
                 l_far_z = t_runway[l_pair_idx].z
-                logMsg(
-                    "FollowMe : RWY " ..
+                debugLog(
+                    "RWY " ..
                         depart_runway ..
                             " centreline from pair idx=" ..
                                 l_pair_idx ..
@@ -4721,7 +4765,7 @@ function process_possible_routes()
                     l_far_z = t_runway[l_index].z
                 end
             end
-            logMsg("FollowMe : RWY " .. depart_runway .. " Pair fallback used (scan)")
+            debugLog("RWY " .. depart_runway .. " Pair fallback used (scan)")
         end
         local l_ax = l_rwy_x - l_far_x
         local l_az = l_rwy_z - l_far_z
@@ -4802,11 +4846,11 @@ function process_possible_routes()
                                                                     string.format("%.0f", t_node[l_ni].dist or 0) ..
                                                                         "m) "
         end
-        logMsg(
-            "FollowMe : DRIVE ROUTE" .. " AIRPORT=" .. curr_icao .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
+        debugLog(
+            "DRIVE ROUTE" .. " AIRPORT=" .. curr_icao .. " FROM=" .. l_from_lbl .. " TO=" .. l_to_lbl
         )
-        logMsg("FollowMe : DRIVE NODES : " .. l_node_list)
-        logMsg("FollowMe : DRIVE NODES TOTAL=" .. #t_node)
+        debugLog("DRIVE NODES : " .. l_node_list)
+        debugLog("DRIVE NODES TOTAL=" .. #t_node)
         if #t_node >= 2 then
             local l_fin_x = t_node[#t_node].x
             local l_fin_z = t_node[#t_node].z
@@ -4816,18 +4860,18 @@ function process_possible_routes()
                 local _, l_dte = heading_n_dist(t_node[l_ri].x, t_node[l_ri].z, l_fin_x, l_fin_z)
                 if l_dte > l_prev_dte then
                     l_n_regressions = l_n_regressions + 1
-                    logMsg(string.format(
-                        "FollowMe : *** REGRESSION ***  driveNode=%d  x=%.1f  z=%.1f  dToEnd=%.1fm  prevDToEnd=%.1fm  delta=+%.1fm",
+                    debugLog(string.format(
+                        "*** REGRESSION ***  driveNode=%d  x=%.1f  z=%.1f  dToEnd=%.1fm  prevDToEnd=%.1fm  delta=+%.1fm",
                         l_ri, t_node[l_ri].x, t_node[l_ri].z,
                         l_dte, l_prev_dte, l_dte - l_prev_dte))
                 end
                 l_prev_dte = l_dte
             end
             if l_n_regressions == 0 then
-                logMsg("FollowMe : DRIVE NODES regression check PASSED (no U-turns / detours)")
+                debugLog("DRIVE NODES regression check PASSED (no U-turns / detours)")
             else
-                logMsg(string.format(
-                    "FollowMe : DRIVE NODES regression check FAILED  regressions=%d  → route has detour(s) causing off-pavement driving",
+                debugLog(string.format(
+                    "DRIVE NODES regression check FAILED  regressions=%d  → route has detour(s) causing off-pavement driving",
                     l_n_regressions))
             end
         end
@@ -5157,8 +5201,8 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
     local l_n1_dead = (l_n1_seg ~= "" and not string.find(l_n1_seg, ","))
     local l_n2_dead = (l_n2_seg ~= "" and not string.find(l_n2_seg, ","))
 
-    logMsg(string.format(
-        "FollowMe : add_new_taxinode_segment  seg=%d  N1=%d(seg='%s' deadend=%s)  N2=%d(seg='%s' deadend=%s)  newNode=%d",
+    debugLog(string.format(
+        "add_new_taxinode_segment  seg=%d  N1=%d(seg='%s' deadend=%s)  N2=%d(seg='%s' deadend=%s)  newNode=%d",
         in_segment_index,
         t_segment[in_segment_index].Node1, l_n1_seg, tostring(l_n1_dead),
         t_segment[in_segment_index].Node2, l_n2_seg, tostring(l_n2_dead),
@@ -5184,11 +5228,11 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment =
             t_taxinode[t_segment[in_segment_index].Node1 + 1].Segment .. "," .. tostring(l_new_segment)
         t_taxinode[l_idx].Segment = tostring(l_new_segment)
-        logMsg(string.format("FollowMe :   N1 connected  N1(%d)→newNode(%d) newSeg=%d%s",
+        debugLog(string.format("N1 connected  N1(%d)→newNode(%d) newSeg=%d%s",
             t_segment[l_new_segment].Node1, l_new_node, l_new_segment,
             l_n1_dead and "  [DEAD-END FIX-A applied]" or ""))
     else
-        logMsg(string.format("FollowMe :   N1(%d) SKIPPED Segment='' (pruned)",
+        debugLog(string.format("N1(%d) SKIPPED Segment='' (pruned)",
             t_segment[in_segment_index].Node1))
     end
 
@@ -5216,11 +5260,11 @@ function add_new_taxinode_segment(in_segment_index, in_x, in_z, in_intersect_dis
         else
             t_taxinode[l_idx].Segment = t_taxinode[l_idx].Segment .. "," .. tostring(l_new_segment)
         end
-        logMsg(string.format("FollowMe :   N2 connected  newNode(%d)→N2(%d) newSeg=%d%s",
+        debugLog(string.format("N2 connected  newNode(%d)→N2(%d) newSeg=%d%s",
             l_new_node, t_segment[l_new_segment].Node2, l_new_segment,
             l_n2_dead and "  [DEAD-END FIX-A applied]" or ""))
     else
-        logMsg(string.format("FollowMe :   N2(%d) SKIPPED Segment='' (pruned)",
+        debugLog(string.format("N2(%d) SKIPPED Segment='' (pruned)",
             t_segment[in_segment_index].Node2))
     end
 
@@ -5444,55 +5488,6 @@ function trim_str(in_str)
 end
 
 -- ====================================================
--- Function: calculate_wheel_rotation_optimized
--- Description:
--- Calcule la rotation des roues (0-360°) en fonction de la vitesse
--- réelle du véhicule et du diamètre de pneu propre à chaque modèle.
--- Met à jour dataref_float_value[2..5] qui sont lus par
--- XPLMInstanceSetPosition pour animer les roues dans le .obj.
--- ====================================================
-function calculate_wheel_rotation_optimized()
-
-    if not fm_car_active then return end
-    if depart_arrive == 0 or fm_arrived ~= 0 then return end
-
-    -- elapsed_time est le vrai dt frame (calculé dans object_physics)
-    local dt = elapsed_time
-    if dt <= 0 or dt > 1 then return end
-
-    -- car_speed est en m/s, tire_diameter est mis à jour par load_object()
-    -- selon le véhicule (Ferrari=0.79, Van=0.65, Truck=0.73)
-    local circumference = math.pi * tire_diameter
-    local deg_per_meter = 360.0 / circumference
-
-    -- Incrément en degrés pour cette frame
-    local delta_deg = car_speed * deg_per_meter * dt
-
-    -- Accumulation et wrap 0-360
-    wheel_rotation_deg = math.floor((wheel_rotation_deg + delta_deg) % 360.0)
-
-    -- Injecter dans le buffer float envoyé à XPLMInstanceSetPosition
-    -- indices 2,3,4,5 = tire_rotation_angle_deg[0..3]
-    dataref_float_value[2] = wheel_rotation_deg
-    dataref_float_value[3] = wheel_rotation_deg
-    dataref_float_value[4] = wheel_rotation_deg
-    dataref_float_value[5] = wheel_rotation_deg
-end
-
-function Steffi_says()
-    local pos = 250
-
-    pos = big_bubble(20, pos,
-        "fm_car_active :"       .. tostring(fm_car_active),
-        "dataref_float_value[2] :" .. tostring(dataref_float_value[2]),
-        "dataref_float_value[3] :" .. tostring(dataref_float_value[3]),
-        "dataref_float_value[4] :" .. tostring(dataref_float_value[4]),
-        "dataref_float_value[5] :" .. tostring(dataref_float_value[5])
-        )
-
-end
-
--- ====================================================
 -- Function: exit_plugin
 -- Description:
 -- Cleanup function called when the plugin exits (registered with do_on_exit).
@@ -5593,5 +5588,4 @@ register_dataref()
 load_probe()
 do_every_frame("handle_plugin_window()")
 do_every_frame("object_physics()")
-do_every_draw("Steffi_says()")
 do_on_exit("exit_plugin()")
